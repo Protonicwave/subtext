@@ -1,0 +1,10 @@
+# Check out LF everywhere, including on Windows. Prettier is configured to expect
+# LF, so a CRLF checkout would fail the formatting check on a clean clone.
+* text=auto eol=lf
+
+# Binary assets that must never be touched.
+*.png binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.mp4 binary
