@@ -2,6 +2,7 @@
 // application. Debug builds keep it, because that is where log output goes.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod chrome;
 mod commands;
 mod dropped;
 mod dto;
@@ -31,6 +32,8 @@ fn main() {
             bindings.mount_events(app);
 
             let handle = app.handle().clone();
+            app.manage(chrome::dress(&handle));
+
             let path = library_path(&handle).map_err(|failure| failure.message)?;
             let state = AppState::open(Database::open(path)?);
 

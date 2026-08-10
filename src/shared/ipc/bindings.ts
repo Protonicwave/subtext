@@ -6,6 +6,13 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	/**
+	 *  What the window the front end is drawing into turned out to be.
+	 * 
+	 *  Asked once at startup. The window has already been dressed by then, so this
+	 *  reports what happened rather than causing it.
+	 */
+	windowChrome: () => typedError<Chrome, Failure>(__TAURI_INVOKE("window_chrome")),
+	/**
 	 *  Opens the platform's own folder picker.
 	 * 
 	 *  Separate from adding the folder, so that a front end that already knows the
@@ -88,6 +95,16 @@ export const events = {
 };
 
 /* Types */
+/**  What the front end needs to know about the window it is drawing into. */
+export type Chrome = {
+	/**
+	 *  The desktop shows through behind the window, so the surfaces drawn on
+	 *  top of it are the translucent ones. False everywhere the window is
+	 *  opaque, where the same surfaces would be washed out over nothing.
+	 */
+	backdrop: boolean,
+};
+
 /**
  *  Something that went wrong, said in a way a person can act on.
  * 

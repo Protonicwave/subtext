@@ -9,9 +9,20 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::chrome::Chrome;
 use crate::dropped;
 use crate::dto::{Answer, Failure, FilmView, FolderView, Id, ScanProgressed, TrackView};
 use crate::state::AppState;
+
+/// What the window the front end is drawing into turned out to be.
+///
+/// Asked once at startup. The window has already been dressed by then, so this
+/// reports what happened rather than causing it.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn window_chrome(chrome: State<'_, Chrome>) -> Answer<Chrome> {
+    Ok(*chrome)
+}
 
 /// Opens the platform's own folder picker.
 ///
