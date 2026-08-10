@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the main window is allowed to ask the system for. Only the folder picker: everything else Subtext does goes through its own commands, which are scoped in Rust rather than here.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

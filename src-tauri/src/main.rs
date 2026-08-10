@@ -2,8 +2,59 @@
 // application. Debug builds keep it, because that is where log output goes.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
+mod dto;
+mod ipc;
+mod state;
+
+use subtext_index::Database;
+use tauri::Manager;
+
+use crate::state::{AppState, library_path};
+
 fn main() {
-    if let Err(error) = tauri::Builder::default().run(tauri::generate_context!()) {
+    let bindings = ipc::bindings();
+
+    // Written again on every development build, so that a command signature and
+    // the TypeScript describing it cannot drift apart while somebody is working
+    // on both. A release build has nothing to generate them from.
+    #[cfg(debug_assertions)]
+    if let Err(error) = bindings.export(ipc::typescript(), ipc::BINDINGS) {
+        eprintln!("the TypeScript bindings could not be written: {error}");
+    }
+
+    let started = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(bindings.invoke_handler())
+        .setup(move |app| {
+            bindings.mount_events(app);
+
+            let handle = app.handle().clone();
+            let path = library_path(&handle).map_err(|failure| failure.message)?;
+            let state = AppState::open(Database::open(path)?);
+
+            if let Err(error) = state.start_watching(&handle) {
+                eprintln!(
+                    "Subtext will not notice changes to folders: {}",
+                    error.message
+                );
+            }
+            app.manage(state);
+
+            // Folders change while the application is closed, so what is on
+            // disk is caught up with as soon as there is a window to report it
+            // to. Cheap when nothing has moved.
+            let rescanning = handle.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let state = rescanning.state::<AppState>();
+                state.scanning(&rescanning, subtext_scan::Scanner::scan_all);
+            });
+
+            Ok(())
+        })
+        .run(tauri::generate_context!());
+
+    if let Err(error) = started {
         eprintln!("Subtext could not start: {error}");
         std::process::exit(1);
     }
