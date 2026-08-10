@@ -1,0 +1,146 @@
+/* ---------- while the scan runs ---------- */
+
+.indexing {
+  padding: var(--space-12) var(--space-6) var(--space-16);
+  text-align: center;
+}
+
+.indexingTitle {
+  margin: var(--space-5) 0 var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-regular);
+}
+
+.counts {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.found {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+  opacity: 0.8;
+}
+
+/* ---------- what was found ---------- */
+
+.nothing {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  color: var(--colour-text-faint);
+  font-size: var(--text-sm);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid color-mix(in oklab, var(--colour-line) 45%, transparent);
+}
+
+.pair:last-child {
+  border-bottom: 0;
+}
+
+.tick {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--colour-accent) 90%, transparent);
+  color: var(--colour-on-accent);
+}
+
+.unpaired .tick {
+  background: #2a2e37;
+  color: var(--colour-text-faint);
+}
+
+.about {
+  min-width: 0;
+}
+
+.file {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle svg {
+  opacity: 0.5;
+}
+
+.unpaired .subtitle {
+  color: var(--colour-attention-dim);
+}
+
+.problem {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--colour-attention);
+}
+
+.badge,
+.attach {
+  margin-top: 2px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge {
+  background: color-mix(in oklab, var(--colour-accent) 14%, transparent);
+  color: var(--colour-accent);
+}
+
+/*
+ * Amber, and a button rather than a label: a film with no subtitle is the one
+ * row on this screen there is something to do about.
+ */
+.attach {
+  background: var(--colour-attention-surface);
+  color: var(--colour-attention);
+  transition: background var(--duration-instant);
+}
+
+.attach:hover:not(:disabled) {
+  background: var(--colour-attention-surface-hover);
+}
+
+.attach:disabled {
+  opacity: 0.6;
+}
+
+.hint {
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+}

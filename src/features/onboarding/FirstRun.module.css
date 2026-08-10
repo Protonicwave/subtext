@@ -1,0 +1,146 @@
+.screen {
+  position: fixed;
+  inset: var(--titlebar-height) 0 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--colour-bg) calc(var(--window-opacity) * 100%), transparent);
+}
+
+/* Its own pool of light, so the first screen is not a flat rectangle. */
+.screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      60% 50% at 50% 0%,
+      color-mix(in oklab, var(--colour-accent) 13%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 40% at 50% 100%,
+      color-mix(in oklab, var(--colour-accent-pair) 12%, transparent),
+      transparent 70%
+    );
+}
+
+.panel {
+  position: relative;
+  width: min(620px, 86vw);
+  text-align: center;
+  animation: rise var(--duration-slow) var(--ease-out);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.kicker {
+  margin-bottom: var(--space-5);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--colour-text-faint);
+}
+
+.heading {
+  margin-bottom: var(--space-3);
+  font-family: var(--font-display);
+  font-weight: var(--weight-regular);
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.heading i {
+  font-style: italic;
+  color: var(--colour-accent);
+}
+
+.blurb {
+  max-width: 430px;
+  margin: 0 auto var(--space-10);
+  color: var(--colour-text-dim);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+}
+
+.target {
+  width: 100%;
+  display: block;
+  padding: var(--space-10) var(--space-8);
+  border: 1.5px dashed #2e333c;
+  border-radius: var(--radius-xl);
+  background: var(--colour-surface);
+  text-align: center;
+  transition:
+    border-color var(--duration-settle),
+    background var(--duration-settle),
+    transform var(--duration-settle) var(--ease-spring);
+}
+
+.target:hover {
+  border-color: color-mix(in oklab, var(--colour-accent) 60%, transparent);
+  background: var(--colour-surface-raised);
+  transform: translateY(-3px);
+}
+
+.glyph {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklab, var(--colour-accent) 16%, transparent);
+  color: var(--colour-accent);
+}
+
+.target b {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--colour-text);
+}
+
+.target span:last-child {
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.alternative {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.promises {
+  margin-top: var(--space-8);
+  display: flex;
+  gap: var(--space-6);
+  justify-content: center;
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+}
+
+.promises li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.promises svg {
+  color: var(--colour-accent);
+  opacity: 0.8;
+}
