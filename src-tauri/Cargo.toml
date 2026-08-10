@@ -16,6 +16,14 @@ tauri = { version = "2.11.5", features = [] }
 subtext-core.workspace = true
 subtext-index.workspace = true
 subtext-scan.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+specta = "=2.0.0-rc.25"
+specta-typescript = "0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tauri-plugin-dialog = "2.7.2"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

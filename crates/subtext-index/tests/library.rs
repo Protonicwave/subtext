@@ -448,9 +448,132 @@ fn fingerprints_say_what_needs_reading_again() {
     assert!(films[0].matches(4_000, 1_700_000_000_000));
     assert!(!films[0].matches(4_000, 1_700_000_000_001));
 
-    let tracks = library.database.tracks().fingerprints(folder).unwrap();
+    let tracks = library.database.tracks().pairings(folder).unwrap();
     assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].film_id, film_id);
+    assert_eq!(tracks[0].match_kind, TrackMatch::Exact);
     assert!(tracks[0].matches(60_000, 1_700_000_000_000));
+    assert!(!tracks[0].matches(60_001, 1_700_000_000_000));
+}
+
+#[test]
+fn a_track_moves_to_a_better_film_unless_it_was_attached_by_hand() {
+    let library = Library::new();
+    let folder = library.watch();
+    let first = library.add_film(folder, "Solaris");
+    let second = library.add_film(folder, "Solaris Part Two");
+    let track_id = library.add_track(first, "Solaris");
+
+    assert!(
+        library
+            .database
+            .tracks()
+            .repoint(track_id, second, TrackMatch::Approximate)
+            .unwrap()
+    );
+    let moved = library.database.tracks().for_film(second).unwrap();
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0].match_kind, TrackMatch::Approximate);
+
+    // Once someone has said where it belongs, a rescan may not disagree.
+    library.database.tracks().attach(track_id, first).unwrap();
+    assert!(
+        !library
+            .database
+            .tracks()
+            .repoint(track_id, second, TrackMatch::Exact)
+            .unwrap()
+    );
+    assert_eq!(library.database.tracks().for_film(first).unwrap().len(), 1);
+}
+
+#[test]
+fn a_batch_writes_its_tracks_and_their_cues_together() {
+    let library = Library::new();
+    let folder = library.watch();
+    let film_id = library.add_film(folder, "Heat");
+    let path = library.root.join("Heat.en.srt");
+    let lines = cues(&["a helicopter over the freeway", "the city at night"]);
+
+    let track = NewTrack {
+        film_id,
+        path: &path,
+        label: SubtitleLabel {
+            language: Some("en"),
+            forced: false,
+            hearing_impaired: false,
+        },
+        match_kind: TrackMatch::Exact,
+        encoding: "UTF-8",
+        size_bytes: 120,
+        modified_at: 1_700_000_000_000,
+    };
+
+    let stored = library
+        .database
+        .tracks()
+        .write_batch(&[(track, &lines)])
+        .unwrap();
+
+    assert_eq!(stored.len(), 1);
+    assert!(stored[0].changed);
+    assert_eq!(
+        library.database.tracks().cues(stored[0].id).unwrap().len(),
+        2
+    );
+    let recorded = library.database.tracks().for_film(film_id).unwrap();
+    assert_eq!(recorded[0].cue_count, 2);
+
+    assert!(
+        library
+            .database
+            .tracks()
+            .write_batch(&[])
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn many_films_are_recorded_in_one_go() {
+    let library = Library::new();
+    let folder = library.watch();
+    let paths: Vec<_> = ["Heat", "Ronin", "Collateral"]
+        .iter()
+        .map(|name| library.root.join(format!("{name}.mkv")))
+        .collect();
+    let films: Vec<_> = paths
+        .iter()
+        .map(|path| NewFilm {
+            folder_id: folder,
+            path,
+            title: "Whichever",
+            year: Some(1_999),
+            size_bytes: 4_000,
+            modified_at: 1_700_000_000_000,
+        })
+        .collect();
+
+    let first = library.database.films().upsert_many(&films).unwrap();
+    assert_eq!(first.len(), 3);
+    assert!(first.iter().all(|stored| stored.changed));
+
+    // The same films again, unchanged, write nothing and keep their rows.
+    let second = library.database.films().upsert_many(&films).unwrap();
+    assert!(second.iter().all(|stored| !stored.changed));
+    assert_eq!(
+        first.iter().map(|stored| stored.id).collect::<Vec<_>>(),
+        second.iter().map(|stored| stored.id).collect::<Vec<_>>()
+    );
+
+    assert!(
+        library
+            .database
+            .films()
+            .upsert_many(&[])
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
