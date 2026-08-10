@@ -1,0 +1,14 @@
+.ring circle {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.track {
+  stroke: #22262e;
+}
+
+.fill {
+  stroke: var(--colour-accent);
+  transition: stroke-dashoffset var(--duration-settle) var(--ease-out);
+}

@@ -1,0 +1,63 @@
+.button {
+  height: 36px;
+  padding: 0 var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--colour-line);
+  background: var(--colour-surface);
+  color: var(--colour-text-dim);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition:
+    background var(--duration-quick),
+    border-color var(--duration-quick),
+    color var(--duration-quick),
+    transform var(--duration-settle) var(--ease-spring);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--colour-surface-raised);
+  border-color: var(--colour-line-strong);
+  color: var(--colour-text);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.45;
+}
+
+.primary {
+  background: var(--colour-accent);
+  border-color: transparent;
+  color: var(--colour-on-accent);
+  font-weight: var(--weight-semibold);
+  box-shadow: 0 8px 26px -12px var(--colour-accent);
+}
+
+/*
+ * Brightness rather than a second colour, so that the hover still holds when
+ * the accent is taken from whichever film is on screen.
+ */
+.primary:hover:not(:disabled) {
+  background: var(--colour-accent);
+  color: var(--colour-on-accent);
+  filter: brightness(1.08);
+}
+
+.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--colour-text-faint);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--colour-surface);
+  border-color: transparent;
+  color: var(--colour-text);
+}
