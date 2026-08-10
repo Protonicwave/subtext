@@ -1,0 +1,32 @@
+/*
+ * Everything below the title bar. It is the scrolling element, not the body,
+ * so that the bar stays where it is without anything having to be sticky.
+ */
+.stage {
+  position: absolute;
+  inset: var(--titlebar-height) 0 0;
+  z-index: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/*
+ * Failures that belong to no screen in particular. A strip along the bottom
+ * rather than a dialog, because none of them stop a person carrying on.
+ */
+.problem {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  transform: translateX(-50%);
+  z-index: 300;
+  max-width: min(560px, 90vw);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid #2e333c;
+  background: color-mix(in oklab, var(--colour-surface-raised) 92%, transparent);
+  backdrop-filter: blur(20px);
+  color: var(--colour-text-dim);
+  font-size: var(--text-xs);
+  box-shadow: var(--shadow-raised);
+}
