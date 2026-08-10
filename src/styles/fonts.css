@@ -1,0 +1,26 @@
+/*
+ * Typefaces, carried in the bundle rather than fetched.
+ *
+ * Subtext works with no network at all, so a font served from a content
+ * delivery network is a font that is sometimes missing. These are the same
+ * files, installed as packages and inlined by the build, which is also why the
+ * content security policy can keep font-src to self.
+ *
+ * Only the upright axes are loaded. The one italic in the design is the
+ * emphasis on the first run heading, which Instrument Serif has a real italic
+ * for; the sans and the mono are never set in italic and would only be dead
+ * weight.
+ */
+
+/* Interface: everything that is not a heading or a number. */
+@import '@fontsource-variable/instrument-sans/wght.css';
+
+/* Display: headings, and the film titles on the library screen. */
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+
+/* Reading: the transcript, which is a column of prose and wants a text face. */
+@import '@fontsource-variable/newsreader/wght.css';
+
+/* Figures: timecodes, counts and file paths, which need to line up. */
+@import '@fontsource-variable/jetbrains-mono/wght.css';

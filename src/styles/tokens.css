@@ -1,0 +1,166 @@
+/*
+ * The design, as values.
+ *
+ * Every colour, size, radius and duration in the application comes from here.
+ * A component that invents its own is a component that will drift, so the rule
+ * is simple: if a number appears in two files it belongs in this one.
+ *
+ * The names say what a thing is for rather than what it looks like. Code that
+ * asks for --colour-text-faint still reads correctly after the grey changes;
+ * code that asks for --grey-600 does not.
+ */
+
+:root {
+  /*
+   * Ground. Four layers from the back of the window forwards. The steps are
+   * small on purpose: a dark interface separates surfaces by a shade and a
+   * hairline, not by drop shadows, which turn to mud at this end of the scale.
+   */
+  --colour-bg: #0b0c0e;
+  --colour-surface: #131519;
+  --colour-surface-raised: #1b1e24;
+  --colour-surface-hover: #20242b;
+  --colour-line: #23262d;
+  --colour-line-strong: #333842;
+
+  /* Ink. Three weights: what you read, what you glance at, what labels it. */
+  --colour-text: #e9eaee;
+  --colour-text-dim: #9ca2ae;
+  --colour-text-faint: #5f6672;
+
+  /*
+   * The accent pair. Taken from each film's own poster from Phase 5 onwards
+   * and written onto the root element, which is why everything downstream
+   * reads it from here instead of hard coding the amber.
+   */
+  --colour-accent: #e8a33d;
+  --colour-accent-pair: #2b6c7a;
+  /* Text sitting on a filled accent. Dark, because the accents are bright. */
+  --colour-on-accent: #0b0c0e;
+
+  /*
+   * Amber. What the import sheet marks a film with no subtitle in: something
+   * to look at rather than something that has gone wrong, so it is warmer than
+   * the text and cooler than an error.
+   */
+  --colour-attention: #c9913f;
+  --colour-attention-dim: #b8813a;
+  --colour-attention-surface: #2a2116;
+  --colour-attention-surface-hover: #332816;
+
+  /* The close button, and nothing else so far. */
+  --colour-danger: #c42b1c;
+
+  /* Typefaces. The fallbacks matter for the moment before the fonts load. */
+  --font-sans: 'Instrument Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-reading: 'Newsreader Variable', Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
+
+  /*
+   * Type scale, in rem against a 16px root. The interface sits at 0.875rem,
+   * which is the size the design was drawn at.
+   */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.3125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.8125rem;
+  --text-3xl: clamp(2.125rem, 4.4vw, 3.25rem);
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* Letter spacing. The wide one is for the small uppercase labels. */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.14em;
+  --tracking-wider: 0.2em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing, on a four pixel grid. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
+  --radius-full: 999px;
+
+  /*
+   * One real shadow, for the sheet that floats over everything. Surfaces below
+   * that are separated by colour, not by depth.
+   */
+  --shadow-sheet: 0 50px 120px -34px rgb(0 0 0 / 100%);
+  --shadow-raised: 0 8px 26px -12px rgb(0 0 0 / 70%);
+
+  /*
+   * Motion. The standard curve decelerates hard, which is what makes a panel
+   * feel placed rather than dropped. The spring overshoots slightly and is for
+   * things that appear, never for things that move out of the way.
+   */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --duration-instant: 120ms;
+  --duration-quick: 200ms;
+  --duration-settle: 350ms;
+  --duration-slow: 600ms;
+
+  /* Window chrome. */
+  --titlebar-height: 38px;
+
+  /*
+   * Grain. The most useful detail in a dark interface: without it every large
+   * gradient bands into visible stripes on an eight bit display.
+   */
+  --grain-opacity: 0.035;
+
+  /*
+   * How opaque the window is over whatever is behind it. Replaced when the
+   * platform gives us a backdrop, and otherwise flat, because a translucent
+   * surface over nothing is just a paler surface.
+   */
+  --window-opacity: 1;
+}
+
+/*
+ * Windows 11 draws a blurred, desaturated wash of the desktop behind the
+ * window. Letting a little of it through is the whole point of asking for it,
+ * and at this depth the text contrast is untouched.
+ */
+:root[data-backdrop='mica'] {
+  --window-opacity: 0.86;
+}
+
+/*
+ * Honour the system setting. Everything here is an accent on the interface
+ * rather than a way of understanding it, so removing it costs nothing but the
+ * flourish, and animation is left on at a length nobody reads as movement.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 1ms;
+    --duration-quick: 1ms;
+    --duration-settle: 1ms;
+    --duration-slow: 1ms;
+    --ease-spring: var(--ease-out);
+  }
+}

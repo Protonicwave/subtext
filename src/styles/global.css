@@ -1,0 +1,106 @@
+/*
+ * The rules that apply to the whole window: the ground it is drawn on, the
+ * grain over it, the scrollbars, and what focus looks like.
+ *
+ * Everything past this point lives in a CSS module beside the component that
+ * uses it.
+ */
+
+@import './fonts.css';
+@import './tokens.css';
+@import './reset.css';
+
+body {
+  background: color-mix(in oklab, var(--colour-bg) calc(var(--window-opacity) * 100%), transparent);
+  color: var(--colour-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * The ambient wash. Two wide, very faint pools of the film's own colours, which
+ * is what stops a dark window reading as a black rectangle. It sits behind
+ * everything and is redrawn slowly when the accent changes, so moving between
+ * films is a shift in the light rather than a repaint.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120% 80% at 12% -10%,
+      color-mix(in oklab, var(--colour-accent) 14%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      100% 70% at 90% 8%,
+      color-mix(in oklab, var(--colour-accent-pair) 12%, transparent),
+      transparent 62%
+    );
+  transition: background calc(var(--duration-slow) * 2) var(--ease-out);
+}
+
+/*
+ * The grain. An SVG turbulence tile, inlined so there is no request for it,
+ * blended over the whole window. Without it the gradients above band into
+ * stripes, which is the one artefact that makes a dark interface look cheap.
+ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: color-mix(in oklab, var(--colour-accent) 40%, transparent);
+  color: #fff;
+}
+
+/*
+ * Scrollbars, made part of the design rather than left as a light grey bar
+ * across a dark window. The border is what gives the thumb its inset look
+ * without a second element.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #242830;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--colour-line-strong);
+  background-clip: padding-box;
+}
+
+/*
+ * Focus. Visible, in the accent, and only when the keyboard is what is being
+ * used: :focus-visible already makes that distinction, and overriding it with
+ * a plain :focus outline is what makes people turn outlines off.
+ */
+:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Something inside a scrolling list must not have its ring clipped. */
+:focus-visible {
+  scroll-margin: var(--space-4);
+}
