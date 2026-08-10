@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/subtext-core", "crates/subtext-index", "crates/subtext-scan"]
+members = ["crates/subtext-core", "crates/subtext-index", "crates/subtext-scan", "src-tauri"]
 resolver = "3"
 
 [workspace.package]
