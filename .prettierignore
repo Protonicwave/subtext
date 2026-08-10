@@ -1,0 +1,8 @@
+dist/
+target/
+src-tauri/target/
+src-tauri/gen/
+node_modules/
+package-lock.json
+PLAN.md
+mockup.html
