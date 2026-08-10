@@ -3,6 +3,10 @@
 use chardetng::{Iso2022JpDetection, Utf8Detection};
 use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
 
+/// How much of a file the encoding is guessed from. Comfortably more than the
+/// few hundred bytes it takes to tell one single byte encoding from another.
+const DETECTION_WINDOW: usize = 16 * 1024;
+
 pub(crate) struct Decoded {
     pub text: String,
     pub encoding: &'static str,
@@ -36,7 +40,11 @@ pub(crate) fn decode(bytes: &[u8]) -> Decoded {
     // warning against them concerns pages that run scripts, and this is a
     // subtitle file.
     let mut detector = chardetng::EncodingDetector::new(Iso2022JpDetection::Allow);
-    detector.feed(bytes, true);
+    // Detection is by far the most expensive step in reading a file, and it
+    // costs the same per byte whether the answer was settled in the first
+    // paragraph or the last. A subtitle file does not change language part way
+    // through, so the opening is enough to decide on.
+    detector.feed(&bytes[..bytes.len().min(DETECTION_WINDOW)], true);
     finish(detector.guess(None, Utf8Detection::Deny), bytes)
 }
 
