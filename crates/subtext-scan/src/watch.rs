@@ -230,9 +230,14 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
 
+        // By name rather than by whole path. The platform reports the path it
+        // watched rather than the path it was given, and on macOS a temporary
+        // directory under /var is reported under /private/var. Which of the two
+        // names comes back is the scanner's problem to reconcile, not this
+        // test's.
         let reported = seen.lock().unwrap_or_else(PoisonError::into_inner).clone();
         assert!(
-            reported.contains(&film),
+            reported.iter().any(|path| path.ends_with("Heat.1995.mkv")),
             "the new file should have been reported, got {reported:?}"
         );
 
