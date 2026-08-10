@@ -27,7 +27,10 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             commands::choose_folder,
+            commands::choose_subtitle,
+            commands::folders_for_paths,
             commands::add_folder,
+            commands::attach_subtitle,
             commands::remove_folder,
             commands::list_folders,
             commands::list_library,

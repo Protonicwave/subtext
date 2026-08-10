@@ -153,7 +153,7 @@ pub(crate) struct TrackView {
 }
 
 impl TrackView {
-    fn of(track: TrackRecord) -> Self {
+    pub(crate) fn of(track: TrackRecord) -> Self {
         Self {
             id: Id::of(track.id),
             path: track.path.display().to_string(),
