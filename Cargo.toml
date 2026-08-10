@@ -1,0 +1,46 @@
+[workspace]
+members = ["crates/subtext-core", "crates/subtext-index", "crates/subtext-scan"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+repository = "https://github.com/Protonicwave/subtext"
+authors = ["Shlok Bhusal"]
+
+[workspace.dependencies]
+subtext-core = { path = "crates/subtext-core" }
+subtext-index = { path = "crates/subtext-index" }
+subtext-scan = { path = "crates/subtext-scan" }
+
+[workspace.lints.rust]
+# The application decodes nothing itself and touches no raw pointers, so there is
+# no case where unsafe would be needed. Forbidding it makes that a build error
+# rather than a review comment.
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Parsing and indexing run on user supplied files, where a panic would take the
+# whole application down rather than skipping one bad cue.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+module_name_repetitions = "allow"
+
+# Debug builds of the parser are otherwise slow enough to make working with a real
+# library tedious, and the benchmarks are meaningless without it.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

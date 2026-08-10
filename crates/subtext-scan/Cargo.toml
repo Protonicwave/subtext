@@ -1,0 +1,16 @@
+[package]
+name = "subtext-scan"
+description = "Filesystem scanning, watching and ingest for Subtext"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+subtext-core.workspace = true
+subtext-index.workspace = true
+
+[lints]
+workspace = true
