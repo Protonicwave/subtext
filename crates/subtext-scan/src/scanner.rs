@@ -88,8 +88,71 @@ impl Scanner {
         let folders = self.folders()?;
         folders
             .iter()
-            .filter(|folder| paths.iter().any(|path| path.starts_with(&folder.path)))
+            .filter(|folder| paths.iter().any(|path| is_inside(path, &folder.path)))
             .map(|folder| self.scan(folder, sink))
             .collect()
+    }
+}
+
+/// Whether a path that changed falls inside a watched folder.
+///
+/// Compared as written first, and then again with both sides resolved. The
+/// platform reports the path it watched rather than the path it was given, and
+/// those differ wherever a symbolic link stands between them: on macOS a folder
+/// under `/var` is reported under `/private/var`, and anywhere at all a folder
+/// reached through a link is reported at the other end of it.
+///
+/// A path that has just been deleted cannot be resolved, so its parent is tried
+/// instead. Being wrong here costs a rescan that finds nothing, or a change
+/// noticed on the next one.
+fn is_inside(path: &Path, folder: &Path) -> bool {
+    if path.starts_with(folder) {
+        return true;
+    }
+
+    let resolved = path
+        .canonicalize()
+        .ok()
+        .or_else(|| path.parent()?.canonicalize().ok());
+    match (resolved, folder.canonicalize()) {
+        (Some(path), Ok(folder)) => path.starts_with(folder),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::is_inside;
+
+    #[test]
+    fn a_path_is_inside_the_folder_it_is_written_under() {
+        let directory = tempfile::tempdir().unwrap();
+        let folder = directory.path().join("films");
+        std::fs::create_dir_all(folder.join("Nineteen Nineties")).unwrap();
+
+        assert!(is_inside(&folder.join("Heat.1995.mkv"), &folder));
+        assert!(is_inside(
+            &folder.join("Nineteen Nineties/Heat.1995.srt"),
+            &folder
+        ));
+        assert!(is_inside(&folder, &folder));
+
+        assert!(!is_inside(
+            &directory.path().join("elsewhere/Heat.mkv"),
+            &folder
+        ));
+    }
+
+    #[test]
+    fn a_folder_reported_by_another_name_is_still_the_same_folder() {
+        let directory = tempfile::tempdir().unwrap();
+        let folder = directory.path().join("films");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        // What a platform that resolves the path before watching it reports.
+        let roundabout = directory.path().join("films/../films/Heat.1995.mkv");
+        assert!(is_inside(&roundabout, &folder));
     }
 }
