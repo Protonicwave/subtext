@@ -109,7 +109,7 @@ fn worth_visiting(entry: &DirEntry) -> bool {
 /// A time the platform cannot express as milliseconds since the epoch reads as
 /// zero, which makes the file look older than everything else and so always
 /// worth reading again. That is the safe direction to be wrong in.
-fn millis_since_epoch(time: SystemTime) -> i64 {
+pub(crate) fn millis_since_epoch(time: SystemTime) -> i64 {
     time.duration_since(UNIX_EPOCH)
         .ok()
         .and_then(|since| i64::try_from(since.as_millis()).ok())

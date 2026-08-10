@@ -24,6 +24,7 @@
 // the same type. Repeating that under each method heading would add nothing.
 #![allow(clippy::missing_errors_doc)]
 
+mod attach;
 mod debounce;
 mod error;
 mod ingest;
@@ -33,6 +34,7 @@ mod scanner;
 mod walk;
 mod watch;
 
+pub use crate::attach::{Attached, attach_subtitle};
 pub use crate::error::{Error, Result};
 pub use crate::ingest::{ScanOutcome, TrackWarnings, scan_folder};
 pub use crate::progress::{ProgressSink, ScanProgress, ScanStage, Silent};

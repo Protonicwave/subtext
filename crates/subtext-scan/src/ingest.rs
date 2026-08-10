@@ -262,6 +262,13 @@ impl Plan {
                 .values()
                 .filter(|pairing| !on_disk.contains(pairing.path.as_path()))
                 .filter(|pairing| present_films.contains(&pairing.film_id))
+                // A subtitle attached by hand may sit outside the folder it was
+                // attached inside, so this walk not finding it is no evidence
+                // that it has gone. Only the filesystem can say that, and it is
+                // worth one stat for the few files anyone attaches themselves.
+                .filter(|pairing| {
+                    pairing.match_kind != TrackMatch::ByHand || !pairing.path.exists()
+                })
                 .map(|pairing| pairing.id),
         );
         plan.removed.sort_unstable();
