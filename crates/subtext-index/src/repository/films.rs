@@ -14,6 +14,20 @@ use crate::repository::{from_sql_int, path_text, to_sql_int};
 const COLUMNS: &str = "id, folder_id, path, title, year, size_bytes, modified_at, \
                        duration_ms, poster_path, accent, missing_since, added_at";
 
+/// How many columns [`COLUMNS`] names, for queries that read a film alongside
+/// something else and need to know where the film ends.
+pub(super) const COLUMN_COUNT: usize = 12;
+
+/// The same columns, qualified with a table alias for use in a join.
+pub(super) fn qualified_columns(alias: &str) -> String {
+    COLUMNS
+        .split(',')
+        .map(str::trim)
+        .map(|column| format!("{alias}.{column}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[derive(Debug)]
 pub struct Films<'a> {
     database: &'a Database,
@@ -229,4 +243,22 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
         missing_since: row.get(10)?,
         added_at: row.get(11)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{COLUMN_COUNT, COLUMNS, qualified_columns};
+
+    #[test]
+    fn the_column_count_matches_the_columns() {
+        assert_eq!(COLUMNS.split(',').count(), COLUMN_COUNT);
+    }
+
+    #[test]
+    fn columns_can_be_qualified_for_a_join() {
+        let qualified = qualified_columns("f");
+        assert!(qualified.starts_with("f.id, f.folder_id, f.path"));
+        assert!(qualified.ends_with("f.added_at"));
+        assert_eq!(qualified.split(',').count(), COLUMN_COUNT);
+    }
 }

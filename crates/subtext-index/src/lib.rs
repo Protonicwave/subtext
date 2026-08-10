@@ -23,4 +23,4 @@ pub use crate::model::{
     FilmRecord, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored, TrackMatch,
     TrackRecord, WatchedFolder,
 };
-pub use crate::repository::{Films, Folders, Tracks};
+pub use crate::repository::{Films, Folders, Positions, Preferences, Tracks};

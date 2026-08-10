@@ -7,10 +7,14 @@
 
 mod films;
 mod folders;
+mod positions;
+mod preferences;
 mod tracks;
 
 pub use self::films::Films;
 pub use self::folders::Folders;
+pub use self::positions::Positions;
+pub use self::preferences::Preferences;
 pub use self::tracks::Tracks;
 
 /// The text a path goes into the database as.
