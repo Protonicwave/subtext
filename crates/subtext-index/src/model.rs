@@ -81,6 +81,29 @@ impl Fingerprint {
     }
 }
 
+/// A subtitle file the library already knows about, as a rescan sees it.
+///
+/// Separate from [`Fingerprint`] because a subtitle file raises a question a
+/// film does not: not only whether it needs reading again, but whether it still
+/// belongs to the film it was paired with.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrackPairing {
+    pub id: i64,
+    pub film_id: i64,
+    pub path: PathBuf,
+    pub match_kind: TrackMatch,
+    pub size_bytes: u64,
+    pub modified_at: i64,
+}
+
+impl TrackPairing {
+    /// Whether the file on disk is the one this row was written from.
+    #[must_use]
+    pub fn matches(&self, size_bytes: u64, modified_at: i64) -> bool {
+        self.size_bytes == size_bytes && self.modified_at == modified_at
+    }
+}
+
 /// Where a subtitle track came from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TrackMatch {

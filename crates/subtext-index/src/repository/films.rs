@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use subtext_core::Timestamp;
 
 use crate::clock::now_millis;
@@ -48,49 +48,31 @@ impl<'a> Films<'a> {
     /// Finding the file again also clears the missing mark, since the drive
     /// being plugged back in is the common reason for a path to reappear.
     pub fn upsert(&self, film: &NewFilm<'_>) -> Result<Stored> {
-        let path = path_text(film.path)?;
+        self.database
+            .with(|connection| upsert_one(connection, film, now_millis()))
+    }
+
+    /// Records every film a scan found, in one transaction.
+    ///
+    /// A folder of a thousand films is a thousand statements either way, but
+    /// one commit rather than a thousand, which is most of the difference
+    /// between a scan measured in seconds and one measured in minutes.
+    pub fn upsert_many(&self, films: &[NewFilm<'_>]) -> Result<Vec<Stored>> {
+        if films.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // One timestamp for the whole batch, so that films found together are
+        // ordered together rather than by how quickly they were written.
+        let added_at = now_millis();
         self.database.with(|connection| {
-            let updated: Option<i64> = connection
-                .query_row(
-                    "INSERT INTO film (folder_id, path, title, year, size_bytes, modified_at, added_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                     ON CONFLICT (path) DO UPDATE SET
-                         folder_id = excluded.folder_id,
-                         title = excluded.title,
-                         year = excluded.year,
-                         size_bytes = excluded.size_bytes,
-                         modified_at = excluded.modified_at,
-                         missing_since = NULL
-                     WHERE film.folder_id IS NOT excluded.folder_id
-                        OR film.title IS NOT excluded.title
-                        OR film.year IS NOT excluded.year
-                        OR film.size_bytes IS NOT excluded.size_bytes
-                        OR film.modified_at IS NOT excluded.modified_at
-                        OR film.missing_since IS NOT NULL
-                     RETURNING id",
-                    params![
-                        film.folder_id,
-                        path,
-                        film.title,
-                        film.year,
-                        to_sql_int(film.size_bytes),
-                        film.modified_at,
-                        now_millis(),
-                    ],
-                    |row| row.get(0),
-                )
-                .optional()?;
-
-            if let Some(id) = updated {
-                return Ok(Stored { id, changed: true });
-            }
-
-            // Nothing was written because nothing had changed, so the row is
-            // still there to be asked for its identifier.
-            let id = connection.query_row("SELECT id FROM film WHERE path = ?1", [path], |row| {
-                row.get(0)
-            })?;
-            Ok(Stored { id, changed: false })
+            let transaction = connection.transaction()?;
+            let stored = films
+                .iter()
+                .map(|film| upsert_one(&transaction, film, added_at))
+                .collect::<Result<Vec<_>>>()?;
+            transaction.commit()?;
+            Ok(stored)
         })
     }
 
@@ -221,6 +203,55 @@ impl<'a> Films<'a> {
             Ok(film)
         })
     }
+}
+
+const UPSERT: &str =
+    "INSERT INTO film (folder_id, path, title, year, size_bytes, modified_at, added_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+     ON CONFLICT (path) DO UPDATE SET
+         folder_id = excluded.folder_id,
+         title = excluded.title,
+         year = excluded.year,
+         size_bytes = excluded.size_bytes,
+         modified_at = excluded.modified_at,
+         missing_since = NULL
+     WHERE film.folder_id IS NOT excluded.folder_id
+        OR film.title IS NOT excluded.title
+        OR film.year IS NOT excluded.year
+        OR film.size_bytes IS NOT excluded.size_bytes
+        OR film.modified_at IS NOT excluded.modified_at
+        OR film.missing_since IS NOT NULL
+     RETURNING id";
+
+/// One film, against a connection that may already be inside a transaction.
+fn upsert_one(connection: &Connection, film: &NewFilm<'_>, added_at: i64) -> Result<Stored> {
+    let path = path_text(film.path)?;
+    let updated: Option<i64> = connection
+        .prepare_cached(UPSERT)?
+        .query_row(
+            params![
+                film.folder_id,
+                path,
+                film.title,
+                film.year,
+                to_sql_int(film.size_bytes),
+                film.modified_at,
+                added_at,
+            ],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    if let Some(id) = updated {
+        return Ok(Stored { id, changed: true });
+    }
+
+    // Nothing was written because nothing had changed, so the row is still
+    // there to be asked for its identifier.
+    let id = connection
+        .prepare_cached("SELECT id FROM film WHERE path = ?1")?
+        .query_row([path], |row| row.get(0))?;
+    Ok(Stored { id, changed: false })
 }
 
 pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {

@@ -9,8 +9,14 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+notify = "8.2.0"
+rayon = "1.12.0"
 subtext-core.workspace = true
 subtext-index.workspace = true
+walkdir = "2.5.0"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
