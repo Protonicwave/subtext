@@ -3219,6 +3219,7 @@ dependencies = [
 name = "subtext-index"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "rusqlite",
  "subtext-core",
  "tempfile",
