@@ -1,0 +1,21 @@
+[package]
+name = "subtext"
+description = "A film player that treats subtitles as data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+subtext-core.workspace = true
+subtext-index.workspace = true
+subtext-scan.workspace = true
+
+[lints]
+workspace = true

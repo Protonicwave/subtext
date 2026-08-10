@@ -1,0 +1,15 @@
+# Names that read as prose in documentation but that clippy would otherwise ask to
+# be wrapped in backticks. `..` keeps clippy's own defaults.
+doc-valid-idents = [
+    "SQLite",
+    "FTS5",
+    "SRT",
+    "WebP",
+    "MP4",
+    "TypeScript",
+    "JavaScript",
+    "BM25",
+    "HEVC",
+    "WebKitGTK",
+    "..",
+]
