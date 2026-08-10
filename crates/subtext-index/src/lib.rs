@@ -13,7 +13,14 @@ mod clock;
 mod database;
 mod error;
 mod migrate;
+mod model;
 mod pool;
+mod repository;
 
 pub use crate::database::Database;
 pub use crate::error::{Error, Result};
+pub use crate::model::{
+    FilmRecord, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored, TrackMatch,
+    TrackRecord, WatchedFolder,
+};
+pub use crate::repository::{Films, Folders, Tracks};
