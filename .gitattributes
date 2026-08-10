@@ -2,6 +2,10 @@
 # LF, so a CRLF checkout would fail the formatting check on a clean clone.
 * text=auto eol=lf
 
+# The subtitle fixtures exist to pin down carriage returns, byte order marks and
+# single byte encodings, so their bytes must survive a checkout untouched.
+crates/subtext-core/tests/fixtures/** -text
+
 # Binary assets that must never be touched.
 *.png binary
 *.ico binary

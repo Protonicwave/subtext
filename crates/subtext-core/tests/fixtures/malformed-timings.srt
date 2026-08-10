@@ -1,0 +1,15 @@
+1
+00:00:01,000 --> 00:00:02,000
+Kept.
+
+2
+00:00:03,000 --> tomorrow
+Dropped.
+
+3
+not a timing at all
+Also dropped.
+
+4
+00:00:07,000 --> 00:00:08,000
+Kept as well.
