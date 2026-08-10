@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 use crate::migrate;
 use crate::pool::Pool;
-use crate::repository::{Films, Folders, Positions, Preferences, Tracks};
+use crate::repository::{Films, Folders, Positions, Preferences, Search, Tracks};
 
 /// One SQLite file holding everything Subtext knows.
 ///
@@ -71,6 +71,12 @@ impl Database {
     #[must_use]
     pub fn preferences(&self) -> Preferences<'_> {
         Preferences::new(self)
+    }
+
+    /// Dialogue search across the whole library.
+    #[must_use]
+    pub fn search(&self) -> Search<'_> {
+        Search::new(self)
     }
 
     /// Runs a large ingest with the search index built once at the end.
