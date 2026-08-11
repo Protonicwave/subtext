@@ -87,6 +87,23 @@ describe('the settings screen', () => {
     });
   });
 
+  /*
+   * The read is quiet while it works, so a read that never started would be
+   * silent too: the setting would have moved and the folder list would go on
+   * describing pairings made under the old answer.
+   */
+  it('says so when the folders cannot be read again', async () => {
+    ipc.rescan.mockRejectedValueOnce(new Error('the library database refused the request'));
+
+    render(<SettingsScreen />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Exact names' }));
+
+    await waitFor(() => {
+      expect(useImport.getState().problem).toMatch(/could not be read again/i);
+    });
+    expect(useImport.getState().problem).toContain('the library database refused the request');
+  });
+
   it('does not read the folders again for a preference about anything else', async () => {
     render(<SettingsScreen />);
 
