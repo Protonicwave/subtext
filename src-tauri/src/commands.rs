@@ -7,14 +7,14 @@
 use std::path::{Path, PathBuf};
 
 use subtext_core::Timestamp;
-use subtext_index::Database;
+use subtext_index::{Database, SearchOptions};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
     AccentView, Answer, CueView, Failure, FilmView, FolderView, Id, PosterWanted, ScanProgressed,
-    TrackView,
+    SearchView, TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters};
@@ -215,6 +215,61 @@ pub(crate) async fn track_cues(state: State<'_, AppState>, track_id: Id) -> Answ
         .map_err(Failure::of)?;
 
     Ok(cues.into_iter().map(CueView::of).collect())
+}
+
+/// How many lines one search asks the index for.
+///
+/// More than the palette can show at once, because the count under the field
+/// says how many were found and the list is scrolled. Far fewer than the index
+/// would happily return, because nobody reads the four hundredth match.
+const SEARCH_LIMIT: usize = 100;
+
+/// How many lines any one film contributes to a search across the library.
+///
+/// Small on purpose. A search for a common word would otherwise come back as
+/// one film said a hundred times, and the useful answer to "who says this" is
+/// which films say it.
+const PER_FILM: usize = 4;
+
+/// Finds a line of dialogue anywhere in the library, or in one film.
+///
+/// Called on a keystroke, so the work happens on a thread of its own rather
+/// than on the runtime that answers every other command. What comes back is
+/// grouped by film and ranked, and the query itself is treated as words rather
+/// than as index syntax, so nothing anybody types is an error.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn search_dialogue(
+    app: AppHandle,
+    query: String,
+    film_id: Option<Id>,
+) -> Answer<SearchView> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let film = film_id.map(Id::get);
+        let options = SearchOptions {
+            film,
+            limit: SEARCH_LIMIT,
+            // Within one film every match is worth showing: the list is that
+            // film's own lines in order, and holding some back would be
+            // answering half the question.
+            per_film: if film.is_some() {
+                SEARCH_LIMIT
+            } else {
+                PER_FILM
+            },
+            ..SearchOptions::default()
+        };
+
+        app.state::<AppState>()
+            .scanner()
+            .database()
+            .search()
+            .find(&query, &options)
+            .map(|results| SearchView::of(&results))
+            .map_err(Failure::of)
+    })
+    .await
+    .map_err(|_| Failure::saying("the search did not finish"))?
 }
 
 /// Records how far through a film somebody is.
