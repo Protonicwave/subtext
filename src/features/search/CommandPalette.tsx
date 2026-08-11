@@ -256,7 +256,9 @@ export function CommandPalette() {
               rows.map((row, at) => (
                 <Fragment key={`${String(row.filmId)}:${String(row.startMs)}:${String(at)}`}>
                   {row.opensFilm && (
-                    <p className={styles.group}>
+                    // Named to the list rather than to a screen reader, which
+                    // is told which film a line is in by the option itself.
+                    <p role="presentation" className={styles.group}>
                       {row.title}
                       {row.year !== null && <span className={styles.year}>{row.year}</span>}
                     </p>
@@ -293,7 +295,7 @@ export function CommandPalette() {
                   </div>
 
                   {row.withheld > 0 && (
-                    <p className={styles.withheld}>
+                    <p role="presentation" className={styles.withheld}>
                       and {row.withheld.toLocaleString('en-GB')} more in this film
                     </p>
                   )}

@@ -40,6 +40,7 @@ export function useShortcuts(actions: Actions) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
       if (isTyping(event.target)) return;
+      if (isCovered()) return;
 
       const { transport, stepping, toggleFullscreen, toggleTranscript, wake } = latest.current;
 
@@ -85,6 +86,18 @@ export function useShortcuts(actions: Actions) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, []);
+}
+
+/**
+ * Whether something is over the film, which the keys then belong to.
+ *
+ * The search palette and the import sheet are both modal dialogs, and both can
+ * be opened over a film that is playing. The field in each of them takes the
+ * keys that are typed into it, but the buttons beside it do not: space on one
+ * of those would press the button and start the film behind it at once.
+ */
+function isCovered(): boolean {
+  return document.querySelector('dialog[open]') !== null;
 }
 
 /** Whether the key belongs to a control that reads keys itself. */
