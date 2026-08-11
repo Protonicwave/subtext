@@ -18,8 +18,6 @@ import { DEFAULTS, type SettingName, type Settings, settingsFrom, storedAs } fro
  */
 interface SettingsState {
   readonly settings: Settings;
-  /** False until the library has been read, so nothing draws the defaults first. */
-  readonly loaded: boolean;
   readonly problem: string | null;
   readonly load: () => Promise<void>;
   readonly change: <Name extends SettingName>(name: Name, value: Settings[Name]) => void;
@@ -28,16 +26,17 @@ interface SettingsState {
 
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: DEFAULTS,
-  loaded: false,
   problem: null,
 
   load: async () => {
     try {
-      set({ settings: settingsFrom(await ipc.readPreferences()), loaded: true, problem: null });
+      set({ settings: settingsFrom(await ipc.readPreferences()), problem: null });
     } catch (failure) {
       // The defaults are a working application, so this is worth saying and
-      // not worth stopping for.
-      set({ loaded: true, problem: reasonFor(failure) });
+      // not worth stopping for. Nothing waits on the read for the same reason:
+      // every screen is drawn from live values, and the ones it starts with are
+      // the ones it would have been given anyway.
+      set({ problem: reasonFor(failure) });
     }
   },
 

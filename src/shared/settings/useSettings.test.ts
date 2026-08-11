@@ -20,7 +20,7 @@ const { useSettings } = await import('./useSettings');
 describe('the settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useSettings.setState({ settings: DEFAULTS, loaded: false, problem: null });
+    useSettings.setState({ settings: DEFAULTS, problem: null });
     ipc.readPreferences.mockResolvedValue([]);
     ipc.writePreference.mockResolvedValue(null);
   });
@@ -31,7 +31,6 @@ describe('the settings', () => {
     await useSettings.getState().load();
 
     expect(useSettings.getState().settings.subtitleSize).toBe(6.2);
-    expect(useSettings.getState().loaded).toBe(true);
   });
 
   it('carries on with the defaults when the library cannot be read', async () => {
@@ -40,7 +39,6 @@ describe('the settings', () => {
     await useSettings.getState().load();
 
     expect(useSettings.getState().settings).toEqual(DEFAULTS);
-    expect(useSettings.getState().loaded).toBe(true);
     expect(useSettings.getState().problem).toContain('refused');
   });
 

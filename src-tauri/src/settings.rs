@@ -40,3 +40,53 @@ pub(crate) fn hardware_decoding(database: &Database) -> bool {
 fn stored(database: &Database, key: &str) -> Option<String> {
     database.preferences().get(key).ok().flatten()
 }
+
+#[cfg(test)]
+mod tests {
+    // A test that cannot open a library has nothing to read a preference from,
+    // so it stops rather than passing quietly.
+    #![allow(clippy::unwrap_used)]
+
+    use subtext_core::Matching;
+    use subtext_index::Database;
+
+    use super::{HARDWARE_DECODING, MATCHING, hardware_decoding, matching};
+
+    /// A library file of its own, kept alive by the directory it is in.
+    fn library() -> (tempfile::TempDir, Database) {
+        let directory = tempfile::tempdir().unwrap();
+        let database = Database::open(directory.path().join("library.db")).unwrap();
+        (directory, database)
+    }
+
+    #[test]
+    fn a_library_that_has_been_told_nothing_does_what_the_application_does() {
+        let (_directory, database) = library();
+
+        assert_eq!(matching(&database), Matching::Relaxed);
+        assert!(hardware_decoding(&database));
+    }
+
+    #[test]
+    fn the_values_the_settings_screen_writes_are_the_ones_read_here() {
+        let (_directory, database) = library();
+        database.preferences().set(MATCHING, "exact").unwrap();
+        database
+            .preferences()
+            .set(HARDWARE_DECODING, "false")
+            .unwrap();
+
+        assert_eq!(matching(&database), Matching::Exact);
+        assert!(!hardware_decoding(&database));
+    }
+
+    #[test]
+    fn anything_else_under_those_keys_reads_as_the_default() {
+        let (_directory, database) = library();
+        database.preferences().set(MATCHING, "strict").unwrap();
+        database.preferences().set(HARDWARE_DECODING, "no").unwrap();
+
+        assert_eq!(matching(&database), Matching::Relaxed);
+        assert!(hardware_decoding(&database));
+    }
+}

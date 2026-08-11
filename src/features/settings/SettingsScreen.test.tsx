@@ -43,7 +43,7 @@ async function open(name: string) {
 describe('the settings screen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useSettings.setState({ settings: DEFAULTS, loaded: true, problem: null });
+    useSettings.setState({ settings: DEFAULTS, problem: null });
     useLibrary.setState({ folders: [folder], films: [], resumable: [], loaded: true });
     useImport.setState({ progress: null, stage: 'idle', asked: false });
   });
