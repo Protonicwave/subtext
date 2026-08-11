@@ -43,7 +43,7 @@ export function App() {
       <main className={styles.stage}>
         {route.screen === 'library' && <LibraryScreen />}
         {route.screen === 'settings' && <SettingsScreen />}
-        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} />}
+        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} at={route.at} />}
       </main>
 
       {firstRun && <FirstRun />}

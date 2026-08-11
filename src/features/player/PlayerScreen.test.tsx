@@ -61,7 +61,7 @@ const film = {
 
 function open(changes: Partial<FilmView> = {}) {
   useLibrary.setState({ folders: [], films: [{ ...film, ...changes }], resumable: [] });
-  const view = render(<PlayerScreen filmId={7} />);
+  const view = render(<PlayerScreen filmId={7} at={null} />);
 
   return { view, video: playing };
 }
@@ -76,7 +76,7 @@ function playing(): HTMLVideoElement {
 describe('playing a film', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useNavigation.setState({ route: { screen: 'player', filmId: 7 }, previous: null });
+    useNavigation.setState({ route: { screen: 'player', filmId: 7, at: null }, previous: null });
     usePanel.setState({ open: true });
   });
 
@@ -107,6 +107,53 @@ describe('playing a film', () => {
     opens(video(), RUNS);
 
     expect(positionOf(video())).toBe(595_000);
+  });
+
+  it('opens at the line a search found rather than where it was left', () => {
+    useLibrary.setState({
+      folders: [],
+      films: [
+        {
+          ...film,
+          position: {
+            positionMs: 600_000,
+            durationMs: RUNS,
+            finished: false,
+            updatedAt: 0,
+            progress: null,
+          },
+        },
+      ],
+      resumable: [],
+    });
+    render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
+    opens(playing(), RUNS);
+
+    expect(positionOf(playing())).toBe(92_000);
+  });
+
+  it('moves to the next line found in a film it is already playing', () => {
+    useLibrary.setState({ folders: [], films: [film], resumable: [] });
+    const view = render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
+    opens(playing(), RUNS);
+
+    view.rerender(<PlayerScreen filmId={7} at={{ ms: 415_000, count: 2 }} />);
+
+    expect(positionOf(playing())).toBe(415_000);
+  });
+
+  it('stays put when the same line is chosen twice over', () => {
+    useLibrary.setState({ folders: [], films: [film], resumable: [] });
+    const view = render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
+    opens(playing(), RUNS);
+    reaches(playing(), 130_000);
+
+    // The same moment, chosen again. It is a fresh jump and the film has moved
+    // on since the first one, so it goes back to the line rather than ignoring
+    // a millisecond it has seen before.
+    view.rerender(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 2 }} />);
+
+    expect(positionOf(playing())).toBe(92_000);
   });
 
   it('writes down where it got to on the way out', async () => {
@@ -170,7 +217,7 @@ describe('playing a film', () => {
 
   it('says so when the film is no longer in the library at all', () => {
     useLibrary.setState({ folders: [], films: [], resumable: [] });
-    render(<PlayerScreen filmId={7} />);
+    render(<PlayerScreen filmId={7} at={null} />);
 
     expect(screen.getByText(/no longer in the library/i)).toBeInTheDocument();
   });

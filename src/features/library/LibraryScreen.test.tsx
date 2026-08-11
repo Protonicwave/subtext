@@ -82,7 +82,7 @@ describe('the library screen', () => {
 
     await userEvent.click(screen.getByText('Heat'));
 
-    expect(useNavigation.getState().route).toEqual({ screen: 'player', filmId: 7 });
+    expect(useNavigation.getState().route).toMatchObject({ screen: 'player', filmId: 7 });
   });
 
   it('offers what there is to carry on with, and how much of it is left', () => {

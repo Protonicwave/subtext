@@ -46,7 +46,7 @@ describe('the title bar', () => {
 
     expect(screen.getByText('Your films')).toBeInTheDocument();
 
-    useNavigation.getState().go({ screen: 'player', filmId: 7 });
+    useNavigation.getState().openFilm(7);
 
     expect(await screen.findByText('Heat')).toBeInTheDocument();
   });

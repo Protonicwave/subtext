@@ -36,7 +36,7 @@ export function LibraryScreen() {
   const folders = useLibrary((library) => library.folders);
   const resumable = useLibrary((library) => library.resumable);
   const chooseFolder = useImport((state) => state.chooseFolder);
-  const go = useNavigation((navigation) => navigation.go);
+  const openFilm = useNavigation((navigation) => navigation.openFilm);
 
   const scroller = useRef<HTMLDivElement>(null);
   const [grid, width] = useWidth();
@@ -71,8 +71,9 @@ export function LibraryScreen() {
   // does not open a decoder before there is anything to point it at.
   useCapture(films.length > 0);
 
+  // No moment named, so the film opens where it was left.
   const open = (film: FilmView) => {
-    go({ screen: 'player', filmId: film.id });
+    openFilm(film.id);
   };
 
   const lines = films.reduce((total, film) => total + linesOf(film), 0);
