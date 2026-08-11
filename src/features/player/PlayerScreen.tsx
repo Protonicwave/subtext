@@ -22,6 +22,7 @@ import { useFullscreen } from './useFullscreen';
 import { useKeepPosition } from './useKeepPosition';
 import { usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
+import { useStepping } from './useStepping';
 import styles from './PlayerScreen.module.css';
 
 /**
@@ -89,8 +90,10 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   const toggleTranscript = usePanel((panel) => panel.toggle);
   const close = usePanel((panel) => panel.close);
 
+  const stepping = useStepping(timeline, transport);
+
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
-  useShortcuts({ transport, toggleFullscreen, toggleTranscript, wake });
+  useShortcuts({ transport, stepping, toggleFullscreen, toggleTranscript, wake });
 
   const palette = paletteOf(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
@@ -141,6 +144,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           <Controls
             playback={playback}
             transport={transport}
+            stepping={stepping}
             visible={visible}
             fullscreen={fullscreen}
             transcript={open}

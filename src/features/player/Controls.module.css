@@ -44,8 +44,19 @@
     color var(--duration-instant) var(--ease-out);
 }
 
-.control:hover {
+.control:hover:not(:disabled) {
   background: rgb(255 255 255 / 12%);
+}
+
+/* A film with no subtitles has no lines to step through. */
+.control:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Set apart from the controls that move by seconds rather than by line. */
+.stepping {
+  margin-left: var(--space-3);
 }
 
 .control:focus-visible {

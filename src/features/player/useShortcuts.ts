@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { PLAYBACK } from './defaults';
+import type { Stepping } from './useStepping';
 import type { Transport } from './usePlayback';
 
 /**
@@ -18,6 +19,7 @@ import type { Transport } from './usePlayback';
 /** Everything a key can do, which is everything the control bar can do. */
 export interface Actions {
   transport: Transport;
+  stepping: Stepping;
   toggleFullscreen: () => void;
   toggleTranscript: () => void;
   /** Something happened, so the controls should be on screen to show what. */
@@ -39,7 +41,11 @@ export function useShortcuts(actions: Actions) {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
       if (isTyping(event.target)) return;
 
-      const { transport, toggleFullscreen, toggleTranscript, wake } = latest.current;
+      const { transport, stepping, toggleFullscreen, toggleTranscript, wake } = latest.current;
+
+      // What the arrows mean, which is a matter of preference and of whether
+      // the film has any dialogue for them to land on.
+      const byLine = PLAYBACK.dialogueArrows && stepping.available;
 
       switch (event.key) {
         case ' ':
@@ -47,10 +53,12 @@ export function useShortcuts(actions: Actions) {
           transport.toggle();
           break;
         case 'ArrowLeft':
-          transport.skipBy(-PLAYBACK.skipMs);
+          if (byLine) stepping.back();
+          else transport.skipBy(-PLAYBACK.skipMs);
           break;
         case 'ArrowRight':
-          transport.skipBy(PLAYBACK.skipMs);
+          if (byLine) stepping.on();
+          else transport.skipBy(PLAYBACK.skipMs);
           break;
         case 'm':
           transport.toggleMute();

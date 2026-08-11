@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
 import { PLAYBACK } from './defaults';
+import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 
 const playing: Playback = {
@@ -16,19 +17,22 @@ const playing: Playback = {
   problem: null,
 };
 
-function show(playback: Partial<Playback> = {}, visible = true) {
+function show(playback: Partial<Playback> = {}, visible = true, available = true) {
   const transport: Transport = {
     toggle: vi.fn(),
+    positionNow: vi.fn(() => playing.positionMs),
     seekTo: vi.fn(),
     skipBy: vi.fn(),
     setVolume: vi.fn(),
     toggleMute: vi.fn(),
   };
+  const stepping: Stepping = { available, back: vi.fn(), on: vi.fn() };
 
   render(
     <Controls
       playback={{ ...playing, ...playback }}
       transport={transport}
+      stepping={stepping}
       visible={visible}
       fullscreen={false}
       transcript={false}
@@ -38,7 +42,7 @@ function show(playback: Partial<Playback> = {}, visible = true) {
     />,
   );
 
-  return transport;
+  return { transport, stepping };
 }
 
 describe('the control bar', () => {
@@ -50,7 +54,7 @@ describe('the control bar', () => {
   });
 
   it('offers to pause what is playing, and to play what is paused', async () => {
-    const transport = show();
+    const { transport } = show();
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
     expect(transport.toggle).toHaveBeenCalled();
 
@@ -59,7 +63,7 @@ describe('the control bar', () => {
   });
 
   it('skips by the interval it says it does', async () => {
-    const transport = show();
+    const { transport } = show();
 
     await userEvent.click(screen.getByRole('button', { name: /forward 10 seconds/i }));
     expect(transport.skipBy).toHaveBeenCalledWith(PLAYBACK.skipMs);
@@ -68,8 +72,27 @@ describe('the control bar', () => {
     expect(transport.skipBy).toHaveBeenCalledWith(-PLAYBACK.skipMs);
   });
 
+  it('steps by line as well as by seconds', async () => {
+    const { stepping } = show();
+
+    await userEvent.click(screen.getByRole('button', { name: /next line/i }));
+    expect(stepping.on).toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /previous line/i }));
+    expect(stepping.back).toHaveBeenCalled();
+  });
+
+  it('has nothing to step through in a film with no subtitles', () => {
+    show({}, true, false);
+
+    expect(screen.getByRole('button', { name: /next line/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /previous line/i })).toBeDisabled();
+    // The seconds still work: they are what a film without dialogue has.
+    expect(screen.getByRole('button', { name: /forward 10 seconds/i })).toBeEnabled();
+  });
+
   it('seeks to wherever the scrubber is put', () => {
-    const transport = show();
+    const { transport } = show();
     const scrubber = screen.getByRole('slider', { name: /position in the film/i });
 
     expect(scrubber).toHaveValue('3852000');

@@ -224,6 +224,37 @@ describe('playing a film', () => {
     expect(positionOf(video())).toBe(600_000);
   });
 
+  it('lands the arrow keys on dialogue rather than on a fixed ten seconds', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
+      { index: 2, startMs: 600_000, endMs: 604_000, text: 'I rob banks.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await screen.findByText('I rob banks.');
+    reaches(video(), 300_000);
+
+    await userEvent.keyboard('{ArrowRight}');
+    expect(positionOf(video())).toBe(600_000);
+
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(positionOf(video())).toBe(60_000);
+  });
+
+  it('steps by line from the control bar', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await screen.findByText('I take scores.');
+
+    await userEvent.click(screen.getByRole('button', { name: /next line/i }));
+    expect(positionOf(video())).toBe(60_000);
+  });
+
   it('draws the line being spoken at the moment it is spoken', async () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },

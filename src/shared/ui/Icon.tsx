@@ -141,6 +141,29 @@ export function SkipForwardIcon(props: IconProps) {
   );
 }
 
+/*
+ * Stepping by line. Drawn as the skip-to-track controls every player has,
+ * because that is what they do here: the lines are the places in the film.
+ */
+
+export function PreviousLineIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" strokeWidth={1.4}>
+      <path d="M18 6v12L9.5 12Z" />
+      <path d="M6.6 5.6v12.8" fill="none" strokeWidth={2} />
+    </Icon>
+  );
+}
+
+export function NextLineIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" strokeWidth={1.4}>
+      <path d="M6 6v12l8.5-6Z" />
+      <path d="M17.4 5.6v12.8" fill="none" strokeWidth={2} />
+    </Icon>
+  );
+}
+
 export function VolumeIcon(props: IconProps) {
   return (
     <Icon {...props}>

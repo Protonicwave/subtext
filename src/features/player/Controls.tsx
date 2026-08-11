@@ -3,8 +3,10 @@ import {
   ExitFullscreenIcon,
   FullscreenIcon,
   MuteIcon,
+  NextLineIcon,
   PauseIcon,
   PlayIcon,
+  PreviousLineIcon,
   SkipBackIcon,
   SkipForwardIcon,
   TranscriptIcon,
@@ -13,6 +15,7 @@ import {
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
 import { PLAYBACK } from './defaults';
+import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';
 
@@ -30,6 +33,8 @@ import styles from './Controls.module.css';
 interface ControlsProps {
   playback: Playback;
   transport: Transport;
+  /** Moving by line, which a film with no subtitles cannot do. */
+  stepping: Stepping;
   visible: boolean;
   fullscreen: boolean;
   /** The transcript is beside the film. */
@@ -43,6 +48,7 @@ interface ControlsProps {
 export function Controls({
   playback,
   transport,
+  stepping,
   visible,
   fullscreen,
   transcript,
@@ -111,6 +117,24 @@ export function Controls({
           <SkipForwardIcon size={17} />
         </Control>
 
+        {/*
+         * Moving by what is said rather than by how long it took to say it.
+         * Set apart from the two beside them, because they answer a different
+         * question: not how far, but which line.
+         */}
+        <Control
+          label="Previous line"
+          onClick={stepping.back}
+          disabled={!stepping.available}
+          className={styles.stepping}
+        >
+          <PreviousLineIcon size={15} />
+        </Control>
+
+        <Control label="Next line" onClick={stepping.on} disabled={!stepping.available}>
+          <NextLineIcon size={15} />
+        </Control>
+
         <p className={styles.clock}>
           <span>{clockOf(positionMs)}</span>
           <span className={styles.left}>{countdownOf(positionMs, durationMs)}</span>
@@ -164,6 +188,7 @@ function played(positionMs: number, durationMs: number | null): number {
 interface ControlProps {
   label: string;
   onClick: () => void;
+  disabled?: boolean | undefined;
   className?: string | undefined;
   children: ReactNode;
 }
@@ -174,12 +199,13 @@ interface ControlProps {
  * The name is on the button rather than in the icon, which is why every icon in
  * the application is hidden from assistive technology.
  */
-function Control({ label, onClick, className, children }: ControlProps) {
+function Control({ label, onClick, disabled, className, children }: ControlProps) {
   return (
     <button
       type="button"
       className={classes(styles.control, className)}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
     >

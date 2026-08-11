@@ -32,6 +32,14 @@ export interface Playback {
 
 export interface Transport {
   toggle: () => void;
+  /**
+   * Where the film is at this moment.
+   *
+   * The element rather than the position above, which is up to a quarter of a
+   * second behind it. Anything acting on where the film is now, rather than
+   * drawing where it was, asks this.
+   */
+  positionNow: () => number;
   seekTo: (ms: number) => void;
   skipBy: (ms: number) => void;
   setVolume: (volume: number) => void;
@@ -187,6 +195,11 @@ export function usePlayback(
     };
   }, [path, startAtMs]);
 
+  const positionNow = useCallback(() => {
+    const element = video.current;
+    return element === null ? 0 : element.currentTime * 1000;
+  }, []);
+
   const seekTo = useCallback((ms: number) => {
     const element = video.current;
     if (element === null) return;
@@ -241,8 +254,8 @@ export function usePlayback(
   // to it, and a new object on every timeupdate would rebind them four times a
   // second for the length of the film.
   const transport = useMemo(
-    () => ({ toggle, seekTo, skipBy, setVolume, toggleMute }),
-    [toggle, seekTo, skipBy, setVolume, toggleMute],
+    () => ({ toggle, positionNow, seekTo, skipBy, setVolume, toggleMute }),
+    [toggle, positionNow, seekTo, skipBy, setVolume, toggleMute],
   );
 
   return [video, state, transport];

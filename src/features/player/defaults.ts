@@ -44,8 +44,17 @@ export interface PlaybackPreferences {
    * seconds of run-up is enough to remember where you were.
    */
   rewindMs: number;
-  /** What the skip controls and the arrow keys move by. */
+  /** What the skip controls, and the arrow keys otherwise, move by. */
   skipMs: number;
+  /**
+   * Whether the arrow keys land on dialogue rather than on a fixed number of
+   * seconds.
+   *
+   * On, because it is the better answer to what somebody pressing the left
+   * arrow wants: they missed a line, and the line is where they meant to go.
+   * A film with no subtitles has no lines to land on and gets the seconds.
+   */
+  dialogueArrows: boolean;
   /**
    * How much of a film counts as having watched it.
    *
@@ -63,6 +72,7 @@ export interface PlaybackPreferences {
 export const PLAYBACK: PlaybackPreferences = {
   rewindMs: 5_000,
   skipMs: 10_000,
+  dialogueArrows: true,
   watchedFraction: 0.97,
   hideAfterMs: 2_600,
   saveEveryMs: 5_000,
