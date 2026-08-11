@@ -1,0 +1,126 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { Controls } from './Controls';
+import { PLAYBACK } from './defaults';
+import type { Playback, Transport } from './usePlayback';
+
+const playing: Playback = {
+  ready: true,
+  playing: true,
+  waiting: false,
+  positionMs: 3_852_000,
+  durationMs: 10_260_000,
+  volume: 0.8,
+  muted: false,
+  problem: null,
+};
+
+function show(playback: Partial<Playback> = {}) {
+  const transport: Transport = {
+    toggle: vi.fn(),
+    seekTo: vi.fn(),
+    skipBy: vi.fn(),
+    setVolume: vi.fn(),
+    toggleMute: vi.fn(),
+  };
+
+  render(
+    <Controls
+      playback={{ ...playing, ...playback }}
+      transport={transport}
+      visible
+      fullscreen={false}
+      onToggleFullscreen={vi.fn()}
+      onHold={vi.fn()}
+    />,
+  );
+
+  return transport;
+}
+
+describe('the control bar', () => {
+  it('says how far in the film is and how much is left', () => {
+    show();
+
+    expect(screen.getByText('1:04:12')).toBeInTheDocument();
+    expect(screen.getByText('-1:46:48')).toBeInTheDocument();
+  });
+
+  it('offers to pause what is playing, and to play what is paused', async () => {
+    const transport = show();
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(transport.toggle).toHaveBeenCalled();
+
+    show({ playing: false });
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+  });
+
+  it('skips by the interval it says it does', async () => {
+    const transport = show();
+
+    await userEvent.click(screen.getByRole('button', { name: /forward 10 seconds/i }));
+    expect(transport.skipBy).toHaveBeenCalledWith(PLAYBACK.skipMs);
+
+    await userEvent.click(screen.getByRole('button', { name: /back 10 seconds/i }));
+    expect(transport.skipBy).toHaveBeenCalledWith(-PLAYBACK.skipMs);
+  });
+
+  it('seeks to wherever the scrubber is put', () => {
+    const transport = show();
+    const scrubber = screen.getByRole('slider', { name: /position in the film/i });
+
+    expect(scrubber).toHaveValue('3852000');
+    expect(scrubber).toHaveAttribute('max', '10260000');
+
+    // A range input reports the position it was moved to, however it was moved.
+    fireEvent.change(scrubber, { target: { value: '600000' } });
+    expect(transport.seekTo).toHaveBeenCalledWith(600_000);
+  });
+
+  it('will not offer to seek a film whose length is unknown', () => {
+    show({ durationMs: null });
+
+    expect(screen.getByRole('slider', { name: /position in the film/i })).toBeDisabled();
+    expect(screen.getByText('--:--')).toBeInTheDocument();
+  });
+
+  it('reports the volume as a figure a person would say', () => {
+    show({ volume: 0.8 });
+
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveAttribute(
+      'aria-valuetext',
+      '80 per cent',
+    );
+  });
+
+  it('shows a muted film as silent whatever the volume was', () => {
+    show({ muted: true, volume: 0.8 });
+
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
+    expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+  });
+
+  it('takes the controls out of reach once they have gone', () => {
+    render(
+      <Controls
+        playback={playing}
+        transport={{
+          toggle: vi.fn(),
+          seekTo: vi.fn(),
+          skipBy: vi.fn(),
+          setVolume: vi.fn(),
+          toggleMute: vi.fn(),
+        }}
+        visible={false}
+        fullscreen={false}
+        onToggleFullscreen={vi.fn()}
+        onHold={vi.fn()}
+      />,
+    );
+
+    // Faded out is not enough: a control nobody can see should not be the next
+    // thing the Tab key lands on.
+    expect(screen.getByRole('button', { name: 'Pause' }).closest('[inert]')).not.toBeNull();
+  });
+});

@@ -1,62 +1,101 @@
 .screen {
+  position: relative;
   height: 100%;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-6);
-  padding: var(--space-12);
-  text-align: center;
+  overflow: hidden;
+  background: #000;
+}
+
+/*
+ * The pointer left still over a playing film. The cursor is as much a thing
+ * drawn over the picture as the control bar is, and it goes away with it.
+ */
+.screen[data-idle='true'] {
+  cursor: none;
 }
 
 /*
  * What the poster becomes. The same element as the tile in the grid as far as
- * the animation is concerned, which is why it is the one thing on this screen
- * with no transition of its own: everything about how it moves is worked out
- * from where it was and where it has ended up.
+ * the animation is concerned, which is why it has no transition of its own:
+ * how it moves is worked out from where it was and where it has ended up.
+ *
+ * It is also the container the subtitles are sized against, so that the text
+ * keeps its proportion to the picture rather than to the window.
  */
 .frame {
-  position: relative;
-  overflow: hidden;
-  width: min(260px, 40vw);
-  aspect-ratio: 2 / 3;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(
-    150deg,
-    color-mix(in oklab, var(--film-accent) 30%, var(--colour-surface)),
-    color-mix(in oklab, var(--film-pair) 34%, var(--colour-bg))
-  );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in oklab, var(--film-accent) 40%, transparent),
-    0 40px 80px -40px var(--film-accent);
-}
-
-.still {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.generated {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: var(--space-4);
-  font-family: var(--font-display);
-  font-size: 3.6rem;
-  line-height: 0.86;
-  color: color-mix(in oklab, #fff 22%, transparent);
+  container-type: size;
+  overflow: hidden;
+  background: #000;
 }
 
-.detail {
+.video {
+  width: 100%;
+  height: 100%;
+  /* The film's own shape, letterboxed. Never cropped to fill the window. */
+  object-fit: contain;
+  background: #000;
+}
+
+/*
+ * Waiting for bytes. Small, off-centre low, and in the film's own colour, so
+ * that it reads as the film arriving rather than as an error.
+ */
+.opening {
+  position: absolute;
+  inset: auto 0 12% 0;
+  z-index: 1;
+  margin: 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 2px solid color-mix(in oklab, var(--film-accent, var(--colour-accent)) 30%, transparent);
+  border-top-color: var(--film-accent, var(--colour-accent));
+  border-radius: var(--radius-full);
+  animation: turn 900ms linear infinite;
+}
+
+@keyframes turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/*
+ * The system's own preference. The ring is still there and still says that
+ * something is happening; it simply stops going round.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .opening {
+    animation: none;
+  }
+}
+
+/* A file the window will not decode, and a film whose file has gone. */
+.refused,
+.missing {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  text-align: center;
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--film-accent, var(--colour-accent)) 12%, var(--colour-bg)),
+    var(--colour-bg)
+  );
 }
 
+.missing {
+  position: relative;
+  height: 100%;
+}
+
+.refusedTitle,
 .title {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
@@ -64,23 +103,16 @@
   line-height: var(--leading-tight);
 }
 
-.title em {
-  font-style: normal;
-  color: var(--colour-text-faint);
+.note {
+  max-width: 52ch;
+  color: var(--colour-text-dim);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
 }
 
 .path {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   color: var(--colour-text-faint);
-}
-
-.note {
-  max-width: 46ch;
-  color: var(--colour-text-dim);
-  font-size: var(--text-sm);
-}
-
-.note + .note {
-  margin-top: calc(var(--space-2) * -1);
+  word-break: break-all;
 }

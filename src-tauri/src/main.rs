@@ -10,10 +10,12 @@ mod dto;
 mod ipc;
 mod posters;
 mod state;
+mod stream;
 
 use subtext_index::Database;
 use tauri::Manager;
 
+use crate::allowed::Roots;
 use crate::state::{AppState, library_path};
 
 fn main() {
@@ -29,6 +31,11 @@ fn main() {
 
     let started = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Managed here rather than in the setup below, because a request for a
+        // film can arrive as soon as the webview exists and the answer to it is
+        // held in this.
+        .manage(Roots::default())
+        .register_asynchronous_uri_scheme_protocol(stream::SCHEME, stream::handle)
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);

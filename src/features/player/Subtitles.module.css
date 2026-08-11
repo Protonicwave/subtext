@@ -1,0 +1,98 @@
+/*
+ * The subtitles sit over the picture and take no pointer events, so clicking
+ * where a line happens to be still pauses the film.
+ *
+ * Sizes are in container height units against the frame the film is drawn in,
+ * which is what keeps the text the same size against the picture whether the
+ * window is small or the film is filling a television.
+ */
+.layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  padding: 0 6%;
+  pointer-events: none;
+  font-family: var(--subtitle-font);
+  font-size: calc(var(--subtitle-size) * 1cqh);
+  font-weight: var(--subtitle-weight);
+  color: var(--subtitle-colour);
+  line-height: var(--leading-snug);
+  text-wrap: balance;
+  transition: padding var(--duration-quick) var(--ease-out);
+}
+
+.layer[data-vertical='bottom'] {
+  align-items: flex-end;
+  padding-bottom: calc(var(--subtitle-position) * 1cqh);
+}
+
+.layer[data-vertical='middle'] {
+  align-items: center;
+}
+
+.layer[data-vertical='top'] {
+  align-items: flex-start;
+  padding-top: calc(var(--subtitle-position) * 1cqh);
+}
+
+.layer[data-horizontal='left'] {
+  justify-content: flex-start;
+}
+
+.layer[data-horizontal='centre'] {
+  justify-content: center;
+}
+
+.layer[data-horizontal='right'] {
+  justify-content: flex-end;
+}
+
+/*
+ * Out of the way of the control bar. The lines move rather than the bar being
+ * drawn over them, because a line half hidden behind a scrubber is worse than
+ * no line at all.
+ */
+.layer.lifted[data-vertical='bottom'] {
+  padding-bottom: calc(var(--subtitle-position) * 1cqh + 88px);
+}
+
+.cue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+  max-width: 100%;
+  text-align: center;
+}
+
+.layer[data-horizontal='left'] .cue {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.layer[data-horizontal='right'] .cue {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.line {
+  /* Only as wide as the words, which is what the panel treatment hugs. */
+  display: inline-block;
+}
+
+/*
+ * The three backings. A shadow reads over almost any frame and takes nothing
+ * away from it; a panel is for a bright, busy film; none is for somebody who
+ * would rather have the picture whole.
+ */
+.shadow .line {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 92%),
+    0 2px 14px rgb(0 0 0 / 70%);
+}
+
+.panel .line {
+  padding: 0.06em 0.4em;
+  border-radius: 0.14em;
+  background: rgb(0 0 0 / 72%);
+}

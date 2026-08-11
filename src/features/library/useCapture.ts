@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
-import { sourceOf } from '@/shared/media/source';
+import { streamOf } from '@/shared/media/source';
 import { captureFrom } from './capture';
 import { keyFor, useFrames } from './frames';
 import { useLibrary } from './useLibrary';
@@ -75,7 +75,7 @@ async function posters(worker: Worker, signal: AbortSignal) {
     await idle();
 
     try {
-      const { image, accent, durationMs } = await captureFrom(sourceOf(film.path), worker);
+      const { image, accent, durationMs } = await captureFrom(streamOf(film.path), worker);
       const updated = await ipc.savePoster(film.id, [...new Uint8Array(image)], accent, durationMs);
       useLibrary.getState().replace(updated);
     } catch {
@@ -97,7 +97,7 @@ async function resumeFrames(worker: Worker, signal: AbortSignal) {
 
     await idle();
     try {
-      const { image } = await captureFrom(sourceOf(film.path), worker, {
+      const { image } = await captureFrom(streamOf(film.path), worker, {
         seconds: film.position.positionMs / 1000,
       });
       useFrames.getState().keep(film.id, key, image);

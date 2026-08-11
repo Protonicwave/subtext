@@ -101,14 +101,18 @@ describe('the application', () => {
     expect(await screen.findByRole('heading', { name: /your films/i })).toBeInTheDocument();
   });
 
-  it('opens a film, which is as far as the player goes for now', async () => {
+  it('opens a film in the player', async () => {
     ipc.listFolders.mockResolvedValue([folder]);
     ipc.listLibrary.mockResolvedValue([film]);
     render(<App />);
 
     await userEvent.click(await screen.findByText('Heat'));
 
-    expect(await screen.findByText(/playback itself is not built yet/i)).toBeInTheDocument();
+    // Nothing decodes under test, so the film sits on its first frame with the
+    // controls showing, which is the right answer to a file that has not
+    // started: something to press.
+    expect(await screen.findByRole('button', { name: 'Play' })).toBeInTheDocument();
+    expect(document.querySelector('video')).not.toBeNull();
   });
 
   it('marks the window when the desktop shows through behind it', async () => {

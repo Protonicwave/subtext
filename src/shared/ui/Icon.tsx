@@ -98,6 +98,84 @@ export function DropIcon(props: IconProps) {
   );
 }
 
+/*
+ * The playback controls. Play and pause are the two that are drawn filled
+ * rather than stroked: they are the largest control in the bar and the only
+ * one somebody looks for without reading, so they need to be a shape and not
+ * an outline.
+ */
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" strokeWidth={1.4}>
+      <path d="M8 5.2 19 12 8 18.8Z" />
+    </Icon>
+  );
+}
+
+export function PauseIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" stroke="none">
+      <rect x="7" y="5" width="3.6" height="14" rx="1.2" />
+      <rect x="13.4" y="5" width="3.6" height="14" rx="1.2" />
+    </Icon>
+  );
+}
+
+/** The arrow that goes back, with the number of seconds inside the curve. */
+export function SkipBackIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.8}>
+      <path d="M11.4 5.4a7 7 0 1 1-6.3 4" />
+      <path d="M4.4 2.4v3.6h3.6" />
+    </Icon>
+  );
+}
+
+export function SkipForwardIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.8}>
+      <path d="M12.6 5.4a7 7 0 1 0 6.3 4" />
+      <path d="M19.6 2.4v3.6H16" />
+    </Icon>
+  );
+}
+
+export function VolumeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9.5h3L11 6v12L7 14.5H4Z" />
+      <path d="M14.6 9.4a3.6 3.6 0 0 1 0 5.2" />
+      <path d="M17.4 6.8a7.2 7.2 0 0 1 0 10.4" />
+    </Icon>
+  );
+}
+
+export function MuteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9.5h3L11 6v12L7 14.5H4Z" />
+      <path d="m15 10 4.5 4.5M19.5 10 15 14.5" />
+    </Icon>
+  );
+}
+
+export function FullscreenIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" />
+    </Icon>
+  );
+}
+
+export function ExitFullscreenIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 4v3.5A1.5 1.5 0 0 1 7.5 9H4M20 9h-3.5A1.5 1.5 0 0 1 15 7.5V4M15 20v-3.5a1.5 1.5 0 0 1 1.5-1.5H20M4 15h3.5A1.5 1.5 0 0 1 9 16.5V20" />
+    </Icon>
+  );
+}
+
 export function MinimiseIcon(props: IconProps) {
   return (
     <Icon {...props} viewBox="0 0 12 12" strokeWidth={1.1}>

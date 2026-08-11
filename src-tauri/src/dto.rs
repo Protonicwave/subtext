@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
-use subtext_core::Timestamp;
+use subtext_core::{Cue, CuePosition, Timestamp};
 use subtext_index::{FilmRecord, PlaybackPosition, TrackMatch, TrackRecord, WatchedFolder};
 use subtext_scan::{ScanOutcome, ScanProgress, ScanStage};
 use tauri_specta::Event;
@@ -229,6 +229,68 @@ fn is_hex(colour: &str) -> bool {
         return false;
     };
     digits.len() == 6 && digits.bytes().all(|digit| digit.is_ascii_hexdigit())
+}
+
+/// One line of dialogue, as the player and the transcript want it.
+///
+/// Deliberately flat and deliberately small. A film of five thousand cues
+/// crosses the boundary in one go and is then searched sixty times a second, so
+/// every field here is a number or a string the renderer uses directly, with
+/// nothing to unpack on the other side.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CueView {
+    /// Position in the track, counted from one in playback order.
+    pub(crate) index: u32,
+    pub(crate) start_ms: u32,
+    pub(crate) end_ms: u32,
+    /// The dialogue as plain text. A cue of several lines keeps its breaks.
+    pub(crate) text: String,
+    /// Where the file asked for the cue to be drawn, if it asked at all.
+    pub(crate) position: Option<CuePositionView>,
+}
+
+impl CueView {
+    pub(crate) fn of(cue: Cue) -> Self {
+        Self {
+            index: cue.index,
+            start_ms: cue.start.millis(),
+            end_ms: cue.end.millis(),
+            text: cue.text,
+            position: cue.position.map(CuePositionView::of),
+        }
+    }
+}
+
+/// One of the nine places a cue can ask to be drawn.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CuePositionView {
+    TopLeft,
+    TopCentre,
+    TopRight,
+    MiddleLeft,
+    MiddleCentre,
+    MiddleRight,
+    BottomLeft,
+    BottomCentre,
+    BottomRight,
+}
+
+impl CuePositionView {
+    fn of(position: CuePosition) -> Self {
+        match position {
+            CuePosition::TopLeft => Self::TopLeft,
+            CuePosition::TopCentre => Self::TopCentre,
+            CuePosition::TopRight => Self::TopRight,
+            CuePosition::MiddleLeft => Self::MiddleLeft,
+            CuePosition::MiddleCentre => Self::MiddleCentre,
+            CuePosition::MiddleRight => Self::MiddleRight,
+            CuePosition::BottomLeft => Self::BottomLeft,
+            CuePosition::BottomCentre => Self::BottomCentre,
+            CuePosition::BottomRight => Self::BottomRight,
+        }
+    }
 }
 
 /// A film with no frame captured from it yet.
