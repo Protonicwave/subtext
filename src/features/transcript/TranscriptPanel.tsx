@@ -54,6 +54,9 @@ const OVERSCAN = 6;
  */
 const FOCUS = 0.38;
 
+/** The keys that move the list rather than the film. */
+const PAGING = new Set(['PageUp', 'PageDown', 'Home', 'End']);
+
 export function TranscriptPanel({ cues, active, onSeek, onClose }: TranscriptPanelProps) {
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -137,6 +140,15 @@ export function TranscriptPanel({ cues, active, onSeek, onClose }: TranscriptPan
           // fires those itself every time it moves to the next line.
           onWheel={release}
           onTouchMove={release}
+          onPointerDown={(event) => {
+            // The scrollbar is part of this element and nothing else is: a
+            // press that names the element itself, rather than a line inside
+            // it, landed on the bar. Choosing a line is not scrolling.
+            if (event.target === event.currentTarget) release();
+          }}
+          onKeyDown={(event) => {
+            if (PAGING.has(event.key)) release();
+          }}
           onCopy={onCopy}
         >
           <div

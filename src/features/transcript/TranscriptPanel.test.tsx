@@ -95,6 +95,32 @@ describe('the transcript panel', () => {
     expect(screen.queryByRole('button', { name: /follow the film/i })).not.toBeInTheDocument();
   });
 
+  it('lets go when the scrollbar is dragged, and not when a line is chosen', async () => {
+    const { onSeek } = show(spoken, 0);
+    const list = drawn()[0]?.parentElement?.parentElement;
+    if (list === undefined || list === null) throw new Error('the lines should sit in a scroller');
+
+    // A press that names the scroller itself landed on its scrollbar, since
+    // everything else in it is a line.
+    fireEvent.pointerDown(list, { target: list });
+    expect(screen.getByRole('button', { name: /follow the film/i })).toBeInTheDocument();
+
+    // Choosing a line is not scrolling, and must not stop it following.
+    await userEvent.click(screen.getByRole('button', { name: /follow the film/i }));
+    await userEvent.click(screen.getByText('I rob banks.'));
+
+    expect(onSeek).toHaveBeenCalledWith(69_000);
+    expect(screen.queryByRole('button', { name: /follow the film/i })).not.toBeInTheDocument();
+  });
+
+  it('lets go when the list is paged with the keyboard', () => {
+    show(spoken, 0);
+
+    fireEvent.keyDown(drawn()[0] ?? document.body, { key: 'PageDown' });
+
+    expect(screen.getByRole('button', { name: /follow the film/i })).toBeInTheDocument();
+  });
+
   it('says why a film without subtitles has no transcript', () => {
     show([]);
 
