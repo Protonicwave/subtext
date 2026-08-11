@@ -1,0 +1,84 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ClientModule from '@/shared/ipc/client';
+
+const { ipc } = vi.hoisted(() => ({
+  ipc: {
+    readPreferences: vi.fn(),
+    writePreference: vi.fn(),
+  },
+}));
+
+vi.mock('@/shared/ipc/client', async () => {
+  const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
+  return { ...actual, ipc };
+});
+
+const { DEFAULTS } = await import('./schema');
+const { appearanceOf, useSettings } = await import('./useSettings');
+
+describe('the settings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettings.setState({ settings: DEFAULTS, loaded: false, problem: null });
+    ipc.readPreferences.mockResolvedValue([]);
+    ipc.writePreference.mockResolvedValue(null);
+  });
+
+  it('reads what was kept from the last time', async () => {
+    ipc.readPreferences.mockResolvedValue([{ key: 'subtitles.size', value: '6.2' }]);
+
+    await useSettings.getState().load();
+
+    expect(useSettings.getState().settings.subtitleSize).toBe(6.2);
+    expect(useSettings.getState().loaded).toBe(true);
+  });
+
+  it('carries on with the defaults when the library cannot be read', async () => {
+    ipc.readPreferences.mockRejectedValue(new Error('the library database refused the request'));
+
+    await useSettings.getState().load();
+
+    expect(useSettings.getState().settings).toEqual(DEFAULTS);
+    expect(useSettings.getState().loaded).toBe(true);
+    expect(useSettings.getState().problem).toContain('refused');
+  });
+
+  it('applies a change at once and keeps it behind that', () => {
+    useSettings.getState().change('subtitleSize', 5);
+
+    expect(useSettings.getState().settings.subtitleSize).toBe(5);
+    expect(ipc.writePreference).toHaveBeenCalledWith('subtitles.size', '5');
+  });
+
+  it('writes nothing for a change that changes nothing', () => {
+    useSettings.getState().change('motion', DEFAULTS.motion);
+
+    expect(ipc.writePreference).not.toHaveBeenCalled();
+  });
+
+  it('says so when a setting could not be kept', async () => {
+    ipc.writePreference.mockRejectedValue(new Error('the library file is read only'));
+
+    useSettings.getState().change('grain', 0);
+    await vi.waitFor(() => {
+      expect(useSettings.getState().problem).toContain('read only');
+    });
+
+    // What is on screen is what this session is using, whatever the next one
+    // will start with.
+    expect(useSettings.getState().settings.grain).toBe(0);
+  });
+
+  it('hands the renderer the subtitle appearance it takes', () => {
+    const appearance = appearanceOf({ ...DEFAULTS, subtitleTypeface: 'serif', subtitleSize: 5.5 });
+
+    expect(appearance).toEqual({
+      typeface: 'serif',
+      size: 5.5,
+      weight: DEFAULTS.subtitleWeight,
+      colour: DEFAULTS.subtitleColour,
+      background: DEFAULTS.subtitleBackground,
+      position: DEFAULTS.subtitlePosition,
+    });
+  });
+});
