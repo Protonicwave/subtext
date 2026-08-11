@@ -60,6 +60,16 @@ export const commands = {
 	/**  Every film in the library, with its subtitle tracks and where it was left. */
 	listLibrary: () => typedError<FilmView[], Failure>(__TAURI_INVOKE("list_library")),
 	/**
+	 *  The films to carry on with, most recently watched first.
+	 * 
+	 *  A separate command rather than a filter over the library, because the order
+	 *  is by when each was last watched and the row shows a handful rather than
+	 *  everything. Films whose files have gone are included and marked missing,
+	 *  since an unplugged drive is exactly the case positions outlive their files
+	 *  for.
+	 */
+	continueWatching: (limit: number) => typedError<FilmView[], Failure>(__TAURI_INVOKE("continue_watching", { limit })),
+	/**
 	 *  The films with no frame captured from them yet.
 	 * 
 	 *  A poster is wanted when the film has none, when the file it names is not

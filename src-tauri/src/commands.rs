@@ -161,6 +161,41 @@ pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmV
         .collect()
 }
 
+/// The films to carry on with, most recently watched first.
+///
+/// A separate command rather than a filter over the library, because the order
+/// is by when each was last watched and the row shows a handful rather than
+/// everything. Films whose files have gone are included and marked missing,
+/// since an unplugged drive is exactly the case positions outlive their files
+/// for.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn continue_watching(
+    state: State<'_, AppState>,
+    limit: u32,
+) -> Answer<Vec<FilmView>> {
+    let database = state.scanner().database();
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+
+    database
+        .positions()
+        .resumable(limit)
+        .map_err(Failure::of)?
+        .into_iter()
+        .map(|resumable| {
+            let tracks = database
+                .tracks()
+                .for_film(resumable.film.id)
+                .map_err(Failure::of)?;
+            Ok(FilmView::of(
+                resumable.film,
+                tracks,
+                Some(resumable.position),
+            ))
+        })
+        .collect()
+}
+
 /// The films with no frame captured from them yet.
 ///
 /// A poster is wanted when the film has none, when the file it names is not
