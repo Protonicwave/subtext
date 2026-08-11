@@ -263,9 +263,13 @@ fn refuse(status: StatusCode, why: &str) -> Response<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    // A test that cannot write the file it is about to read has nothing to
+    // measure, so it stops rather than passing quietly.
+    #![allow(clippy::expect_used)]
+
     use std::path::Path;
 
-    use super::{CHUNK, content_type_of, range_of, requested};
+    use super::{CHUNK, content_type_of, range_of, read, requested};
 
     /// A film of two chunks and a bit, so that the cap is visible.
     const LENGTH: u64 = CHUNK * 2 + 1_000;
@@ -363,6 +367,46 @@ mod tests {
     fn a_url_naming_nothing_is_not_a_path() {
         let root = "stream://localhost/".parse().unwrap_or_default();
         assert_eq!(requested(&root), None);
+    }
+
+    /// The seek target, measured on the part of it that is ours.
+    ///
+    /// A seek costs one request, and a request costs one open, one seek and one
+    /// read of a bounded size. What it does not cost is a read of the file,
+    /// which is the failure this is here to catch: a change that dropped the
+    /// cap would take a hundred and twenty eight megabytes to answer this and
+    /// gigabytes to answer a real film.
+    ///
+    /// The file is large enough that the read is a real one against the disk
+    /// rather than something the page cache had ready from a moment ago.
+    #[test]
+    fn a_seek_far_into_a_large_file_reads_one_chunk() {
+        const SIZE: usize = 128 * 1024 * 1024;
+
+        let directory = tempfile::tempdir().expect("somewhere to write a film");
+        let path = directory.path().join("Heat.1995.mkv");
+
+        std::fs::write(&path, vec![7; SIZE]).expect("a film to seek into");
+        let file = std::fs::File::open(&path).expect("the film to be readable");
+
+        let length = u64::try_from(SIZE).expect("a size that fits");
+        // Two thirds of the way in, which is not where anything has been read.
+        let start = length / 3 * 2;
+        let (from, to) = range_of(Some(&format!("bytes={start}-")), length)
+            .expect("a range that far in is satisfiable");
+
+        let began = std::time::Instant::now();
+        let bytes = read(&file, from, to).expect("the range to be readable");
+        let took = began.elapsed();
+
+        assert_eq!(
+            bytes.len(),
+            usize::try_from(CHUNK).expect("a chunk that fits")
+        );
+        assert!(
+            took < std::time::Duration::from_millis(200),
+            "a seek should not take {took:?}"
+        );
     }
 
     #[test]
