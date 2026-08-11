@@ -160,6 +160,19 @@ export function MuteIcon(props: IconProps) {
   );
 }
 
+/**
+ * The transcript: the picture with the dialogue beside it, which is what the
+ * button it sits on does to the screen.
+ */
+export function TranscriptIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.7}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M13.5 5v14M16 9.5h2.5M16 14.5h2" />
+    </Icon>
+  );
+}
+
 export function FullscreenIcon(props: IconProps) {
   return (
     <Icon {...props}>

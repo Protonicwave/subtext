@@ -7,6 +7,7 @@ import {
   PlayIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  TranscriptIcon,
   VolumeIcon,
 } from '@/shared/ui/Icon';
 import { clockOf, countdownOf } from '@/shared/media/clock';
@@ -31,7 +32,10 @@ interface ControlsProps {
   transport: Transport;
   visible: boolean;
   fullscreen: boolean;
+  /** The transcript is beside the film. */
+  transcript: boolean;
   onToggleFullscreen: () => void;
+  onToggleTranscript: () => void;
   /** The pointer is resting here, so the bar should not go away under it. */
   onHold: (holding: boolean) => void;
 }
@@ -41,7 +45,9 @@ export function Controls({
   transport,
   visible,
   fullscreen,
+  transcript,
   onToggleFullscreen,
+  onToggleTranscript,
   onHold,
 }: ControlsProps) {
   const { positionMs, durationMs, playing, volume, muted } = playback;
@@ -129,6 +135,14 @@ export function Controls({
             aria-valuetext={`${String(Math.round((muted ? 0 : volume) * 100))} per cent`}
           />
         </div>
+
+        <Control
+          label={transcript ? 'Hide the transcript' : 'Show the transcript'}
+          onClick={onToggleTranscript}
+          className={transcript ? styles.on : undefined}
+        >
+          <TranscriptIcon size={17} />
+        </Control>
 
         <Control
           label={fullscreen ? 'Leave full screen' : 'Full screen'}

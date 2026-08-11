@@ -53,6 +53,14 @@
   outline-offset: 2px;
 }
 
+/*
+ * A control that is not an action but a state: the transcript is either beside
+ * the film or it is not, and the button says which.
+ */
+.on {
+  color: var(--colour-accent);
+}
+
 /* Play and pause: the one control anybody reaches for without looking. */
 .primary {
   width: 40px;

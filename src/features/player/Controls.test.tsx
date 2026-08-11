@@ -16,7 +16,7 @@ const playing: Playback = {
   problem: null,
 };
 
-function show(playback: Partial<Playback> = {}) {
+function show(playback: Partial<Playback> = {}, visible = true) {
   const transport: Transport = {
     toggle: vi.fn(),
     seekTo: vi.fn(),
@@ -29,9 +29,11 @@ function show(playback: Partial<Playback> = {}) {
     <Controls
       playback={{ ...playing, ...playback }}
       transport={transport}
-      visible
+      visible={visible}
       fullscreen={false}
+      transcript={false}
       onToggleFullscreen={vi.fn()}
+      onToggleTranscript={vi.fn()}
       onHold={vi.fn()}
     />,
   );
@@ -102,22 +104,7 @@ describe('the control bar', () => {
   });
 
   it('takes the controls out of reach once they have gone', () => {
-    render(
-      <Controls
-        playback={playing}
-        transport={{
-          toggle: vi.fn(),
-          seekTo: vi.fn(),
-          skipBy: vi.fn(),
-          setVolume: vi.fn(),
-          toggleMute: vi.fn(),
-        }}
-        visible={false}
-        fullscreen={false}
-        onToggleFullscreen={vi.fn()}
-        onHold={vi.fn()}
-      />,
-    );
+    show({}, false);
 
     // Faded out is not enough: a control nobody can see should not be the next
     // thing the Tab key lands on.

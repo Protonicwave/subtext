@@ -9,6 +9,8 @@ import { useFilmAccent } from '@/features/library/accent';
 import { paletteOf } from '@/features/library/fallback';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
+import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
+import { usePanel } from '@/features/transcript/usePanel';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { PLAYBACK, SUBTITLES } from './defaults';
@@ -83,8 +85,12 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
 
+  const open = usePanel((panel) => panel.open);
+  const toggleTranscript = usePanel((panel) => panel.toggle);
+  const close = usePanel((panel) => panel.close);
+
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
-  useShortcuts(transport, toggleFullscreen, wake);
+  useShortcuts({ transport, toggleFullscreen, toggleTranscript, wake });
 
   const palette = paletteOf(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
@@ -93,10 +99,6 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     <div
       ref={screen}
       className={styles.screen}
-      // The pointer resting still over a playing film is somebody watching it,
-      // and the cursor is as much a thing over the picture as the controls are.
-      data-idle={!visible}
-      onPointerMove={wake}
       style={
         {
           '--film-accent': palette.primary,
@@ -104,7 +106,16 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
         } as CSSProperties
       }
     >
-      <motion.div layoutId={frameId(film.id)} className={styles.frame}>
+      <motion.div
+        layoutId={frameId(film.id)}
+        className={styles.frame}
+        // The pointer resting still over a playing film is somebody watching
+        // it, and the cursor is as much a thing over the picture as the
+        // controls are. Only over the picture: the transcript beside it is
+        // being read, and neither its cursor nor its scrolling is playback.
+        data-idle={!visible}
+        onPointerMove={wake}
+      >
         <video
           ref={video}
           className={styles.video}
@@ -132,7 +143,9 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
             transport={transport}
             visible={visible}
             fullscreen={fullscreen}
+            transcript={open}
             onToggleFullscreen={toggleFullscreen}
+            onToggleTranscript={toggleTranscript}
             onHold={hold}
           />
         ) : (
@@ -144,6 +157,15 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           </div>
         )}
       </motion.div>
+
+      {open && (
+        <TranscriptPanel
+          cues={timeline.cues}
+          active={active}
+          onSeek={transport.seekTo}
+          onClose={close}
+        />
+      )}
     </div>
   );
 }
