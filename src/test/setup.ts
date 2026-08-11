@@ -44,6 +44,15 @@ for (const [measure, from] of [
 }
 
 /*
+ * Nothing scrolls in jsdom either, and the method a component asks with is not
+ * there at all rather than doing nothing. Keeping a chosen line in view is
+ * scrolling, and what the tests check is which line was chosen.
+ */
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => undefined;
+}
+
+/*
  * jsdom does not implement the modal dialog methods, so a component built on
  * the platform's own dialog would render nothing under test.
  *
