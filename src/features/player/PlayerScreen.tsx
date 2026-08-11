@@ -115,6 +115,15 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
 
         <Subtitles cue={cue} appearance={SUBTITLES} lifted={visible} />
 
+        {/*
+         * Opening a film off a drive that has been asleep takes a moment, and
+         * so does a seek into a part of it that has not been read. Without
+         * this the window looks as though it has stopped.
+         */}
+        {playback.problem === null && (!playback.ready || playback.waiting) && (
+          <div className={styles.opening} role="status" aria-label="Opening the film" />
+        )}
+
         {playback.problem === null ? (
           <Controls
             playback={playback}

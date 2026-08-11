@@ -45,7 +45,7 @@ function stateOf(element: HTMLMediaElement): Pretending {
 export function pretendMediaWorks() {
   property('duration', (state) => state.duration);
   property('paused', (state) => state.paused);
-  property('error', (state) => (state.code === null ? null : ({ code: state.code })));
+  property('error', (state) => (state.code === null ? null : { code: state.code }));
 
   writable('currentTime');
   writable('volume');

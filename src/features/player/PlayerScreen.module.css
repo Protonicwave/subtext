@@ -37,6 +37,39 @@
   background: #000;
 }
 
+/*
+ * Waiting for bytes. Small, off-centre low, and in the film's own colour, so
+ * that it reads as the film arriving rather than as an error.
+ */
+.opening {
+  position: absolute;
+  inset: auto 0 12% 0;
+  z-index: 1;
+  margin: 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 2px solid color-mix(in oklab, var(--film-accent, var(--colour-accent)) 30%, transparent);
+  border-top-color: var(--film-accent, var(--colour-accent));
+  border-radius: var(--radius-full);
+  animation: turn 900ms linear infinite;
+}
+
+@keyframes turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/*
+ * The system's own preference. The ring is still there and still says that
+ * something is happening; it simply stops going round.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .opening {
+    animation: none;
+  }
+}
+
 /* A file the window will not decode, and a film whose file has gone. */
 .refused,
 .missing {

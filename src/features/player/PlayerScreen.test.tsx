@@ -140,6 +140,14 @@ describe('playing a film', () => {
     expect(ipc.savePosition).not.toHaveBeenCalled();
   });
 
+  it('says that a film is on its way while it is still opening', () => {
+    const { video } = open();
+    expect(screen.getByRole('status', { name: /opening the film/i })).toBeInTheDocument();
+
+    opens(video(), RUNS);
+    expect(screen.queryByRole('status', { name: /opening the film/i })).not.toBeInTheDocument();
+  });
+
   it('says what is likely wrong with a file it cannot decode', () => {
     const { video } = open();
     refuses(video(), 3);
