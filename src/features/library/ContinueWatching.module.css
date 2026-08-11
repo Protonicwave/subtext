@@ -1,0 +1,115 @@
+.row {
+  margin-bottom: var(--space-10);
+}
+
+.heading {
+  margin-bottom: var(--space-4);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+/*
+ * Scrolled sideways rather than wrapped. This row is a short list of recent
+ * things, and letting it wrap would let it grow until it pushed the library off
+ * the screen.
+ */
+.cards {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-snap-type: x proximity;
+}
+
+.cards > li {
+  flex: none;
+  width: 260px;
+  scroll-snap-align: start;
+}
+
+.card {
+  width: 100%;
+  text-align: left;
+}
+
+.shot {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--film-accent) 28%, var(--colour-surface)),
+    color-mix(in oklab, var(--film-pair) 32%, var(--colour-bg))
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--colour-line-strong) 70%, transparent);
+  transition: box-shadow var(--duration-quick) var(--ease-out);
+}
+
+.card:hover .shot,
+.card:focus-visible .shot {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--film-accent) 60%, transparent),
+    0 12px 30px -18px var(--film-accent);
+}
+
+.still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.generated {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--space-3);
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  line-height: 0.86;
+  color: color-mix(in oklab, #fff 20%, transparent);
+}
+
+.sliver {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: color-mix(in oklab, var(--colour-bg) 70%, transparent);
+}
+
+.sliver > span {
+  display: block;
+  height: 100%;
+  background: var(--film-accent);
+}
+
+.name {
+  display: block;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.left {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.gone .shot {
+  opacity: 0.42;
+}
+
+.gone .left {
+  color: var(--colour-attention);
+}

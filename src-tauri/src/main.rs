@@ -2,11 +2,13 @@
 // application. Debug builds keep it, because that is where log output goes.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod allowed;
 mod chrome;
 mod commands;
 mod dropped;
 mod dto;
 mod ipc;
+mod posters;
 mod state;
 
 use subtext_index::Database;
@@ -44,6 +46,16 @@ fn main() {
                 );
             }
             app.manage(state);
+
+            // The webview reads films and posters itself, and may read nothing
+            // until it is told what. Done after the state is managed, since what
+            // is readable is exactly what the library says is being watched.
+            if let Err(error) = allowed::what_is_watched(&handle) {
+                eprintln!(
+                    "Subtext will not be able to show posters: {}",
+                    error.message
+                );
+            }
 
             // Folders change while the application is closed, so what is on
             // disk is caught up with as soon as there is a window to report it

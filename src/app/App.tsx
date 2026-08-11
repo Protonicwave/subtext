@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { MotionConfig } from 'motion/react';
 import { ipc } from '@/shared/ipc/client';
 import { LibraryScreen } from '@/features/library/LibraryScreen';
 import { useLibrary } from '@/features/library/useLibrary';
@@ -34,7 +35,9 @@ export function App() {
   const firstRun = loaded && folders.length === 0;
 
   return (
-    <>
+    // The system's own preference decides whether things move, rather than a
+    // setting of ours that would then have to agree with it.
+    <MotionConfig reducedMotion="user">
       <TitleBar />
 
       <main className={styles.stage}>
@@ -53,7 +56,7 @@ export function App() {
 
       <ImportFlow />
       <DropZone />
-    </>
+    </MotionConfig>
   );
 }
 

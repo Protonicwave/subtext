@@ -60,6 +60,44 @@ export const commands = {
 	/**  Every film in the library, with its subtitle tracks and where it was left. */
 	listLibrary: () => typedError<FilmView[], Failure>(__TAURI_INVOKE("list_library")),
 	/**
+	 *  The films to carry on with, most recently watched first.
+	 * 
+	 *  A separate command rather than a filter over the library, because the order
+	 *  is by when each was last watched and the row shows a handful rather than
+	 *  everything. Films whose files have gone are included and marked missing,
+	 *  since an unplugged drive is exactly the case positions outlive their files
+	 *  for.
+	 */
+	continueWatching: (limit: number) => typedError<FilmView[], Failure>(__TAURI_INVOKE("continue_watching", { limit })),
+	/**
+	 *  The films with no frame captured from them yet.
+	 * 
+	 *  A poster is wanted when the film has none, when the file it names is not
+	 *  there any more, and when the film's own file has changed since the frame was
+	 *  taken. The last of those needs nothing stored to compare against: the name a
+	 *  poster is filed under is derived from the film's path and modification time,
+	 *  so a film whose row names a different file is a film whose frame is stale.
+	 */
+	postersWanted: () => typedError<PosterWanted[], Failure>(__TAURI_INVOKE("posters_wanted")),
+	/**
+	 *  Records the frame captured from a film, and what was learnt taking it.
+	 * 
+	 *  The encoding and the colours are the front end's work, because the frame is
+	 *  already decoded there and sending four megabytes of pixels across to have
+	 *  them squeezed here would cost more than it saved. What arrives is a WebP of
+	 *  a few tens of kilobytes.
+	 * 
+	 *  The running time comes with it: opening the file is the only way to find out
+	 *  how long a film is, and the capture has just done that. Without it a partly
+	 *  watched film has a position and no fraction to draw it as.
+	 */
+	savePoster: (filmId: Id, image: number[], accent: {
+	/**  The colour the film's glow and its accent are drawn in. */
+	primary: string,
+	/**  The second colour of the pair, which the ambient wash uses. */
+	pair: string,
+} | null, durationMs: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("save_poster", { filmId, image, accent, durationMs })),
+	/**
 	 *  Reads every watched folder again.
 	 * 
 	 *  Cheap when nothing has moved: an unchanged folder is one stat per file and
@@ -95,6 +133,20 @@ export const events = {
 };
 
 /* Types */
+/**
+ *  The colour pair taken from a film's own frame.
+ * 
+ *  Kept in one column as two hex triples separated by a space, because nothing
+ *  ever queries one colour without the other and a second column would only be
+ *  a second thing to keep in step.
+ */
+export type AccentView = {
+	/**  The colour the film's glow and its accent are drawn in. */
+	primary: string,
+	/**  The second colour of the pair, which the ambient wash uses. */
+	pair: string,
+};
+
 /**  What the front end needs to know about the window it is drawing into. */
 export type Chrome = {
 	/**
@@ -131,7 +183,7 @@ export type FilmView = {
 	year: number | null,
 	durationMs: number | null,
 	posterPath: string | null,
-	accent: string | null,
+	accent: AccentView | null,
 	/**  The file is not where it was. The film is kept anyway. */
 	missing: boolean,
 	tracks: TrackView[],
@@ -177,6 +229,12 @@ export type PositionView = {
 	updatedAt: Millis,
 	/**  How far through, from zero to one, where the running time is known. */
 	progress: number | null,
+};
+
+/**  A film with no frame captured from it yet. */
+export type PosterWanted = {
+	id: Id,
+	path: string,
 };
 
 /**

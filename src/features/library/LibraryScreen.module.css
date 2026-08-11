@@ -1,4 +1,17 @@
+/*
+ * The library screen scrolls itself rather than leaving it to the shell. The
+ * virtualiser has to be told which element is scrolled, and it has to be one
+ * that only holds the grid.
+ */
 .screen {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* The padding is here rather than on the scroller, so the scrollbar sits at the
+   edge of the window and not inset from it. */
+.inner {
   padding: var(--space-10) var(--space-12) var(--space-16);
 }
 
@@ -31,54 +44,24 @@
   font-size: var(--text-sm);
 }
 
-.films {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid color-mix(in oklab, var(--colour-line) 55%, transparent);
-}
-
-.film {
+/*
+ * The grid is as tall as every row it would have, and holds only the rows in
+ * view. Each row is positioned rather than flowed, which is what lets the ones
+ * between be absent without the scroll position moving.
+ */
+.grid {
+  position: relative;
   width: 100%;
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  align-items: baseline;
-  padding: var(--space-3) var(--space-2);
-  text-align: left;
-  border-bottom: 1px solid color-mix(in oklab, var(--colour-line) 55%, transparent);
-  transition: background var(--duration-instant);
-}
-
-.film:hover {
-  background: color-mix(in oklab, var(--colour-surface) 70%, transparent);
-}
-
-.name {
-  font-size: var(--text-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.name em {
-  margin-left: var(--space-2);
-  font-style: normal;
-  font-size: var(--text-xs);
-  color: var(--colour-text-faint);
-}
-
-.detail {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  color: var(--colour-text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lines {
-  font-size: var(--text-xs);
-  color: var(--colour-text-dim);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  gap: var(--space-5);
+  width: 100%;
+  /* Rows are placed by transform rather than by top, so that scrolling moves
+     them on the compositor instead of laying the grid out again. */
+  will-change: transform;
 }

@@ -9,6 +9,7 @@ const { ipc, drops } = vi.hoisted(() => ({
     windowChrome: vi.fn(() => Promise.resolve({ backdrop: false })),
     listFolders: vi.fn((): Promise<FolderView[]> => Promise.resolve([])),
     listLibrary: vi.fn((): Promise<FilmView[]> => Promise.resolve([])),
+    continueWatching: vi.fn((): Promise<FilmView[]> => Promise.resolve([])),
     chooseFolder: vi.fn(),
   },
   drops: vi.fn(() => Promise.resolve(() => undefined)),
@@ -60,10 +61,11 @@ describe('the application', () => {
     vi.clearAllMocks();
     document.documentElement.removeAttribute('data-backdrop');
     useNavigation.setState({ route: { screen: 'library' }, previous: null });
-    useLibrary.setState({ folders: [], films: [], loaded: false, problem: null });
+    useLibrary.setState({ folders: [], films: [], resumable: [], loaded: false, problem: null });
     ipc.windowChrome.mockResolvedValue({ backdrop: false });
     ipc.listFolders.mockResolvedValue([]);
     ipc.listLibrary.mockResolvedValue([]);
+    ipc.continueWatching.mockResolvedValue([]);
   });
 
   it('asks for a folder when nothing is being watched', async () => {
