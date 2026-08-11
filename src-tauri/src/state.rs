@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_specta::Event;
 
 use crate::dto::{Failure, ScanFailed, ScanFinished, ScanProgressed, ScanSummary};
+use crate::settings;
 
 /// The library, the scanner, and the watches on the folders it came from.
 pub(crate) struct AppState {
@@ -101,6 +102,13 @@ impl AppState {
         work: impl FnOnce(&Scanner, &dyn ProgressSink) -> subtext_scan::Result<Vec<ScanOutcome>>,
     ) {
         self.scanning.store(true, Ordering::Relaxed);
+
+        // The one place every scan passes through, whether it was asked for or
+        // started by the watcher, and so the place the pairing preference is
+        // read. Read afresh each time rather than pushed when it changes, since
+        // a scan already running is one whose mind it is too late to change.
+        self.scanner
+            .set_matching(settings::matching(self.scanner.database()));
 
         let report = |progress: &ScanProgress| {
             let event = ScanProgressed::of(progress);

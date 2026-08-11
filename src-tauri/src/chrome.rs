@@ -1,4 +1,4 @@
-//! How the window itself is dressed.
+//! How the window itself is opened and dressed.
 //!
 //! The window has no system title bar, because Subtext draws its own. That is
 //! the same on every platform. The backdrop is not: Windows 11 can put a
@@ -7,7 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Runtime, WebviewWindowBuilder};
+
+use crate::dto::Failure;
 
 /// What the front end needs to know about the window it is drawing into.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, Type)]
@@ -17,12 +19,52 @@ pub(crate) struct Chrome {
     /// top of it are the translucent ones. False everywhere the window is
     /// opaque, where the same surfaces would be washed out over nothing.
     pub(crate) backdrop: bool,
+    /// Whether turning hardware decoding off would do anything here. Only the
+    /// Windows webview takes a switch for it; everywhere else the decision
+    /// belongs to the platform, and the settings screen leaves out a control it
+    /// would not be telling the truth about.
+    pub(crate) switchable_decoding: bool,
 }
 
-/// Asks the platform for a backdrop, and says whether it gave one.
+/// What the webview is told when it must not decode film on the graphics card.
+///
+/// Chromium takes its switches as one string, and passing any replaces the ones
+/// the framework would have passed by itself, so both of those are repeated
+/// here. The first turns off a menu and a reputation check that have no place
+/// in a film player; the second is what lets a frame be captured for a poster
+/// without somebody having pressed play first.
+const SOFTWARE_DECODING: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+     --autoplay-policy=no-user-gesture-required --disable-accelerated-video-decode";
+
+/// Opens the window this application is.
+///
+/// Built here rather than from the configuration alone, because how the webview
+/// decodes video is settled when it is created and the answer is a preference
+/// in the library file, which nothing has opened until now. Everything else
+/// about the window is still the configuration's to say.
+pub(crate) fn open<R: Runtime>(app: &AppHandle<R>, hardware_decoding: bool) -> Result<(), Failure> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .first()
+        .ok_or_else(|| Failure::saying("this build has no window to open"))?
+        .clone();
+
+    let mut window = WebviewWindowBuilder::from_config(app, &config).map_err(Failure::of)?;
+    if !hardware_decoding {
+        window = window.additional_browser_args(SOFTWARE_DECODING);
+    }
+    window.build().map_err(Failure::of)?;
+
+    Ok(())
+}
+
+/// Asks the platform for a backdrop, and says what the window turned out to be.
 pub(crate) fn dress<R: Runtime>(app: &AppHandle<R>) -> Chrome {
     Chrome {
         backdrop: apply_backdrop(app),
+        switchable_decoding: cfg!(windows),
     }
 }
 
