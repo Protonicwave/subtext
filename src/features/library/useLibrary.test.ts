@@ -6,6 +6,7 @@ const { ipc } = vi.hoisted(() => ({
   ipc: {
     listFolders: vi.fn(),
     listLibrary: vi.fn(),
+    continueWatching: vi.fn(),
     addFolder: vi.fn(),
     removeFolder: vi.fn(),
   },
@@ -47,16 +48,20 @@ const film = {
 describe('the library', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useLibrary.setState({ folders: [], films: [], loaded: false, problem: null });
+    useLibrary.setState({ folders: [], films: [], resumable: [], loaded: false, problem: null });
     ipc.listFolders.mockResolvedValue([folder]);
     ipc.listLibrary.mockResolvedValue([film]);
+    ipc.continueWatching.mockResolvedValue([]);
   });
 
-  it('reads the folders and the films together', async () => {
+  it('reads the folders, the films and what to carry on with together', async () => {
+    ipc.continueWatching.mockResolvedValue([film]);
+
     await useLibrary.getState().refresh();
 
     expect(useLibrary.getState().folders).toEqual([folder]);
     expect(useLibrary.getState().films).toEqual([film]);
+    expect(useLibrary.getState().resumable).toEqual([film]);
     expect(useLibrary.getState().loaded).toBe(true);
   });
 
@@ -88,13 +93,34 @@ describe('the library', () => {
   });
 
   it('takes the films with the folder they were found in', async () => {
-    useLibrary.setState({ folders: [folder], films: [film] });
+    useLibrary.setState({ folders: [folder], films: [film], resumable: [film] });
     ipc.removeFolder.mockResolvedValue(true);
 
     await useLibrary.getState().removeFolder(1);
 
     expect(useLibrary.getState().folders).toEqual([]);
     expect(useLibrary.getState().films).toEqual([]);
+    expect(useLibrary.getState().resumable).toEqual([]);
+  });
+
+  it('puts back the one film a capture changed, and leaves the rest alone', () => {
+    const other = { ...film, id: 9, title: 'Ronin' };
+    useLibrary.setState({ films: [film, other], resumable: [film] });
+
+    const captured = { ...film, posterPath: '/data/posters/abc.webp' };
+    useLibrary.getState().replace(captured);
+
+    expect(useLibrary.getState().films).toEqual([captured, other]);
+    // Wherever else the same film is being shown, it says the same thing.
+    expect(useLibrary.getState().resumable).toEqual([captured]);
+  });
+
+  it('has nothing to put back for a film that is no longer listed', () => {
+    useLibrary.setState({ films: [film], resumable: [] });
+
+    useLibrary.getState().replace({ ...film, id: 404 });
+
+    expect(useLibrary.getState().films).toEqual([film]);
   });
 
   it('counts the lines across every subtitle track a film has', () => {

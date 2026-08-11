@@ -10,28 +10,40 @@ import { ipc, reasonFor } from '@/shared/ipc/client';
  * nobody asked about, which makes guessing at the new state a way to be subtly
  * wrong.
  */
+/** How many films the row above the grid offers to carry on with. */
+const CONTINUE = 12;
+
 interface LibraryState {
   folders: FolderView[];
   films: FilmView[];
+  /** What to carry on with, most recently watched first. */
+  resumable: FilmView[];
   /** False until the first read has come back, so the shell can wait. */
   loaded: boolean;
   problem: string | null;
   refresh: () => Promise<void>;
   addFolder: (path: string) => Promise<void>;
   removeFolder: (id: Id) => Promise<void>;
+  /** Puts back one film that the back end has just changed. */
+  replace: (film: FilmView) => void;
   clearProblem: () => void;
 }
 
 export const useLibrary = create<LibraryState>((set) => ({
   folders: [],
   films: [],
+  resumable: [],
   loaded: false,
   problem: null,
 
   refresh: async () => {
     try {
-      const [folders, films] = await Promise.all([ipc.listFolders(), ipc.listLibrary()]);
-      set({ folders, films, loaded: true, problem: null });
+      const [folders, films, resumable] = await Promise.all([
+        ipc.listFolders(),
+        ipc.listLibrary(),
+        ipc.continueWatching(CONTINUE),
+      ]);
+      set({ folders, films, resumable, loaded: true, problem: null });
     } catch (failure) {
       set({ loaded: true, problem: reasonFor(failure) });
     }
@@ -55,11 +67,27 @@ export const useLibrary = create<LibraryState>((set) => ({
       set((library) => ({
         folders: library.folders.filter((folder) => folder.id !== id),
         films: library.films.filter((film) => film.folderId !== id),
+        resumable: library.resumable.filter((film) => film.folderId !== id),
         problem: null,
       }));
     } catch (failure) {
       set({ problem: reasonFor(failure) });
     }
+  },
+
+  /*
+   * The one place a film is patched rather than read back wholesale. Capturing
+   * a poster changes one row and returns what that row now says, and re-reading
+   * ten thousand films to learn it would undo the point of doing the captures
+   * quietly in the background.
+   */
+  replace: (film) => {
+    const swap = (films: FilmView[]) => films.map((known) => (known.id === film.id ? film : known));
+
+    set((library) => ({
+      films: swap(library.films),
+      resumable: swap(library.resumable),
+    }));
   },
 
   clearProblem: () => {
