@@ -1,4 +1,4 @@
-import { type CSSProperties, useRef } from 'react';
+import { type CSSProperties, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
@@ -11,8 +11,9 @@ import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { PLAYBACK, SUBTITLES } from './defaults';
+import { timelineOf } from './cues';
 import { startAtOf } from './resume';
-import { useActiveCue } from './useActiveCue';
+import { useActiveLine } from './useActiveLine';
 import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
@@ -77,7 +78,8 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
 
   const [video, playback, transport] = usePlayback(film.path, startAtOf(film, PLAYBACK.rewindMs));
   const cues = useCues(film);
-  const cue = useActiveCue(video, cues);
+  const timeline = useMemo(() => timelineOf(cues), [cues]);
+  const active = useActiveLine(video, timeline);
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
 
@@ -113,7 +115,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           onClick={transport.toggle}
         />
 
-        <Subtitles cue={cue} appearance={SUBTITLES} lifted={visible} />
+        <Subtitles cue={timeline.cues[active] ?? null} appearance={SUBTITLES} lifted={visible} />
 
         {/*
          * Opening a film off a drive that has been asleep takes a moment, and
