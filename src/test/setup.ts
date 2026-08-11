@@ -7,6 +7,43 @@ afterEach(() => {
 });
 
 /*
+ * jsdom lays nothing out and has no ResizeObserver for anything that wants to
+ * be told when that changed. A component that measures itself therefore never
+ * hears anything at all.
+ */
+if (typeof ResizeObserver === 'undefined') {
+  // Nothing is ever laid out, so nothing ever changes size and the callback is
+  // never owed anything.
+  const silent = () => undefined;
+  globalThis.ResizeObserver = class {
+    observe = silent;
+    unobserve = silent;
+    disconnect = silent;
+  };
+}
+
+/*
+ * Every element in jsdom reports a box of zero by zero, because nothing is ever
+ * laid out. A component that virtualises a list reads that as nothing being in
+ * view and draws nothing at all, which would leave the poster grid untestable.
+ *
+ * Reporting the window's own size is the smallest thing that can be said
+ * instead. It is not a layout engine, and no test here asserts a measurement:
+ * what they assert is which films ended up on the screen.
+ */
+for (const [measure, from] of [
+  ['offsetWidth', 'innerWidth'],
+  ['clientWidth', 'innerWidth'],
+  ['offsetHeight', 'innerHeight'],
+  ['clientHeight', 'innerHeight'],
+] as const) {
+  Object.defineProperty(HTMLElement.prototype, measure, {
+    configurable: true,
+    get: () => window[from],
+  });
+}
+
+/*
  * jsdom does not implement the modal dialog methods, so a component built on
  * the platform's own dialog would render nothing under test.
  *

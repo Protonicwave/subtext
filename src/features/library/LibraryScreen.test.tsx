@@ -1,0 +1,125 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ClientModule from '@/shared/ipc/client';
+import type { FilmView, FolderView } from '@/shared/ipc/bindings';
+
+const { ipc } = vi.hoisted(() => ({
+  ipc: { chooseFolder: vi.fn(), postersWanted: vi.fn(() => Promise.resolve([])) },
+}));
+
+vi.mock('@/shared/ipc/client', async () => {
+  const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
+  return { ...actual, ipc };
+});
+// The URL a file is served from is the shell's business, and there is no shell
+// under test. The screen only cares that it has one.
+vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://${path}` }));
+
+const { LibraryScreen } = await import('./LibraryScreen');
+const { useLibrary } = await import('./useLibrary');
+const { useNavigation } = await import('@/app/routes');
+
+const folder = { id: 1, path: '/films', addedAt: 0, films: 2, watching: true } satisfies FolderView;
+
+const film = {
+  id: 7,
+  folderId: 1,
+  path: '/films/Heat.1995.mkv',
+  title: 'Heat',
+  year: 1995,
+  durationMs: 170 * 60_000,
+  posterPath: null,
+  accent: null,
+  missing: false,
+  tracks: [
+    {
+      id: 3,
+      path: '/films/Heat.1995.srt',
+      language: 'en',
+      forced: false,
+      hearingImpaired: false,
+      matchKind: 'exact' as const,
+      cueCount: 1_402,
+    },
+  ],
+  position: null,
+} satisfies FilmView;
+
+const watching = {
+  ...film,
+  id: 8,
+  title: 'Ronin',
+  position: {
+    positionMs: 122 * 60_000,
+    durationMs: 170 * 60_000,
+    finished: false,
+    updatedAt: 5,
+    progress: 122 / 170,
+  },
+} satisfies FilmView;
+
+function show(state: Partial<{ films: FilmView[]; resumable: FilmView[]; folders: FolderView[] }>) {
+  useLibrary.setState({ folders: [folder], films: [], resumable: [], ...state });
+  render(<LibraryScreen />);
+}
+
+describe('the library screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useNavigation.setState({ route: { screen: 'library' }, previous: null });
+  });
+
+  it('says what is there, and how much of it there is to search', () => {
+    show({ films: [film] });
+
+    expect(screen.getByText('Heat')).toBeInTheDocument();
+    expect(screen.getByText(/1 film · 1,402 lines of dialogue/)).toBeInTheDocument();
+  });
+
+  it('opens a film when its tile is chosen', async () => {
+    show({ films: [film] });
+
+    await userEvent.click(screen.getByText('Heat'));
+
+    expect(useNavigation.getState().route).toEqual({ screen: 'player', filmId: 7 });
+  });
+
+  it('offers what there is to carry on with, and how much of it is left', () => {
+    show({ films: [film, watching], resumable: [watching] });
+
+    expect(screen.getByRole('heading', { name: /carry on watching/i })).toBeInTheDocument();
+    expect(screen.getByText('48 min left')).toBeInTheDocument();
+  });
+
+  it('says nothing about carrying on when there is nothing to carry on with', () => {
+    show({ films: [film] });
+
+    expect(screen.queryByRole('heading', { name: /carry on watching/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a film whose file has gone as missing rather than hiding it', () => {
+    show({ films: [{ ...film, missing: true }] });
+
+    expect(screen.getByText('Heat')).toBeInTheDocument();
+    expect(screen.getAllByText(/missing/i).length).toBeGreaterThan(0);
+  });
+
+  it('draws a film that has a captured frame with it', () => {
+    show({ films: [{ ...film, posterPath: '/data/posters/abc.webp' }] });
+
+    // Decorative, so it has no accessible name to find it by: the title beside
+    // it is what says which film this is.
+    expect(document.querySelector('img')).toHaveAttribute('src', 'asset:///data/posters/abc.webp');
+  });
+
+  it('tells somebody with no films which of the two reasons it is', () => {
+    show({ films: [], folders: [] });
+    expect(screen.getByText(/no folders are being watched yet/i)).toBeInTheDocument();
+  });
+
+  it('says so when a watched folder turned out to hold nothing', () => {
+    show({ films: [], folders: [folder] });
+    expect(screen.getByText(/nothing was found in the folders/i)).toBeInTheDocument();
+  });
+});

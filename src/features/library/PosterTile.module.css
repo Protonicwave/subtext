@@ -1,0 +1,180 @@
+/*
+ * A film in the grid.
+ *
+ * Everything that makes a tile look like the film it shows comes from the two
+ * custom properties the component sets: the glow behind it, the ring around it
+ * and the wash over the generated composition are all one colour, and it is the
+ * film's own.
+ */
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  border-radius: var(--radius-lg);
+  transition: transform var(--duration-quick) var(--ease-out);
+}
+
+/*
+ * The lift. Only the tile moves; the glow below is a separate layer so that it
+ * grows rather than travelling with it, which is the difference between a card
+ * rising off a surface and a card sliding across one.
+ */
+.tile:hover,
+.tile:focus-visible {
+  transform: translateY(-4px);
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: 6% 4% 18%;
+  z-index: 0;
+  border-radius: var(--radius-lg);
+  background: var(--film-accent);
+  filter: blur(26px);
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity var(--duration-settle) var(--ease-out),
+    transform var(--duration-settle) var(--ease-out);
+}
+
+.tile:hover::before,
+.tile:focus-visible::before {
+  opacity: 0.34;
+  transform: scale(1);
+}
+
+.frame {
+  position: relative;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--film-accent) 30%, var(--colour-surface)),
+    color-mix(in oklab, var(--film-pair) 34%, var(--colour-bg))
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--colour-line-strong) 70%, transparent);
+  transition: box-shadow var(--duration-quick) var(--ease-out);
+}
+
+.tile:hover .frame,
+.tile:focus-visible .frame {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--film-accent) 55%, transparent);
+}
+
+.still,
+.preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Over the still, so the moment it starts is a dissolve and not a cut. */
+.preview {
+  position: absolute;
+  inset: 0;
+  animation: appear var(--duration-settle) var(--ease-out) both;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * The composition a film gets when no frame could be taken from it. The
+ * initials sit large and low in the display serif, half sunk into the gradient,
+ * which reads as a designed cover rather than as a placeholder.
+ */
+.generated {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--space-4);
+  font-family: var(--font-display);
+  font-size: 3.6rem;
+  line-height: 0.86;
+  color: color-mix(in oklab, #fff 22%, transparent);
+  letter-spacing: var(--tracking-tight);
+}
+
+.badge {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--colour-bg) 78%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--colour-attention);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+/* How far through the film somebody is, along the bottom edge of the frame. */
+.sliver {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: color-mix(in oklab, var(--colour-bg) 70%, transparent);
+}
+
+.sliver > span {
+  display: block;
+  height: 100%;
+  background: var(--film-accent);
+}
+
+.caption {
+  position: relative;
+  z-index: 1;
+  display: block;
+  min-width: 0;
+}
+
+.name {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--colour-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * A film whose file is not there. Shown rather than hidden, because a library
+ * that quietly loses a film when a drive is unplugged is a library nobody can
+ * trust, and dimmed rather than struck through, because it is probably coming
+ * back.
+ */
+.gone .frame {
+  opacity: 0.42;
+}
+
+.gone .name {
+  color: var(--colour-text-dim);
+}

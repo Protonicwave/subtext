@@ -1,13 +1,16 @@
 /*
- * Everything below the title bar. It is the scrolling element, not the body,
- * so that the bar stays where it is without anything having to be sticky.
+ * Everything below the title bar. Never the body, so that the bar stays where
+ * it is without anything having to be sticky.
+ *
+ * Each screen scrolls itself rather than being scrolled by this. The library
+ * has to: a virtualised grid has to be told which element is scrolled, and
+ * something that also held the title bar would not be the right answer.
  */
 .stage {
   position: absolute;
   inset: var(--titlebar-height) 0 0;
   z-index: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /*
