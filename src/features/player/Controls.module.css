@@ -44,13 +44,32 @@
     color var(--duration-instant) var(--ease-out);
 }
 
-.control:hover {
+.control:hover:not(:disabled) {
   background: rgb(255 255 255 / 12%);
+}
+
+/* A film with no subtitles has no lines to step through. */
+.control:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Set apart from the controls that move by seconds rather than by line. */
+.stepping {
+  margin-left: var(--space-3);
 }
 
 .control:focus-visible {
   outline: 2px solid var(--colour-accent);
   outline-offset: 2px;
+}
+
+/*
+ * A control that is not an action but a state: the transcript is either beside
+ * the film or it is not, and the button says which.
+ */
+.on {
+  color: var(--colour-accent);
 }
 
 /* Play and pause: the one control anybody reaches for without looking. */
@@ -140,8 +159,61 @@
   border-radius: var(--radius-full);
 }
 
-.scrubber {
+/*
+ * The scrubber and the film's dialogue behind it, in the same box. The played
+ * fraction lives here rather than on the input, because both of them read it.
+ */
+.track {
+  position: relative;
+  height: 26px;
+}
+
+.density {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
+}
+
+.quiet {
+  fill: rgb(255 255 255 / 22%);
+}
+
+/*
+ * The same shape again, cut off at how much has been played. Clipping one path
+ * costs nothing per frame; drawing a second one from the cues would cost the
+ * whole shape every time the position moved.
+ */
+.spoken {
+  fill: var(--colour-accent);
+  clip-path: inset(0 calc(100% - var(--played, 0) * 100%) 0 0);
+}
+
+/*
+ * The input itself is only the thumb and the dragging: its track is the
+ * dialogue drawn behind it.
+ */
+.scrubber {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.scrubber::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+/*
+ * Centred in the track by the platform, which is the middle of the bar and so
+ * the line the shape is drawn about. The ring is what keeps it visible where
+ * the dialogue behind it is at its thickest.
+ */
+.scrubber::-webkit-slider-thumb {
+  margin-top: 0;
+  width: 13px;
+  height: 13px;
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 45%);
 }
 
 .scrubber:disabled {

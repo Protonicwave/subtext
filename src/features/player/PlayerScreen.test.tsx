@@ -28,6 +28,7 @@ vi.mock('@/shared/media/source', () => ({
 
 const { PlayerScreen } = await import('./PlayerScreen');
 const { useLibrary } = await import('./../library/useLibrary');
+const { usePanel } = await import('@/features/transcript/usePanel');
 const { useNavigation } = await import('@/app/routes');
 
 pretendMediaWorks();
@@ -76,6 +77,7 @@ describe('playing a film', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useNavigation.setState({ route: { screen: 'player', filmId: 7 }, previous: null });
+    usePanel.setState({ open: true });
   });
 
   it('points the element at the file through the protocol that serves it', () => {
@@ -191,10 +193,75 @@ describe('playing a film', () => {
     expect(video().muted).toBe(true);
   });
 
+  it('puts the dialogue beside the film, and takes it away again', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+
+    expect(await screen.findByRole('complementary', { name: /transcript/i })).toBeInTheDocument();
+
+    await userEvent.keyboard('t');
+    expect(screen.queryByRole('complementary', { name: /transcript/i })).not.toBeInTheDocument();
+
+    await userEvent.keyboard('t');
+    expect(screen.getByRole('complementary', { name: /transcript/i })).toBeInTheDocument();
+  });
+
+  it('goes to a line that is chosen in the transcript', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
+      { index: 2, startMs: 600_000, endMs: 604_000, text: 'I rob banks.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+
+    await userEvent.click(await screen.findByText('I rob banks.'));
+
+    expect(positionOf(video())).toBe(600_000);
+  });
+
+  it('lands the arrow keys on dialogue rather than on a fixed ten seconds', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
+      { index: 2, startMs: 600_000, endMs: 604_000, text: 'I rob banks.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await screen.findByText('I rob banks.');
+    reaches(video(), 300_000);
+
+    await userEvent.keyboard('{ArrowRight}');
+    expect(positionOf(video())).toBe(600_000);
+
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(positionOf(video())).toBe(60_000);
+  });
+
+  it('steps by line from the control bar', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
+    ]);
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await screen.findByText('I take scores.');
+
+    await userEvent.click(screen.getByRole('button', { name: /next line/i }));
+    expect(positionOf(video())).toBe(60_000);
+  });
+
   it('draws the line being spoken at the moment it is spoken', async () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
     ]);
+    // Over the picture, which is what this is about. The transcript says the
+    // same line beside it, and would answer for the subtitles if it were here.
+    usePanel.setState({ open: false });
 
     const { video } = open();
     opens(video(), RUNS);

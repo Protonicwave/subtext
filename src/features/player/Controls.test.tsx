@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
+import { shapeOf } from './density';
 import { PLAYBACK } from './defaults';
+import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 
 const playing: Playback = {
@@ -16,27 +18,34 @@ const playing: Playback = {
   problem: null,
 };
 
-function show(playback: Partial<Playback> = {}) {
+function show(playback: Partial<Playback> = {}, visible = true, available = true) {
   const transport: Transport = {
     toggle: vi.fn(),
+    positionNow: vi.fn(() => playing.positionMs),
     seekTo: vi.fn(),
     skipBy: vi.fn(),
     setVolume: vi.fn(),
     toggleMute: vi.fn(),
   };
+  const stepping: Stepping = { available, back: vi.fn(), on: vi.fn() };
 
   render(
     <Controls
       playback={{ ...playing, ...playback }}
       transport={transport}
-      visible
+      stepping={stepping}
+      density={shapeOf([0.2, 1, 0])}
+      preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
+      visible={visible}
       fullscreen={false}
+      transcript={false}
       onToggleFullscreen={vi.fn()}
+      onToggleTranscript={vi.fn()}
       onHold={vi.fn()}
     />,
   );
 
-  return transport;
+  return { transport, stepping };
 }
 
 describe('the control bar', () => {
@@ -48,7 +57,7 @@ describe('the control bar', () => {
   });
 
   it('offers to pause what is playing, and to play what is paused', async () => {
-    const transport = show();
+    const { transport } = show();
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
     expect(transport.toggle).toHaveBeenCalled();
 
@@ -57,7 +66,7 @@ describe('the control bar', () => {
   });
 
   it('skips by the interval it says it does', async () => {
-    const transport = show();
+    const { transport } = show();
 
     await userEvent.click(screen.getByRole('button', { name: /forward 10 seconds/i }));
     expect(transport.skipBy).toHaveBeenCalledWith(PLAYBACK.skipMs);
@@ -66,8 +75,27 @@ describe('the control bar', () => {
     expect(transport.skipBy).toHaveBeenCalledWith(-PLAYBACK.skipMs);
   });
 
+  it('steps by line as well as by seconds', async () => {
+    const { stepping } = show();
+
+    await userEvent.click(screen.getByRole('button', { name: /next line/i }));
+    expect(stepping.on).toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /previous line/i }));
+    expect(stepping.back).toHaveBeenCalled();
+  });
+
+  it('has nothing to step through in a film with no subtitles', () => {
+    show({}, true, false);
+
+    expect(screen.getByRole('button', { name: /next line/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /previous line/i })).toBeDisabled();
+    // The seconds still work: they are what a film without dialogue has.
+    expect(screen.getByRole('button', { name: /forward 10 seconds/i })).toBeEnabled();
+  });
+
   it('seeks to wherever the scrubber is put', () => {
-    const transport = show();
+    const { transport } = show();
     const scrubber = screen.getByRole('slider', { name: /position in the film/i });
 
     expect(scrubber).toHaveValue('3852000');
@@ -76,6 +104,29 @@ describe('the control bar', () => {
     // A range input reports the position it was moved to, however it was moved.
     fireEvent.change(scrubber, { target: { value: '600000' } });
     expect(transport.seekTo).toHaveBeenCalledWith(600_000);
+  });
+
+  it('draws the dialogue of the film along the scrubber', () => {
+    show();
+
+    // Two copies of the one shape: the second is clipped to how much has been
+    // played, so filling it in as the film runs costs nothing per frame.
+    expect(document.querySelectorAll(`path[d="${shapeOf([0.2, 1, 0])}"]`)).toHaveLength(2);
+  });
+
+  it('shows the moment under the pointer, and what is said there', () => {
+    show();
+    const track = screen.getByRole('slider', { name: /position in the film/i }).parentElement;
+    if (track === null) throw new Error('the scrubber should sit in a track');
+
+    // jsdom lays nothing out, so the box is nothing wide and the pointer is at
+    // the start of it. Which moment it works out is arithmetic tested
+    // elsewhere; what this is about is that resting over the bar shows one.
+    fireEvent.pointerMove(track, { clientX: 0 });
+    expect(screen.getByText('I take scores.')).toBeInTheDocument();
+
+    fireEvent.pointerLeave(track);
+    expect(screen.queryByText('I take scores.')).not.toBeInTheDocument();
   });
 
   it('will not offer to seek a film whose length is unknown', () => {
@@ -102,22 +153,7 @@ describe('the control bar', () => {
   });
 
   it('takes the controls out of reach once they have gone', () => {
-    render(
-      <Controls
-        playback={playing}
-        transport={{
-          toggle: vi.fn(),
-          seekTo: vi.fn(),
-          skipBy: vi.fn(),
-          setVolume: vi.fn(),
-          toggleMute: vi.fn(),
-        }}
-        visible={false}
-        fullscreen={false}
-        onToggleFullscreen={vi.fn()}
-        onHold={vi.fn()}
-      />,
-    );
+    show({}, false);
 
     // Faded out is not enough: a control nobody can see should not be the next
     // thing the Tab key lands on.

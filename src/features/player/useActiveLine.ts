@@ -1,6 +1,5 @@
-import { type RefObject, useEffect, useMemo, useState } from 'react';
-import type { CueView } from '@/shared/ipc/bindings';
-import { NONE, type Timeline, activeAt, timelineOf } from './cues';
+import { type RefObject, useEffect, useState } from 'react';
+import { NONE, type Timeline, activeAt } from '@/shared/media/cues';
 
 /**
  * The line of dialogue on screen, kept in step with the picture.
@@ -14,12 +13,14 @@ import { NONE, type Timeline, activeAt, timelineOf } from './cues';
  * runs a binary search, and returns; state is only set when the line actually
  * changes, which over a film is a few hundred times rather than a few hundred
  * thousand. Nothing in it allocates.
+ *
+ * What comes back is the index rather than the cue, because the transcript
+ * needs to know which line this is among the others and not only what it says.
  */
-export function useActiveCue(
+export function useActiveLine(
   video: RefObject<HTMLVideoElement | null>,
-  cues: readonly CueView[],
-): CueView | null {
-  const timeline = useMemo(() => timelineOf(cues), [cues]);
+  timeline: Timeline,
+): number {
   // What was found, and what it was found in. Held together so that dialogue
   // arriving, or a second film being opened, cannot leave the last film's line
   // on screen for the frame before the loop next runs.
@@ -50,6 +51,5 @@ export function useActiveCue(
     };
   }, [timeline, video]);
 
-  if (found.timeline !== timeline) return null;
-  return timeline.cues[found.index] ?? null;
+  return found.timeline === timeline ? found.index : NONE;
 }

@@ -1,0 +1,201 @@
+/*
+ * The transcript sits beside the picture rather than over it, on a surface of
+ * its own carrying a whisper of the film's colour. Everything in it is set in
+ * the reading face: this is the one part of the application that is read a
+ * paragraph at a time rather than glanced at.
+ */
+.panel {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: clamp(268px, 25vw, 400px);
+  border-left: 1px solid var(--colour-line);
+  background: color-mix(in oklab, var(--film-accent, var(--colour-accent)) 4%, var(--colour-bg));
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.heading {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--colour-text-dim);
+}
+
+.count {
+  margin-right: auto;
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-text-faint);
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--colour-text-dim);
+  cursor: pointer;
+  transition: background var(--duration-instant) var(--ease-out);
+}
+
+.close:hover {
+  background: var(--colour-surface-hover);
+  color: var(--colour-text);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * The list scrolls itself to keep up with the film, and the easing of that is
+ * here rather than in the code that moves it. Only the panel's own scrolling is
+ * eased: a scroll made with the wheel is the person's, and the platform leaves
+ * those alone.
+ */
+.scroller {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+/* The system's own preference, honoured where the movement is decided. */
+@media (prefers-reduced-motion: reduce) {
+  .scroller {
+    scroll-behavior: auto;
+  }
+}
+
+/* As tall as the whole transcript, holding only the rows that are in view. */
+.list {
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * One line of dialogue. The lines around the one being spoken fade with their
+ * distance from it, so that the eye is drawn to the film's place in the page
+ * without the rest of it going dark.
+ */
+.line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  opacity: calc(1 - var(--away, 6) * 0.07);
+  transition:
+    opacity var(--duration-quick) var(--ease-out),
+    background var(--duration-instant) var(--ease-out);
+}
+
+.line:hover {
+  background: color-mix(in oklab, var(--colour-surface-hover) 60%, transparent);
+  opacity: 1;
+}
+
+.line:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: -2px;
+}
+
+/* The line being spoken now. */
+.current {
+  border-left-color: var(--film-accent, var(--colour-accent));
+  opacity: 1;
+}
+
+.current .said {
+  color: var(--colour-text);
+}
+
+/* The moment, in the interface face: this is a figure and not prose. */
+.at {
+  flex: none;
+  padding-top: 0.28em;
+  width: 4.4em;
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-text-faint);
+  user-select: none;
+}
+
+.current .at {
+  color: var(--film-accent, var(--colour-accent));
+}
+
+.said {
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-dim);
+  /* A cue broken over two lines in the file keeps its break here. */
+  white-space: pre-line;
+}
+
+.nothing {
+  padding: var(--space-6) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--colour-text-faint);
+}
+
+/*
+ * The offer to catch up, which only exists while the panel is not following.
+ * It sits over the foot of the list rather than pushing it, so that taking it
+ * does not move the line somebody was reading.
+ */
+.resume {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  translate: -50% 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--colour-line-strong);
+  border-radius: var(--radius-full);
+  background: var(--colour-surface-raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--colour-text);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  animation: rise var(--duration-quick) var(--ease-out);
+}
+
+.resume:hover {
+  background: var(--colour-surface-hover);
+}
+
+.resume:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: -50% 8px;
+  }
+}

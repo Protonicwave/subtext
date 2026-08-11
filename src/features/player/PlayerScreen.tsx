@@ -1,24 +1,30 @@
-import { type CSSProperties, useRef } from 'react';
+import { type CSSProperties, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
+import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
 import { useNavigation } from '@/app/routes';
 import { useFilmAccent } from '@/features/library/accent';
 import { paletteOf } from '@/features/library/fallback';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
+import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
+import { usePanel } from '@/features/transcript/usePanel';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { PLAYBACK, SUBTITLES } from './defaults';
+import { shapeFor } from './density';
+import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
-import { useActiveCue } from './useActiveCue';
+import { useActiveLine } from './useActiveLine';
 import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
 import { useKeepPosition } from './useKeepPosition';
 import { usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
+import { useStepping } from './useStepping';
 import styles from './PlayerScreen.module.css';
 
 /**
@@ -77,12 +83,35 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
 
   const [video, playback, transport] = usePlayback(film.path, startAtOf(film, PLAYBACK.rewindMs));
   const cues = useCues(film);
-  const cue = useActiveCue(video, cues);
+  const timeline = useMemo(() => timelineOf(cues), [cues]);
+  const active = useActiveLine(video, timeline);
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
 
+  const open = usePanel((panel) => panel.open);
+  const toggleTranscript = usePanel((panel) => panel.toggle);
+  const close = usePanel((panel) => panel.close);
+
+  const stepping = useStepping(timeline, transport);
+
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
-  useShortcuts(transport, toggleFullscreen, wake);
+  useShortcuts({ transport, stepping, toggleFullscreen, toggleTranscript, wake });
+
+  // Worked out once per film and remembered, which is what makes it free to
+  // ask for on every redraw of the control bar.
+  const density = shapeFor(
+    `${String(film.id)}:${String(playback.durationMs)}`,
+    timeline.cues,
+    playback.durationMs,
+  );
+
+  const preview = useMemo(
+    () => ({
+      source: streamOf(film.path),
+      spokenAt: (ms: number) => timeline.cues[nearestFrom(timeline, ms, NEAR_ENOUGH)]?.text ?? null,
+    }),
+    [film.path, timeline],
+  );
 
   const palette = paletteOf(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
@@ -91,10 +120,6 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     <div
       ref={screen}
       className={styles.screen}
-      // The pointer resting still over a playing film is somebody watching it,
-      // and the cursor is as much a thing over the picture as the controls are.
-      data-idle={!visible}
-      onPointerMove={wake}
       style={
         {
           '--film-accent': palette.primary,
@@ -102,7 +127,16 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
         } as CSSProperties
       }
     >
-      <motion.div layoutId={frameId(film.id)} className={styles.frame}>
+      <motion.div
+        layoutId={frameId(film.id)}
+        className={styles.frame}
+        // The pointer resting still over a playing film is somebody watching
+        // it, and the cursor is as much a thing over the picture as the
+        // controls are. Only over the picture: the transcript beside it is
+        // being read, and neither its cursor nor its scrolling is playback.
+        data-idle={!visible}
+        onPointerMove={wake}
+      >
         <video
           ref={video}
           className={styles.video}
@@ -113,7 +147,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           onClick={transport.toggle}
         />
 
-        <Subtitles cue={cue} appearance={SUBTITLES} lifted={visible} />
+        <Subtitles cue={timeline.cues[active] ?? null} appearance={SUBTITLES} lifted={visible} />
 
         {/*
          * Opening a film off a drive that has been asleep takes a moment, and
@@ -128,9 +162,14 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           <Controls
             playback={playback}
             transport={transport}
+            stepping={stepping}
+            density={density}
+            preview={preview}
             visible={visible}
             fullscreen={fullscreen}
+            transcript={open}
             onToggleFullscreen={toggleFullscreen}
+            onToggleTranscript={toggleTranscript}
             onHold={hold}
           />
         ) : (
@@ -142,6 +181,15 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
           </div>
         )}
       </motion.div>
+
+      {open && (
+        <TranscriptPanel
+          cues={timeline.cues}
+          active={active}
+          onSeek={transport.seekTo}
+          onClose={close}
+        />
+      )}
     </div>
   );
 }

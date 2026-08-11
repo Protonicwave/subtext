@@ -1,17 +1,29 @@
-import { type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import {
+  type ChangeEvent,
+  type CSSProperties,
+  type PointerEvent,
+  type ReactNode,
+  useState,
+} from 'react';
 import {
   ExitFullscreenIcon,
   FullscreenIcon,
   MuteIcon,
+  NextLineIcon,
   PauseIcon,
   PlayIcon,
+  PreviousLineIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  TranscriptIcon,
   VolumeIcon,
 } from '@/shared/ui/Icon';
+import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
-import { clockOf, countdownOf } from './clock';
+import { BANDS } from './density';
 import { PLAYBACK } from './defaults';
+import { ScrubberPreview } from './ScrubberPreview';
+import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';
 
@@ -26,12 +38,29 @@ import styles from './Controls.module.css';
  * behind it.
  */
 
+/** What the bar needs to show the moment the pointer is resting over. */
+export interface Preview {
+  /** The film, through the protocol that serves it. */
+  source: string;
+  /** What is said around a moment, where anything is. */
+  spokenAt: (ms: number) => string | null;
+}
+
 interface ControlsProps {
   playback: Playback;
   transport: Transport;
+  /** Moving by line, which a film with no subtitles cannot do. */
+  stepping: Stepping;
+  /** The dialogue drawn along the scrubber, as a path. */
+  density: string;
+  /** What the bar shows about the moment under the pointer. */
+  preview: Preview;
   visible: boolean;
   fullscreen: boolean;
+  /** The transcript is beside the film. */
+  transcript: boolean;
   onToggleFullscreen: () => void;
+  onToggleTranscript: () => void;
   /** The pointer is resting here, so the bar should not go away under it. */
   onHold: (holding: boolean) => void;
 }
@@ -39,9 +68,14 @@ interface ControlsProps {
 export function Controls({
   playback,
   transport,
+  stepping,
+  density,
+  preview,
   visible,
   fullscreen,
+  transcript,
   onToggleFullscreen,
+  onToggleTranscript,
   onHold,
 }: ControlsProps) {
   const { positionMs, durationMs, playing, volume, muted } = playback;
@@ -49,6 +83,19 @@ export function Controls({
   const seconds = Math.round(PLAYBACK.skipMs / 1000);
   const onScrub = (event: ChangeEvent<HTMLInputElement>) => {
     transport.seekTo(Number(event.target.value));
+  };
+
+  // How far along the bar the pointer is, from zero to one, or nothing when it
+  // is somewhere else. Kept as a fraction rather than as a moment, because it
+  // is what places the preview as well as what names the moment it shows.
+  const [along, setAlong] = useState<number | null>(null);
+
+  const onHover = (event: PointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    // A bar of no width has the pointer at the start of it, which is the only
+    // moment such a bar could be pointing at.
+    const at = box.width > 0 ? (event.clientX - box.left) / box.width : 0;
+    setAlong(Math.max(0, Math.min(1, at)));
   };
 
   return (
@@ -64,19 +111,56 @@ export function Controls({
         onHold(false);
       }}
     >
-      <input
-        type="range"
-        className={classes(styles.slider, styles.scrubber)}
-        min={0}
-        max={durationMs ?? 0}
-        step={1000}
-        value={Math.min(positionMs, durationMs ?? positionMs)}
-        onChange={onScrub}
-        disabled={durationMs === null}
+      <div
+        className={styles.track}
         style={{ '--played': played(positionMs, durationMs) } as CSSProperties}
-        aria-label="Position in the film"
-        aria-valuetext={clockOf(positionMs)}
-      />
+        onPointerMove={onHover}
+        onPointerLeave={() => {
+          setAlong(null);
+        }}
+      >
+        {/*
+         * Only while the pointer is over the bar. What draws it opens the film
+         * a second time, and holding a decoder on a four gigabyte file to
+         * answer a question nobody is asking is not worth the memory.
+         */}
+        {along !== null && durationMs !== null && (
+          <ScrubberPreview
+            source={preview.source}
+            atMs={along * durationMs}
+            along={along}
+            line={preview.spokenAt(along * durationMs)}
+          />
+        )}
+
+        {/*
+         * The film's dialogue, drawn behind the scrubber. Two copies of the
+         * same shape: the second is clipped to how much has been played, which
+         * is what fills it in as the film runs without redrawing the path.
+         */}
+        <svg
+          className={styles.density}
+          viewBox={`0 0 ${String(BANDS)} 100`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path className={styles.quiet} d={density} />
+          <path className={styles.spoken} d={density} />
+        </svg>
+
+        <input
+          type="range"
+          className={classes(styles.slider, styles.scrubber)}
+          min={0}
+          max={durationMs ?? 0}
+          step={1000}
+          value={Math.min(positionMs, durationMs ?? positionMs)}
+          onChange={onScrub}
+          disabled={durationMs === null}
+          aria-label="Position in the film"
+          aria-valuetext={clockOf(positionMs)}
+        />
+      </div>
 
       <div className={styles.row}>
         <Control
@@ -105,6 +189,24 @@ export function Controls({
           <SkipForwardIcon size={17} />
         </Control>
 
+        {/*
+         * Moving by what is said rather than by how long it took to say it.
+         * Set apart from the two beside them, because they answer a different
+         * question: not how far, but which line.
+         */}
+        <Control
+          label="Previous line"
+          onClick={stepping.back}
+          disabled={!stepping.available}
+          className={styles.stepping}
+        >
+          <PreviousLineIcon size={15} />
+        </Control>
+
+        <Control label="Next line" onClick={stepping.on} disabled={!stepping.available}>
+          <NextLineIcon size={15} />
+        </Control>
+
         <p className={styles.clock}>
           <span>{clockOf(positionMs)}</span>
           <span className={styles.left}>{countdownOf(positionMs, durationMs)}</span>
@@ -131,6 +233,14 @@ export function Controls({
         </div>
 
         <Control
+          label={transcript ? 'Hide the transcript' : 'Show the transcript'}
+          onClick={onToggleTranscript}
+          className={transcript ? styles.on : undefined}
+        >
+          <TranscriptIcon size={17} />
+        </Control>
+
+        <Control
           label={fullscreen ? 'Leave full screen' : 'Full screen'}
           onClick={onToggleFullscreen}
         >
@@ -150,6 +260,7 @@ function played(positionMs: number, durationMs: number | null): number {
 interface ControlProps {
   label: string;
   onClick: () => void;
+  disabled?: boolean | undefined;
   className?: string | undefined;
   children: ReactNode;
 }
@@ -160,12 +271,13 @@ interface ControlProps {
  * The name is on the button rather than in the icon, which is why every icon in
  * the application is hidden from assistive technology.
  */
-function Control({ label, onClick, className, children }: ControlProps) {
+function Control({ label, onClick, disabled, className, children }: ControlProps) {
   return (
     <button
       type="button"
       className={classes(styles.control, className)}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
     >
