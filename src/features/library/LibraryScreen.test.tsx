@@ -59,8 +59,16 @@ const watching = {
   },
 } satisfies FilmView;
 
-function show(state: Partial<{ films: FilmView[]; resumable: FilmView[]; folders: FolderView[] }>) {
-  useLibrary.setState({ folders: [folder], films: [], resumable: [], ...state });
+/** Read, unless a test is about what the screen says before the read comes back. */
+function show(
+  state: Partial<{
+    films: FilmView[];
+    resumable: FilmView[];
+    folders: FolderView[];
+    loaded: boolean;
+  }>,
+) {
+  useLibrary.setState({ folders: [folder], films: [], resumable: [], loaded: true, ...state });
   render(<LibraryScreen />);
 }
 
@@ -146,5 +154,18 @@ describe('the library screen', () => {
   it('says so when a watched folder turned out to hold nothing', () => {
     show({ films: [], folders: [folder] });
     expect(screen.getByText(/nothing was found in the folders/i)).toBeInTheDocument();
+  });
+
+  /*
+   * The difference between a library that is empty and one that has not been
+   * read yet. Both have no films in hand, and only one of them is worth telling
+   * somebody about.
+   */
+  it('claims nothing about what is on disk until the first read has come back', () => {
+    show({ films: [], folders: [], loaded: false });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/reading your films/i);
+    expect(screen.queryByText(/no folders are being watched yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nothing was found/i)).not.toBeInTheDocument();
   });
 });
