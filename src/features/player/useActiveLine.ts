@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useState } from 'react';
-import { NONE, type Timeline, activeAt } from './cues';
+import { NONE, type Timeline, activeAt } from '@/shared/media/cues';
 
 /**
  * The line of dialogue on screen, kept in step with the picture.

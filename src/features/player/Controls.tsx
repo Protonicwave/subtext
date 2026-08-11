@@ -9,8 +9,8 @@ import {
   SkipForwardIcon,
   VolumeIcon,
 } from '@/shared/ui/Icon';
+import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
-import { clockOf, countdownOf } from './clock';
 import { PLAYBACK } from './defaults';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';

@@ -1,9 +1,15 @@
 /**
- * The two figures in the control bar.
+ * A moment in a film, written the way a person would say it.
  *
- * Both are drawn in tabular figures, so the width of the readout does not
- * change as the digits do. A clock that shuffles the controls sideways once a
- * second is the sort of detail nobody names and everybody notices.
+ * One way of writing a time for the whole application: the control bar, the
+ * timecode against each line of the transcript, and the timecodes attached to a
+ * passage copied out of it. A film talked about in two different notations in
+ * two different places is a film that reads as two applications.
+ *
+ * Both figures are drawn in tabular figures wherever they appear, so the width
+ * of the readout does not change as the digits do. A clock that shuffles the
+ * controls sideways once a second is the sort of detail nobody names and
+ * everybody notices.
  */
 
 /**
