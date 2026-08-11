@@ -35,12 +35,12 @@ body::before {
   background:
     radial-gradient(
       120% 80% at 12% -10%,
-      color-mix(in oklab, var(--colour-accent) 14%, transparent),
+      color-mix(in oklab, var(--colour-accent) calc(14% * var(--ambient)), transparent),
       transparent 60%
     ),
     radial-gradient(
       100% 70% at 90% 8%,
-      color-mix(in oklab, var(--colour-accent-pair) 12%, transparent),
+      color-mix(in oklab, var(--colour-accent-pair) calc(12% * var(--ambient)), transparent),
       transparent 62%
     );
   transition: background calc(var(--duration-slow) * 2) var(--ease-out);

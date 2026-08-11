@@ -14,7 +14,8 @@ vi.mock('@/shared/ipc/client', async () => {
 });
 
 const { DEFAULTS } = await import('./schema');
-const { appearanceOf, useSettings } = await import('./useSettings');
+const { appearanceOf } = await import('./schema');
+const { useSettings } = await import('./useSettings');
 
 describe('the settings', () => {
   beforeEach(() => {

@@ -2,11 +2,13 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { CueView } from '@/shared/ipc/bindings';
 import { Subtitles } from './Subtitles';
-import { SUBTITLES } from './defaults';
+import { DEFAULTS, appearanceOf } from '@/shared/settings/schema';
 
 function cue(text: string, position: CueView['position'] = null): CueView {
   return { index: 4, startMs: 1_000, endMs: 3_000, text, position };
 }
+
+const SUBTITLES = appearanceOf(DEFAULTS);
 
 function draw(spoken: CueView | null, appearance = SUBTITLES, lifted = false) {
   const { container } = render(<Subtitles cue={spoken} appearance={appearance} lifted={lifted} />);

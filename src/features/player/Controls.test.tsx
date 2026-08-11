@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
 import { shapeOf } from './density';
-import { PLAYBACK } from './defaults';
+import { DEFAULTS } from '@/shared/settings/schema';
 import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 
@@ -69,10 +69,10 @@ describe('the control bar', () => {
     const { transport } = show();
 
     await userEvent.click(screen.getByRole('button', { name: /forward 10 seconds/i }));
-    expect(transport.skipBy).toHaveBeenCalledWith(PLAYBACK.skipMs);
+    expect(transport.skipBy).toHaveBeenCalledWith(DEFAULTS.skipMs);
 
     await userEvent.click(screen.getByRole('button', { name: /back 10 seconds/i }));
-    expect(transport.skipBy).toHaveBeenCalledWith(-PLAYBACK.skipMs);
+    expect(transport.skipBy).toHaveBeenCalledWith(-DEFAULTS.skipMs);
   });
 
   it('steps by line as well as by seconds', async () => {

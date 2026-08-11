@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { sourceOf } from '@/shared/media/source';
 import { classes } from '@/shared/ui/classes';
-import { fallbackFor, paletteOf } from './fallback';
+import { useFilmPalette } from './accent';
+import { fallbackFor } from './fallback';
 import { frameId, stillnessWanted } from './transition';
 import { linesOf } from './useLibrary';
 import styles from './PosterTile.module.css';
@@ -29,7 +30,7 @@ export function PosterTile({ film, onOpen }: PosterTileProps) {
   const [hovered, setHovered] = useState(false);
   const preview = usePreview(hovered && !film.missing, film.path);
 
-  const palette = paletteOf(film);
+  const palette = useFilmPalette(film);
   const still = film.posterPath === null ? null : sourceOf(film.posterPath);
   const progress = film.position?.progress ?? null;
 

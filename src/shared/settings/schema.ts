@@ -1,5 +1,4 @@
 import type { PreferenceView } from '@/shared/ipc/bindings';
-import { PLAYBACK, SUBTITLES } from '@/features/player/defaults';
 
 /**
  * Every preference: where it is kept, what it may be, and what the application
@@ -16,12 +15,48 @@ import { PLAYBACK, SUBTITLES } from '@/features/player/defaults';
  * refusing to open the window over.
  */
 
+/**
+ * How the subtitles are drawn, as the renderer takes them.
+ *
+ * The renderer decides nothing for itself. Everything about how a line looks
+ * arrives as one of these, which is what makes the settings screen a matter of
+ * where the values come from rather than of rewriting what reads them.
+ */
+export interface SubtitleAppearance {
+  typeface: 'sans' | 'serif';
+  /**
+   * As a percentage of the height of the picture, so that the subtitles are the
+   * same size against the film whatever the window is doing.
+   */
+  size: number;
+  weight: number;
+  colour: string;
+  /**
+   * What sits behind the text. A shadow reads on almost everything; a panel is
+   * for a film with a bright, busy frame; none is for somebody who would rather
+   * see the picture.
+   */
+  background: 'none' | 'shadow' | 'panel';
+  /** How far the text sits above the bottom of the picture, as a percentage. */
+  position: number;
+}
+
 interface Field<T> {
   readonly key: string;
   readonly fallback: T;
   /** What the stored text means, or nothing if it means nothing. */
   readonly read: (stored: string) => T | undefined;
 }
+
+/** How far a number may go, and how finely it moves between the two. */
+export interface Range {
+  readonly least: number;
+  readonly most: number;
+  readonly step: number;
+}
+
+/** A number, and the range the control for it is drawn across. */
+interface Amount extends Field<number>, Range {}
 
 /** One of a fixed set of names. */
 function choice<const T extends string>(key: string, options: readonly T[], fallback: T): Field<T> {
@@ -47,14 +82,15 @@ function toggle(key: string, fallback: boolean): Field<boolean> {
  * a version whose slider went further does not put the subtitles off the bottom
  * of the picture.
  */
-function amount(key: string, least: number, most: number, fallback: number): Field<number> {
+function amount(key: string, range: Range, fallback: number): Amount {
   return {
     key,
     fallback,
+    ...range,
     read: (stored) => {
       const value = Number(stored);
       if (stored.trim() === '' || !Number.isFinite(value)) return undefined;
-      return Math.min(most, Math.max(least, value));
+      return Math.min(range.most, Math.max(range.least, value));
     },
   };
 }
@@ -67,7 +103,7 @@ function amount(key: string, least: number, most: number, fallback: number): Fie
  * against a film are worth more than sixteen million that were not.
  */
 export const SUBTITLE_COLOURS = [
-  { value: SUBTITLES.colour, name: 'Paper' },
+  { value: '#f2f3f6', name: 'Paper' },
   { value: '#ffffff', name: 'White' },
   { value: '#efe3c9', name: 'Warm' },
   { value: '#ffd98a', name: 'Amber' },
@@ -83,32 +119,40 @@ export const FIELDS = {
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),
 
-  subtitleTypeface: choice('subtitles.typeface', ['sans', 'serif'], SUBTITLES.typeface),
-  subtitleSize: amount('subtitles.size', 2.4, 8, SUBTITLES.size),
-  subtitleWeight: amount('subtitles.weight', 400, 700, SUBTITLES.weight),
+  subtitleTypeface: choice('subtitles.typeface', ['sans', 'serif'], 'sans'),
+  subtitleSize: amount('subtitles.size', { least: 2.4, most: 8, step: 0.1 }, 4.4),
+  subtitleWeight: amount('subtitles.weight', { least: 400, most: 700, step: 100 }, 500),
   subtitleColour: choice(
     'subtitles.colour',
     SUBTITLE_COLOURS.map((colour) => colour.value),
-    SUBTITLES.colour,
+    SUBTITLE_COLOURS[0].value,
   ),
-  subtitleBackground: choice(
-    'subtitles.background',
-    ['none', 'shadow', 'panel'],
-    SUBTITLES.background,
-  ),
-  subtitlePosition: amount('subtitles.position', 2, 24, SUBTITLES.position),
+  subtitleBackground: choice('subtitles.background', ['none', 'shadow', 'panel'], 'shadow'),
+  subtitlePosition: amount('subtitles.position', { least: 2, most: 24, step: 0.5 }, 7),
 
   resume: choice('playback.resume', ['carry-on', 'beginning'], 'carry-on'),
-  rewindMs: amount('playback.rewind', 0, 30_000, PLAYBACK.rewindMs),
-  skipMs: amount('playback.skip', 5_000, 60_000, PLAYBACK.skipMs),
-  dialogueArrows: toggle('playback.arrows', PLAYBACK.dialogueArrows),
-  watchedFraction: amount('playback.watched', 0.8, 1, PLAYBACK.watchedFraction),
-  hideAfterMs: amount('playback.hide', 1_000, 10_000, PLAYBACK.hideAfterMs),
+  /*
+   * Coming back to a film in the middle of a line is disorienting, and a few
+   * seconds of run-up is enough to remember where you were.
+   */
+  rewindMs: amount('playback.rewind', { least: 0, most: 30_000, step: 1_000 }, 5_000),
+  skipMs: amount('playback.skip', { least: 5_000, most: 60_000, step: 5_000 }, 10_000),
+  /*
+   * On, because it is the better answer to what somebody pressing the left
+   * arrow wants: they missed a line, and the line is where they meant to go.
+   */
+  dialogueArrows: toggle('playback.arrows', true),
+  /*
+   * Not all of it, because almost nobody sits through the credits and a film
+   * left two minutes from the end should not be offered for ever.
+   */
+  watchedFraction: amount('playback.watched', { least: 0.8, most: 1, step: 0.01 }, 0.97),
+  hideAfterMs: amount('playback.hide', { least: 1_000, most: 10_000, step: 200 }, 2_600),
   hardwareDecoding: toggle('playback.hardware', true),
 
   accent: choice('appearance.accent', ['film', 'fixed'], 'film'),
-  glow: amount('appearance.glow', 0, 1.6, 1),
-  grain: amount('appearance.grain', 0, 0.09, GRAIN),
+  glow: amount('appearance.glow', { least: 0, most: 1.6, step: 0.05 }, 1),
+  grain: amount('appearance.grain', { least: 0, most: 0.09, step: 0.005 }, GRAIN),
   motion: choice('appearance.motion', ['system', 'reduced'], 'system'),
   transcriptTypeface: choice('transcript.typeface', ['serif', 'sans'], 'serif'),
   transcriptFollow: toggle('transcript.follow', true),
@@ -120,6 +164,19 @@ type Held<F> = F extends Field<infer T> ? T : never;
 export type Settings = { [Name in keyof typeof FIELDS]: Held<(typeof FIELDS)[Name]> };
 
 export type SettingName = keyof Settings;
+
+/** The settings holding one kind of value, which one kind of control edits. */
+type NamesHolding<T> = {
+  [Name in SettingName]: Settings[Name] extends T ? Name : never;
+}[SettingName];
+
+export type ToggleName = NamesHolding<boolean>;
+export type AmountName = NamesHolding<number>;
+
+/** How far the control for one number may move it. */
+export function rangeOf(name: AmountName): Range {
+  return FIELDS[name];
+}
 
 export const DEFAULTS: Settings = Object.fromEntries(
   Object.entries(FIELDS).map(([name, field]) => [name, field.fallback]),
@@ -150,4 +207,16 @@ export function storedAs<Name extends SettingName>(
   // there is nothing to write but the value said plainly. Reading it back is
   // the half that needs to know what it is looking at.
   return { key: FIELDS[name].key, value: String(value) };
+}
+
+/** How the subtitles are to be drawn, as the renderer takes them. */
+export function appearanceOf(settings: Settings): SubtitleAppearance {
+  return {
+    typeface: settings.subtitleTypeface,
+    size: settings.subtitleSize,
+    weight: settings.subtitleWeight,
+    colour: settings.subtitleColour,
+    background: settings.subtitleBackground,
+    position: settings.subtitlePosition,
+  };
 }

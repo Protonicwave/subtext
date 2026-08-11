@@ -1,16 +1,52 @@
 .screen {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: var(--space-10);
+  height: 100%;
+  overflow: hidden;
+  padding: var(--space-10) var(--space-12) 0;
+}
+
+/* The rail stays put while the panel beside it scrolls. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+}
+
+.tab {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  text-align: left;
+  color: var(--colour-text-dim);
+  transition:
+    background var(--duration-instant),
+    color var(--duration-instant);
+}
+
+.tab:hover {
+  background: var(--colour-surface);
+  color: var(--colour-text);
+}
+
+.here,
+.here:hover {
+  background: var(--colour-surface-raised);
+  color: var(--colour-text);
+}
+
+.panel {
+  max-width: 720px;
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-10) var(--space-12) var(--space-16);
-  max-width: 860px;
+  padding-bottom: var(--space-16);
 }
 
 .top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-4);
 }
 
 .title {
@@ -20,91 +56,8 @@
   line-height: var(--leading-tight);
 }
 
-.title small {
-  display: block;
+.says {
   margin-top: var(--space-1);
-  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--colour-text-faint);
-}
-
-.empty {
-  color: var(--colour-text-faint);
-  font-size: var(--text-sm);
-}
-
-.folders {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.folder {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  background: var(--colour-surface);
-  border: 1px solid var(--colour-line);
-  border-radius: var(--radius-lg);
-}
-
-.glyph {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--colour-surface-raised);
-  color: var(--colour-text-faint);
-}
-
-.path {
-  min-width: 0;
-}
-
-.path b {
-  display: block;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.path span {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-top: 2px;
-  font-size: var(--text-2xs);
-  color: var(--colour-text-faint);
-}
-
-/* A folder being watched has a live indicator, not a label saying "live". */
-.live {
-  width: 6px;
-  height: 6px;
-  margin-right: 3px;
-  border-radius: var(--radius-full);
-  background: #5fb56b;
-  box-shadow: 0 0 8px #5fb56b;
-}
-
-.remove {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-md);
-  color: var(--colour-text-faint);
-  transition:
-    background var(--duration-instant),
-    color var(--duration-instant);
-}
-
-.remove:hover {
-  background: var(--colour-surface-hover);
-  color: var(--colour-text);
 }

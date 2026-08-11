@@ -1,0 +1,101 @@
+/* The folders are a block of their own above the settings about them. */
+.folders {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.heading h3 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.empty {
+  max-width: 46ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-faint);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.folder {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-lg);
+}
+
+.glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-raised);
+  color: var(--colour-text-faint);
+}
+
+.path {
+  min-width: 0;
+}
+
+.path b {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: 2px;
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+}
+
+/* A folder being watched has a live indicator, not a label saying "live". */
+.live {
+  width: 6px;
+  height: 6px;
+  margin-right: 3px;
+  border-radius: var(--radius-full);
+  background: #5fb56b;
+  box-shadow: 0 0 8px #5fb56b;
+}
+
+.remove {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--colour-text-faint);
+  transition:
+    background var(--duration-instant),
+    color var(--duration-instant);
+}
+
+.remove:hover {
+  background: var(--colour-surface-hover);
+  color: var(--colour-text);
+}

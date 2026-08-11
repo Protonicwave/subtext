@@ -1,5 +1,30 @@
 import { useEffect } from 'react';
 import type { AccentView } from '@/shared/ipc/bindings';
+import type { Settings } from '@/shared/settings/schema';
+import { useSetting } from '@/shared/settings/useSettings';
+import { paletteOf } from './fallback';
+
+/**
+ * The colours one film is drawn in.
+ *
+ * Its own, taken from the frame captured for its poster, unless somebody would
+ * rather the application kept one colour. The fixed answer names the tokens
+ * rather than repeating what they hold, so there is still one place the amber
+ * is written down.
+ */
+export function paletteFor(
+  film: { title: string; accent: AccentView | null },
+  accent: Settings['accent'],
+): AccentView {
+  return accent === 'film' ? paletteOf(film) : FIXED;
+}
+
+/** The same, for one film rather than for a list of them. */
+export function useFilmPalette(film: { title: string; accent: AccentView | null }): AccentView {
+  return paletteFor(film, useSetting('accent'));
+}
+
+const FIXED: AccentView = { primary: 'var(--colour-accent)', pair: 'var(--colour-accent-pair)' };
 
 /**
  * Gives the window the colours of the film that is open.
@@ -13,8 +38,11 @@ import type { AccentView } from '@/shared/ipc/bindings';
  * the colour of whatever was last watched.
  */
 export function useFilmAccent(accent: AccentView | null) {
-  const primary = accent?.primary;
-  const pair = accent?.pair;
+  // Somebody who asked for one colour is asking for the window not to move
+  // with the film, so there is nothing to write on the root at all.
+  const fromFilm = useSetting('accent') === 'film';
+  const primary = fromFilm ? accent?.primary : undefined;
+  const pair = fromFilm ? accent?.pair : undefined;
 
   useEffect(() => {
     if (primary === undefined || pair === undefined) return;

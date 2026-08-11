@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
-import { ipc } from '@/shared/ipc/client';
+import { useAppearance } from '@/shared/settings/appearance';
+import { useSettings } from '@/shared/settings/useSettings';
+import { useChrome } from '@/shared/window/chrome';
 import { LibraryScreen } from '@/features/library/LibraryScreen';
 import { useLibrary } from '@/features/library/useLibrary';
 import { PlayerScreen } from '@/features/player/PlayerScreen';
@@ -10,6 +12,7 @@ import { FirstRun } from '@/features/onboarding/FirstRun';
 import { ImportFlow } from '@/features/onboarding/ImportFlow';
 import { useImport } from '@/features/onboarding/useImport';
 import { CommandPalette } from '@/features/search/CommandPalette';
+import { ShortcutSheet } from '@/features/settings/ShortcutSheet';
 import { TitleBar } from './TitleBar';
 import { useNavigation } from './routes';
 import styles from './App.module.css';
@@ -22,12 +25,17 @@ export function App() {
   const folders = useLibrary((library) => library.folders);
   const problem = useLibrary((library) => library.problem);
   const importProblem = useImport((state) => state.problem);
+  const loadSettings = useSettings((state) => state.load);
+  const settingsProblem = useSettings((state) => state.problem);
+  const motion = useSettings((state) => state.settings.motion);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void loadSettings();
+  }, [refresh, loadSettings]);
 
   useBackdrop();
+  useAppearance();
   useEscape(back);
 
   // Nothing is being watched, so there is nothing to show and only one thing
@@ -36,9 +44,13 @@ export function App() {
   const firstRun = loaded && folders.length === 0;
 
   return (
-    // The system's own preference decides whether things move, rather than a
-    // setting of ours that would then have to agree with it.
-    <MotionConfig reducedMotion="user">
+    /*
+     * The system's own preference decides whether things move, unless somebody
+     * has said here that they would rather nothing did. There is no third
+     * answer: a setting that forced animation on over the system's objection
+     * would be a setting for overruling somebody who has already spoken.
+     */
+    <MotionConfig reducedMotion={motion === 'reduced' ? 'always' : 'user'}>
       <TitleBar />
 
       <main className={styles.stage}>
@@ -49,13 +61,14 @@ export function App() {
 
       {firstRun && <FirstRun />}
 
-      {(problem ?? importProblem) !== null && (
+      {(problem ?? importProblem ?? settingsProblem) !== null && (
         <p role="alert" className={styles.problem}>
-          {problem ?? importProblem}
+          {problem ?? importProblem ?? settingsProblem}
         </p>
       )}
 
       <CommandPalette />
+      <ShortcutSheet />
       <ImportFlow />
       <DropZone />
     </MotionConfig>
@@ -70,16 +83,11 @@ export function App() {
  * root element is all the difference amounts to.
  */
 function useBackdrop() {
+  const backdrop = useChrome().backdrop;
+
   useEffect(() => {
-    void ipc
-      .windowChrome()
-      .then((chrome) => {
-        if (chrome.backdrop) document.documentElement.dataset.backdrop = 'mica';
-      })
-      .catch(() => {
-        // A window that will not say how it is drawn is drawn the plain way.
-      });
-  }, []);
+    if (backdrop) document.documentElement.dataset.backdrop = 'mica';
+  }, [backdrop]);
 }
 
 /** Escape goes back a screen, from anywhere that is not already the library. */

@@ -1,19 +1,19 @@
-import { type CSSProperties, useEffect, useMemo, useRef } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
 import { type Moment, useNavigation } from '@/app/routes';
-import { useFilmAccent } from '@/features/library/accent';
-import { paletteOf } from '@/features/library/fallback';
+import { useFilmAccent, useFilmPalette } from '@/features/library/accent';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
 import { usePanel } from '@/features/transcript/usePanel';
+import { appearanceOf } from '@/shared/settings/schema';
+import { useSettings } from '@/shared/settings/useSettings';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
-import { PLAYBACK, SUBTITLES } from './defaults';
 import { shapeFor } from './density';
 import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
@@ -83,12 +83,16 @@ export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
 function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack: () => void }) {
   const screen = useRef<HTMLDivElement>(null);
 
+  const settings = useSettings((state) => state.settings);
+  // Worked out once, and not again when a setting the player also reads
+  // changes: the element has already been told where to start.
+  const [start] = useState(
+    () => at?.ms ?? (settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs)),
+  );
+
   // A film opened from a search result starts at the line that was found; one
   // opened from the library starts a little before where it was left.
-  const [video, playback, transport] = usePlayback(
-    film.path,
-    at?.ms ?? startAtOf(film, PLAYBACK.rewindMs),
-  );
+  const [video, playback, transport] = usePlayback(film.path, start);
   const cues = useCues(film);
   const timeline = useMemo(() => timelineOf(cues), [cues]);
   const active = useActiveLine(video, timeline);
@@ -121,7 +125,8 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     [film.path, timeline],
   );
 
-  const palette = paletteOf(film);
+  const appearance = useMemo(() => appearanceOf(settings), [settings]);
+  const palette = useFilmPalette(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
 
   return (
@@ -155,7 +160,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
           onClick={transport.toggle}
         />
 
-        <Subtitles cue={timeline.cues[active] ?? null} appearance={SUBTITLES} lifted={visible} />
+        <Subtitles cue={timeline.cues[active] ?? null} appearance={appearance} lifted={visible} />
 
         {/*
          * Opening a film off a drive that has been asleep takes a moment, and

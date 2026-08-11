@@ -4,6 +4,7 @@ import type { FilmView } from '@/shared/ipc/bindings';
 import { FolderIcon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
 import { useWidth } from '@/shared/ui/useWidth';
+import { useSetting } from '@/shared/settings/useSettings';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
 import { ContinueWatching } from './ContinueWatching';
@@ -32,14 +33,27 @@ const CAPTION = 44;
 const OVERSCAN = 3;
 
 export function LibraryScreen() {
-  const films = useLibrary((library) => library.films);
+  const held = useLibrary((library) => library.films);
   const folders = useLibrary((library) => library.folders);
-  const resumable = useLibrary((library) => library.resumable);
+  const stopped = useLibrary((library) => library.resumable);
   const chooseFolder = useImport((state) => state.chooseFolder);
   const openFilm = useNavigation((navigation) => navigation.openFilm);
 
   const scroller = useRef<HTMLDivElement>(null);
   const [grid, width] = useWidth();
+
+  // A film whose file has gone is still a film Subtext knows about, and where
+  // it was left is kept whichever of these is chosen. All that is in question
+  // is whether it is worth a tile while the drive it is on is unplugged.
+  const showMissing = useSetting('missingFilms') === 'keep';
+  const films = useMemo(
+    () => (showMissing ? held : held.filter((film) => !film.missing)),
+    [held, showMissing],
+  );
+  const resumable = useMemo(
+    () => (showMissing ? stopped : stopped.filter((film) => !film.missing)),
+    [stopped, showMissing],
+  );
 
   const columns = columnsFor(width);
   const rows = useMemo(() => rowsOf(films, columns), [films, columns]);
@@ -99,11 +113,7 @@ export function LibraryScreen() {
         <ContinueWatching films={resumable} onOpen={open} />
 
         {films.length === 0 ? (
-          <p className={styles.empty}>
-            {folders.length === 0
-              ? 'No folders are being watched yet.'
-              : 'Nothing was found in the folders being watched.'}
-          </p>
+          <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
         ) : (
           <div
             className={styles.grid}
@@ -130,6 +140,21 @@ export function LibraryScreen() {
       </div>
     </div>
   );
+}
+
+/**
+ * Why the grid is empty, which is three different situations and not one.
+ *
+ * The third is a library that is entirely missing its files, with the setting
+ * that hides those turned on: an unplugged drive, and worth saying so rather
+ * than reporting that nothing was found.
+ */
+function emptyBecause(folders: number, held: number): string {
+  if (folders === 0) return 'No folders are being watched yet.';
+  if (held > 0) {
+    return 'Every film here is missing its file. Reconnect the drive they are on, or show them again from the settings screen.';
+  }
+  return 'Nothing was found in the folders being watched.';
 }
 
 function count(many: number, thing: string): string {

@@ -21,7 +21,7 @@ import {
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
 import { BANDS } from './density';
-import { PLAYBACK } from './defaults';
+import { useSetting } from '@/shared/settings/useSettings';
 import { ScrubberPreview } from './ScrubberPreview';
 import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
@@ -80,7 +80,8 @@ export function Controls({
 }: ControlsProps) {
   const { positionMs, durationMs, playing, volume, muted } = playback;
 
-  const seconds = Math.round(PLAYBACK.skipMs / 1000);
+  const skipMs = useSetting('skipMs');
+  const seconds = Math.round(skipMs / 1000);
   const onScrub = (event: ChangeEvent<HTMLInputElement>) => {
     transport.seekTo(Number(event.target.value));
   };
@@ -174,7 +175,7 @@ export function Controls({
         <Control
           label={`Back ${String(seconds)} seconds`}
           onClick={() => {
-            transport.skipBy(-PLAYBACK.skipMs);
+            transport.skipBy(-skipMs);
           }}
         >
           <SkipBackIcon size={17} />
@@ -183,7 +184,7 @@ export function Controls({
         <Control
           label={`Forward ${String(seconds)} seconds`}
           onClick={() => {
-            transport.skipBy(PLAYBACK.skipMs);
+            transport.skipBy(skipMs);
           }}
         >
           <SkipForwardIcon size={17} />

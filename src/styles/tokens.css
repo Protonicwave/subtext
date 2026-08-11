@@ -134,6 +134,13 @@
   --grain-opacity: 0.035;
 
   /*
+   * How much of the ambient wash is drawn, as a multiplier of what the two
+   * pools behind the window are worth at full strength. Both this and the
+   * grain above are replaced from the settings once they have been read.
+   */
+  --ambient: 1;
+
+  /*
    * How opaque the window is over whatever is behind it. Replaced when the
    * platform gives us a backdrop, and otherwise flat, because a translucent
    * surface over nothing is just a paler surface.
@@ -163,4 +170,16 @@
     --duration-slow: 1ms;
     --ease-spring: var(--ease-out);
   }
+}
+
+/*
+ * The same again for somebody who asked for it here rather than in the system,
+ * which is the setting for a machine that is shared or that says nothing.
+ */
+:root[data-motion='reduced'] {
+  --duration-instant: 1ms;
+  --duration-quick: 1ms;
+  --duration-settle: 1ms;
+  --duration-slow: 1ms;
+  --ease-spring: var(--ease-out);
 }

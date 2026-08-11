@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { ipc, reasonFor } from '@/shared/ipc/client';
-import type { SubtitleAppearance } from '@/features/player/defaults';
 import { DEFAULTS, type SettingName, type Settings, settingsFrom, storedAs } from './schema';
 
 /**
@@ -60,16 +59,4 @@ export const useSettings = create<SettingsState>((set, get) => ({
 /** One setting, for a component that wants a single value to redraw on. */
 export function useSetting<Name extends SettingName>(name: Name): Settings[Name] {
   return useSettings((state) => state.settings[name]);
-}
-
-/** How the subtitles are to be drawn, as the renderer takes them. */
-export function appearanceOf(settings: Settings): SubtitleAppearance {
-  return {
-    typeface: settings.subtitleTypeface,
-    size: settings.subtitleSize,
-    weight: settings.subtitleWeight,
-    colour: settings.subtitleColour,
-    background: settings.subtitleBackground,
-    position: settings.subtitlePosition,
-  };
 }
