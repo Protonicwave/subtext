@@ -113,6 +113,31 @@ describe('the library screen', () => {
     expect(document.querySelector('img')).toHaveAttribute('src', 'asset:///data/posters/abc.webp');
   });
 
+  it('draws a handful of tiles for a library of ten thousand films', () => {
+    const many = Array.from({ length: 10_000 }, (_, at) => ({
+      ...film,
+      id: at + 1,
+      title: `Film ${String(at + 1)}`,
+    }));
+
+    const at = performance.now();
+    show({ films: many });
+    const took = performance.now() - at;
+
+    // The number itself is the window's worth plus the overscan, and it does
+    // not move with the size of the library. That is the whole property the
+    // scrolling target rests on: a row costs the same whether there are ten
+    // rows behind it or ten thousand.
+    const tiles = document.querySelectorAll('button').length;
+    expect(tiles).toBeLessThan(60);
+    expect(screen.getByText('Film 1')).toBeInTheDocument();
+    expect(screen.queryByText('Film 9000')).not.toBeInTheDocument();
+
+    // Slow enough to catch a return to drawing all of them, and loose enough
+    // not to fail on a busy machine.
+    expect(took).toBeLessThan(2_000);
+  });
+
   it('tells somebody with no films which of the two reasons it is', () => {
     show({ films: [], folders: [] });
     expect(screen.getByText(/no folders are being watched yet/i)).toBeInTheDocument();
