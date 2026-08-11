@@ -70,6 +70,26 @@ export const commands = {
 	 */
 	continueWatching: (limit: number) => typedError<FilmView[], Failure>(__TAURI_INVOKE("continue_watching", { limit })),
 	/**
+	 *  Every line of dialogue in one subtitle track, in playback order.
+	 * 
+	 *  The whole track at once rather than a window around the current moment. A
+	 *  five thousand cue film is a few hundred kilobytes, it is read once when the
+	 *  player opens, and having all of it in memory is what lets the active line be
+	 *  found by a binary search on every frame instead of by asking across the
+	 *  boundary sixty times a second.
+	 */
+	trackCues: (trackId: Id) => typedError<CueView[], Failure>(__TAURI_INVOKE("track_cues", { trackId })),
+	/**
+	 *  Records how far through a film somebody is.
+	 * 
+	 *  Called on a throttle while playing and once on the way out, so it is one row
+	 *  replaced and nothing else. The running time comes with it because the player
+	 *  is the thing that knows it: a film whose poster was never captured has no
+	 *  duration stored, and without one the library cannot draw how far through it
+	 *  is.
+	 */
+	savePosition: (filmId: Id, positionMs: number, durationMs: number | null, finished: boolean) => typedError<null, Failure>(__TAURI_INVOKE("save_position", { filmId, positionMs, durationMs, finished })),
+	/**
 	 *  The films with no frame captured from them yet.
 	 * 
 	 *  A poster is wanted when the film has none, when the file it names is not
@@ -155,6 +175,28 @@ export type Chrome = {
 	 *  opaque, where the same surfaces would be washed out over nothing.
 	 */
 	backdrop: boolean,
+};
+
+/**  One of the nine places a cue can ask to be drawn. */
+export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
+
+/**
+ *  One line of dialogue, as the player and the transcript want it.
+ * 
+ *  Deliberately flat and deliberately small. A film of five thousand cues
+ *  crosses the boundary in one go and is then searched sixty times a second, so
+ *  every field here is a number or a string the renderer uses directly, with
+ *  nothing to unpack on the other side.
+ */
+export type CueView = {
+	/**  Position in the track, counted from one in playback order. */
+	index: number,
+	startMs: number,
+	endMs: number,
+	/**  The dialogue as plain text. A cue of several lines keeps its breaks. */
+	text: string,
+	/**  Where the file asked for the cue to be drawn, if it asked at all. */
+	position: CuePositionView | null,
 };
 
 /**

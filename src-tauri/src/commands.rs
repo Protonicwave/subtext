@@ -13,7 +13,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, Answer, Failure, FilmView, FolderView, Id, PosterWanted, ScanProgressed, TrackView,
+    AccentView, Answer, CueView, Failure, FilmView, FolderView, Id, PosterWanted, ScanProgressed,
+    TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters};
@@ -194,6 +195,55 @@ pub(crate) async fn continue_watching(
             ))
         })
         .collect()
+}
+
+/// Every line of dialogue in one subtitle track, in playback order.
+///
+/// The whole track at once rather than a window around the current moment. A
+/// five thousand cue film is a few hundred kilobytes, it is read once when the
+/// player opens, and having all of it in memory is what lets the active line be
+/// found by a binary search on every frame instead of by asking across the
+/// boundary sixty times a second.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn track_cues(state: State<'_, AppState>, track_id: Id) -> Answer<Vec<CueView>> {
+    let cues = state
+        .scanner()
+        .database()
+        .tracks()
+        .cues(track_id.get())
+        .map_err(Failure::of)?;
+
+    Ok(cues.into_iter().map(CueView::of).collect())
+}
+
+/// Records how far through a film somebody is.
+///
+/// Called on a throttle while playing and once on the way out, so it is one row
+/// replaced and nothing else. The running time comes with it because the player
+/// is the thing that knows it: a film whose poster was never captured has no
+/// duration stored, and without one the library cannot draw how far through it
+/// is.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn save_position(
+    state: State<'_, AppState>,
+    film_id: Id,
+    position_ms: u32,
+    duration_ms: Option<u32>,
+    finished: bool,
+) -> Answer<()> {
+    state
+        .scanner()
+        .database()
+        .positions()
+        .save(
+            film_id.get(),
+            Timestamp::from_millis(position_ms),
+            duration_ms.map(Timestamp::from_millis),
+            finished,
+        )
+        .map_err(Failure::of)
 }
 
 /// The films with no frame captured from them yet.
