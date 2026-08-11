@@ -17,7 +17,7 @@ use crate::dto::{
     SearchView, TrackView,
 };
 use crate::state::AppState;
-use crate::{allowed, dropped, posters};
+use crate::{allowed, dropped, posters, recent};
 
 /// What the window the front end is drawing into turned out to be.
 ///
@@ -270,6 +270,35 @@ pub(crate) async fn search_dialogue(
     })
     .await
     .map_err(|_| Failure::saying("the search did not finish"))?
+}
+
+/// What has been searched for before, most recent first.
+///
+/// What the palette offers before anybody has typed anything.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn recent_searches(state: State<'_, AppState>) -> Answer<Vec<String>> {
+    recent::list(state.scanner().database())
+}
+
+/// Keeps a search, because it found something worth opening.
+///
+/// Returns the list it made rather than nothing, so the palette shows what was
+/// written rather than what it assumed would be.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn remember_search(
+    state: State<'_, AppState>,
+    query: String,
+) -> Answer<Vec<String>> {
+    recent::remember(state.scanner().database(), &query)
+}
+
+/// Forgets every search that has been made.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn forget_searches(state: State<'_, AppState>) -> Answer<()> {
+    recent::forget(state.scanner().database())
 }
 
 /// Records how far through a film somebody is.

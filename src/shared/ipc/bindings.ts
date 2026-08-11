@@ -89,6 +89,21 @@ export const commands = {
 	 */
 	searchDialogue: (query: string, filmId: number | null) => typedError<SearchView, Failure>(__TAURI_INVOKE("search_dialogue", { query, filmId })),
 	/**
+	 *  What has been searched for before, most recent first.
+	 * 
+	 *  What the palette offers before anybody has typed anything.
+	 */
+	recentSearches: () => typedError<string[], Failure>(__TAURI_INVOKE("recent_searches")),
+	/**
+	 *  Keeps a search, because it found something worth opening.
+	 * 
+	 *  Returns the list it made rather than nothing, so the palette shows what was
+	 *  written rather than what it assumed would be.
+	 */
+	rememberSearch: (query: string) => typedError<string[], Failure>(__TAURI_INVOKE("remember_search", { query })),
+	/**  Forgets every search that has been made. */
+	forgetSearches: () => typedError<null, Failure>(__TAURI_INVOKE("forget_searches")),
+	/**
 	 *  Records how far through a film somebody is.
 	 * 
 	 *  Called on a throttle while playing and once on the way out, so it is one row
