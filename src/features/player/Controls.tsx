@@ -14,6 +14,7 @@ import {
 } from '@/shared/ui/Icon';
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
+import { BANDS } from './density';
 import { PLAYBACK } from './defaults';
 import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
@@ -35,6 +36,8 @@ interface ControlsProps {
   transport: Transport;
   /** Moving by line, which a film with no subtitles cannot do. */
   stepping: Stepping;
+  /** The dialogue drawn along the scrubber, as a path. */
+  density: string;
   visible: boolean;
   fullscreen: boolean;
   /** The transcript is beside the film. */
@@ -49,6 +52,7 @@ export function Controls({
   playback,
   transport,
   stepping,
+  density,
   visible,
   fullscreen,
   transcript,
@@ -76,19 +80,38 @@ export function Controls({
         onHold(false);
       }}
     >
-      <input
-        type="range"
-        className={classes(styles.slider, styles.scrubber)}
-        min={0}
-        max={durationMs ?? 0}
-        step={1000}
-        value={Math.min(positionMs, durationMs ?? positionMs)}
-        onChange={onScrub}
-        disabled={durationMs === null}
+      <div
+        className={styles.track}
         style={{ '--played': played(positionMs, durationMs) } as CSSProperties}
-        aria-label="Position in the film"
-        aria-valuetext={clockOf(positionMs)}
-      />
+      >
+        {/*
+         * The film's dialogue, drawn behind the scrubber. Two copies of the
+         * same shape: the second is clipped to how much has been played, which
+         * is what fills it in as the film runs without redrawing the path.
+         */}
+        <svg
+          className={styles.density}
+          viewBox={`0 0 ${String(BANDS)} 100`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path className={styles.quiet} d={density} />
+          <path className={styles.spoken} d={density} />
+        </svg>
+
+        <input
+          type="range"
+          className={classes(styles.slider, styles.scrubber)}
+          min={0}
+          max={durationMs ?? 0}
+          step={1000}
+          value={Math.min(positionMs, durationMs ?? positionMs)}
+          onChange={onScrub}
+          disabled={durationMs === null}
+          aria-label="Position in the film"
+          aria-valuetext={clockOf(positionMs)}
+        />
+      </div>
 
       <div className={styles.row}>
         <Control

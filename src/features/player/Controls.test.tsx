@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
+import { shapeOf } from './density';
 import { PLAYBACK } from './defaults';
 import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
@@ -33,6 +34,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       playback={{ ...playing, ...playback }}
       transport={transport}
       stepping={stepping}
+      density={shapeOf([0.2, 1, 0])}
       visible={visible}
       fullscreen={false}
       transcript={false}
@@ -101,6 +103,14 @@ describe('the control bar', () => {
     // A range input reports the position it was moved to, however it was moved.
     fireEvent.change(scrubber, { target: { value: '600000' } });
     expect(transport.seekTo).toHaveBeenCalledWith(600_000);
+  });
+
+  it('draws the dialogue of the film along the scrubber', () => {
+    show();
+
+    // Two copies of the one shape: the second is clipped to how much has been
+    // played, so filling it in as the film runs costs nothing per frame.
+    expect(document.querySelectorAll(`path[d="${shapeOf([0.2, 1, 0])}"]`)).toHaveLength(2);
   });
 
   it('will not offer to seek a film whose length is unknown', () => {

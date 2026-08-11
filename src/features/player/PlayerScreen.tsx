@@ -14,6 +14,7 @@ import { usePanel } from '@/features/transcript/usePanel';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { PLAYBACK, SUBTITLES } from './defaults';
+import { shapeFor } from './density';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
 import { useControls } from './useControls';
@@ -95,6 +96,14 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
   useShortcuts({ transport, stepping, toggleFullscreen, toggleTranscript, wake });
 
+  // Worked out once per film and remembered, which is what makes it free to
+  // ask for on every redraw of the control bar.
+  const density = shapeFor(
+    `${String(film.id)}:${String(playback.durationMs)}`,
+    timeline.cues,
+    playback.durationMs,
+  );
+
   const palette = paletteOf(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
 
@@ -145,6 +154,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
             playback={playback}
             transport={transport}
             stepping={stepping}
+            density={density}
             visible={visible}
             fullscreen={fullscreen}
             transcript={open}
