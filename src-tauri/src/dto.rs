@@ -10,7 +10,10 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
 use subtext_core::{Cue, CuePosition, Timestamp};
-use subtext_index::{FilmRecord, PlaybackPosition, TrackMatch, TrackRecord, WatchedFolder};
+use subtext_index::{
+    CueHit, FilmHits, FilmRecord, MATCH_END, MATCH_START, PlaybackPosition, SearchResults,
+    TrackMatch, TrackRecord, WatchedFolder,
+};
 use subtext_scan::{ScanOutcome, ScanProgress, ScanStage};
 use tauri_specta::Event;
 
@@ -293,6 +296,129 @@ impl CuePositionView {
     }
 }
 
+/// Everything one search found, grouped by the film it was found in.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SearchView {
+    /// Films in the order their best line ranked.
+    pub(crate) films: Vec<FilmMatches>,
+    /// How many lines are being shown, which the palette says out loud.
+    pub(crate) shown: u32,
+    /// Whether the search stopped at the limit rather than running out of
+    /// matches, so the palette can say "the first hundred" honestly.
+    pub(crate) truncated: bool,
+    /// Whether these are the best matches or simply the first ones. A search
+    /// matching half the library gives up ranking rather than keeping somebody
+    /// waiting for an order they typed straight past.
+    pub(crate) ranked: bool,
+}
+
+impl SearchView {
+    pub(crate) fn of(results: &SearchResults) -> Self {
+        Self {
+            shown: count(results.shown()),
+            films: results.films.iter().map(FilmMatches::of).collect(),
+            truncated: results.truncated,
+            ranked: results.ranked,
+        }
+    }
+}
+
+/// The lines one film had to offer, best first.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FilmMatches {
+    pub(crate) film_id: Id,
+    /// Carried rather than looked up on the other side, so that a film indexed
+    /// since the library screen last read itself still has a name in the
+    /// palette.
+    pub(crate) title: String,
+    pub(crate) year: Option<u16>,
+    pub(crate) hits: Vec<DialogueHit>,
+    /// Matches in this film that were not returned, because the film had
+    /// reached its share of the results.
+    pub(crate) withheld: u32,
+}
+
+impl FilmMatches {
+    fn of(film: &FilmHits) -> Self {
+        Self {
+            film_id: Id::of(film.film_id),
+            title: film.title.clone(),
+            year: film.year,
+            hits: film.hits.iter().map(DialogueHit::of).collect(),
+            withheld: count(film.withheld),
+        }
+    }
+}
+
+/// One line of dialogue that matched.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DialogueHit {
+    /// Where in the film it is said, which is where selecting it opens the film.
+    pub(crate) start_ms: u32,
+    /// The line around the match, split at the matched words.
+    pub(crate) snippet: Vec<SnippetPart>,
+}
+
+impl DialogueHit {
+    fn of(hit: &CueHit) -> Self {
+        Self {
+            start_ms: hit.start.millis(),
+            snippet: SnippetPart::split(&hit.snippet),
+        }
+    }
+}
+
+/// A stretch of a snippet, and whether it is one of the words searched for.
+///
+/// The index marks matches with two control characters, and splitting on them
+/// happens here rather than on the other side. A front end handed the marked
+/// string would have to find them again to draw the highlight, and a line of
+/// dialogue that happened to contain one would be drawn wrongly. Across the
+/// boundary the shape says what it means.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SnippetPart {
+    pub(crate) text: String,
+    pub(crate) matched: bool,
+}
+
+impl SnippetPart {
+    fn split(snippet: &str) -> Vec<Self> {
+        let mut parts = Vec::new();
+        let mut rest = snippet;
+        let mut matched = false;
+
+        loop {
+            let mark = if matched { MATCH_END } else { MATCH_START };
+            let (text, remainder) = match rest.split_once(mark) {
+                Some((text, remainder)) => (text, Some(remainder)),
+                None => (rest, None),
+            };
+
+            // Two marks with nothing between them carry no text to draw, and
+            // the leading one is the common case: a snippet that begins on the
+            // matched word.
+            if !text.is_empty() {
+                parts.push(Self {
+                    text: text.to_owned(),
+                    matched,
+                });
+            }
+
+            match remainder {
+                Some(remainder) => {
+                    rest = remainder;
+                    matched = !matched;
+                }
+                None => return parts,
+            }
+        }
+    }
+}
+
 /// A film with no frame captured from it yet.
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -466,7 +592,65 @@ mod tests {
     // say, so it stops rather than passing quietly.
     #![allow(clippy::expect_used)]
 
-    use super::AccentView;
+    use subtext_index::{MATCH_END, MATCH_START};
+
+    use super::{AccentView, SnippetPart};
+
+    /// A snippet as the index writes one, with the matched words marked.
+    fn marked(snippet: &str) -> String {
+        snippet.replace('[', MATCH_START).replace(']', MATCH_END)
+    }
+
+    fn drawn(parts: &[SnippetPart]) -> Vec<(&str, bool)> {
+        parts
+            .iter()
+            .map(|part| (part.text.as_str(), part.matched))
+            .collect()
+    }
+
+    #[test]
+    fn a_snippet_is_split_at_the_words_that_matched() {
+        let parts = SnippetPart::split(&marked("we'll always have [Paris]"));
+        assert_eq!(
+            drawn(&parts),
+            [("we'll always have ", false), ("Paris", true)]
+        );
+    }
+
+    #[test]
+    fn a_snippet_beginning_on_a_match_has_nothing_in_front_of_it() {
+        let parts = SnippetPart::split(&marked("[Paris] is where we were"));
+        assert_eq!(
+            drawn(&parts),
+            [("Paris", true), (" is where we were", false)]
+        );
+    }
+
+    #[test]
+    fn every_matched_word_is_marked() {
+        let parts = SnippetPart::split(&marked("the [action] is the [juice]"));
+        assert_eq!(
+            drawn(&parts),
+            [
+                ("the ", false),
+                ("action", true),
+                (" is the ", false),
+                ("juice", true),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_snippet_with_no_match_in_it_is_one_piece() {
+        let parts = SnippetPart::split("nothing was marked here");
+        assert_eq!(drawn(&parts), [("nothing was marked here", false)]);
+    }
+
+    #[test]
+    fn a_line_that_says_nothing_produces_nothing_to_draw() {
+        assert!(SnippetPart::split("").is_empty());
+        assert!(SnippetPart::split(&marked("[]")).is_empty());
+    }
 
     fn accent(primary: &str, pair: &str) -> AccentView {
         AccentView {

@@ -11,6 +11,7 @@ import { classes } from '@/shared/ui/classes';
 import { windowControls } from '@/shared/window/controls';
 import { breadcrumbFor, useNavigation } from './routes';
 import { useLibrary } from '@/features/library/useLibrary';
+import { useSearch } from '@/features/search/useSearch';
 import styles from './TitleBar.module.css';
 
 /**
@@ -23,6 +24,7 @@ export function TitleBar() {
   const route = useNavigation((navigation) => navigation.route);
   const go = useNavigation((navigation) => navigation.go);
   const films = useLibrary((library) => library.films);
+  const show = useSearch((search) => search.show);
   const maximised = useMaximised();
 
   const breadcrumb = breadcrumbFor(
@@ -43,10 +45,16 @@ export function TitleBar() {
 
       <div className={styles.spacer} data-tauri-drag-region />
 
-      {/* The palette itself arrives with library-wide search. Until then this
-          says where it will be and what opens it, rather than pretending to
-          work. */}
-      <button type="button" className={styles.search} disabled title="Dialogue search, not yet">
+      {/* The keyboard is how this is really reached. The button is here because
+          a shortcut nobody has been told about is a feature nobody finds, and
+          it carries the keys it stands in for. */}
+      <button
+        type="button"
+        className={styles.search}
+        onClick={() => {
+          show(route.screen === 'player' ? route.filmId : null);
+        }}
+      >
         <SearchIcon size={12} />
         Search dialogue
         <kbd className={styles.keys}>Ctrl K</kbd>

@@ -1,10 +1,10 @@
-import { type CSSProperties, useMemo, useRef } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
-import { useNavigation } from '@/app/routes';
+import { type Moment, useNavigation } from '@/app/routes';
 import { useFilmAccent } from '@/features/library/accent';
 import { paletteOf } from '@/features/library/fallback';
 import { frameId } from '@/features/library/transition';
@@ -22,7 +22,7 @@ import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
 import { useKeepPosition } from './useKeepPosition';
-import { usePlayback } from './usePlayback';
+import { type Transport, usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
 import { useStepping } from './useStepping';
 import styles from './PlayerScreen.module.css';
@@ -42,9 +42,11 @@ import styles from './PlayerScreen.module.css';
 
 interface PlayerScreenProps {
   filmId: Id;
+  /** The moment to open at, where a search result named one. */
+  at: Moment | null;
 }
 
-export function PlayerScreen({ filmId }: PlayerScreenProps) {
+export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
   const film = useLibrary((library) => library.films.find((known) => known.id === filmId));
   const back = useNavigation((navigation) => navigation.back);
 
@@ -73,15 +75,20 @@ export function PlayerScreen({ filmId }: PlayerScreenProps) {
     );
   }
 
-  // Keyed by the film, so that opening a second one from search later gets a
-  // fresh element and fresh state rather than the last film's position.
-  return <Film key={film.id} film={film} onBack={back} />;
+  // Keyed by the film, so that opening a second one from search gets a fresh
+  // element and fresh state rather than the last film's position.
+  return <Film key={film.id} film={film} at={at} onBack={back} />;
 }
 
-function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
+function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack: () => void }) {
   const screen = useRef<HTMLDivElement>(null);
 
-  const [video, playback, transport] = usePlayback(film.path, startAtOf(film, PLAYBACK.rewindMs));
+  // A film opened from a search result starts at the line that was found; one
+  // opened from the library starts a little before where it was left.
+  const [video, playback, transport] = usePlayback(
+    film.path,
+    at?.ms ?? startAtOf(film, PLAYBACK.rewindMs),
+  );
   const cues = useCues(film);
   const timeline = useMemo(() => timelineOf(cues), [cues]);
   const active = useActiveLine(video, timeline);
@@ -94,6 +101,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
 
   const stepping = useStepping(timeline, transport);
 
+  useJumpTo(at, transport);
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
   useShortcuts({ transport, stepping, toggleFullscreen, toggleTranscript, wake });
 
@@ -192,4 +200,23 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
       )}
     </div>
   );
+}
+
+/**
+ * Moves a film that is already open to the moment a search result named.
+ *
+ * Only the ones after the first. The first is where the element was told to
+ * load, which is a better way to arrive than loading the beginning and jumping
+ * away from it, and seeking to it here would be a seek to where the film
+ * already is.
+ */
+function useJumpTo(at: Moment | null, transport: Transport) {
+  const jumped = useRef(at?.count ?? null);
+
+  useEffect(() => {
+    if (at === null || at.count === jumped.current) return;
+
+    jumped.current = at.count;
+    transport.seekTo(at.ms);
+  }, [at, transport]);
 }

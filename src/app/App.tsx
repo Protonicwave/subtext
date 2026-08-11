@@ -9,6 +9,7 @@ import { DropZone } from '@/features/onboarding/DropZone';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { ImportFlow } from '@/features/onboarding/ImportFlow';
 import { useImport } from '@/features/onboarding/useImport';
+import { CommandPalette } from '@/features/search/CommandPalette';
 import { TitleBar } from './TitleBar';
 import { useNavigation } from './routes';
 import styles from './App.module.css';
@@ -43,7 +44,7 @@ export function App() {
       <main className={styles.stage}>
         {route.screen === 'library' && <LibraryScreen />}
         {route.screen === 'settings' && <SettingsScreen />}
-        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} />}
+        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} at={route.at} />}
       </main>
 
       {firstRun && <FirstRun />}
@@ -54,6 +55,7 @@ export function App() {
         </p>
       )}
 
+      <CommandPalette />
       <ImportFlow />
       <DropZone />
     </MotionConfig>
