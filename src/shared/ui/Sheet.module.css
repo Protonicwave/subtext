@@ -1,0 +1,89 @@
+/*
+ * The dialog element is the backdrop here, not the panel. It is stretched over
+ * the window and the panel is centred inside it, which is what makes a click
+ * anywhere outside the panel a click on the dialog itself.
+ */
+.backdrop {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: rgb(6 7 9 / 66%);
+  backdrop-filter: blur(14px);
+  border: 0;
+  padding: 0;
+  color: var(--colour-text);
+  overflow: hidden;
+}
+
+.backdrop:not([open]) {
+  display: none;
+}
+
+.backdrop::backdrop {
+  background: transparent;
+}
+
+.sheet {
+  width: min(720px, 92vw);
+  max-height: 80dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--colour-surface);
+  border: 1px solid #2a2e37;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sheet);
+  animation: rise var(--duration-settle) var(--ease-spring);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.head {
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+}
+
+.description {
+  margin-top: var(--space-1);
+  color: var(--colour-text-faint);
+  font-size: var(--text-xs);
+}
+
+.description b {
+  color: var(--colour-accent);
+  font-weight: var(--weight-medium);
+}
+
+.body {
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.foot {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--colour-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}

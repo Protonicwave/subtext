@@ -1,0 +1,103 @@
+/*
+ * The reset.
+ *
+ * Short on purpose. It undoes the browser defaults that fight a designed
+ * interface and leaves the rest alone, rather than flattening every element
+ * and then building each one back up.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+ * A desktop window is not a document. Nothing scrolls the window itself; the
+ * views inside it scroll, which is what keeps the title bar where it is.
+ */
+body {
+  overflow: hidden;
+}
+
+/*
+ * Controls inherit the interface typeface rather than the operating system's
+ * form font, which is the single biggest giveaway that something was built in
+ * a browser.
+ */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* A disabled control should look unavailable, not merely unresponsive. */
+button:disabled {
+  cursor: default;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  flex: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/*
+ * Text selection is for text. Dragging across the interface and leaving half
+ * the labels highlighted is a web page habit that a desktop application should
+ * not have, so it is switched off by default and switched back on for the
+ * things a person might actually want to copy.
+ */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-selectable],
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

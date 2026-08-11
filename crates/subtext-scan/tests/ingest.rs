@@ -253,6 +253,34 @@ fn a_pairing_made_by_hand_survives_a_rescan() {
 }
 
 #[test]
+fn a_subtitle_attached_from_outside_the_folder_stays_attached() {
+    let library = Fixture::new();
+    library.film("Heat.1995.mkv");
+    library.scan();
+
+    // Where a subtitle downloaded on its own actually lands, which is not
+    // beside the film. The scan of the watched folder will never see it.
+    let downloaded = library.root.join("heat english subs.srt");
+    std::fs::write(&downloaded, common::srt(&["A guy told me one time"])).unwrap();
+
+    let heat = library.film_id("Heat.1995.mkv");
+    let attached = library.scanner.attach_subtitle(heat, &downloaded).unwrap();
+    assert_eq!(attached.cues, 1);
+
+    library.scan();
+
+    assert_eq!(
+        library.dialogue("Heat.1995.mkv"),
+        ["A guy told me one time"]
+    );
+
+    // Deleting it is the one thing that should take it out of the library.
+    std::fs::remove_file(&downloaded).unwrap();
+    library.scan();
+    assert!(library.dialogue("Heat.1995.mkv").is_empty());
+}
+
+#[test]
 fn a_subtitle_moves_when_a_better_film_arrives_beside_it() {
     let library = Fixture::new();
     library.film("Solaris Part Two.mkv");

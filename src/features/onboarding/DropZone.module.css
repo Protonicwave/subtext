@@ -1,0 +1,73 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  background: rgb(6 7 9 / 72%);
+  backdrop-filter: blur(18px);
+  animation: fade var(--duration-instant) var(--ease-out);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.target {
+  width: min(560px, 84vw);
+  padding: var(--space-16) var(--space-10);
+  text-align: center;
+  border-radius: 20px;
+  border: 1.5px dashed color-mix(in oklab, var(--colour-accent) 55%, transparent);
+  background: color-mix(in oklab, var(--colour-accent) 6%, transparent);
+}
+
+.glyph {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto var(--space-5);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklab, var(--colour-accent) 16%, transparent);
+  color: var(--colour-accent);
+  animation: float 2.4s ease-in-out infinite;
+}
+
+/*
+ * The one piece of motion that runs on its own rather than in response to
+ * something, so it is also the one that has to stop when motion is unwelcome.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .glyph {
+    animation: none;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.detail {
+  color: var(--colour-text-dim);
+  font-size: var(--text-sm);
+}

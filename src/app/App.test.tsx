@@ -1,54 +1,47 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FilmView, FolderView, ScanProgressed } from '../shared/ipc/bindings';
-import { App } from './App';
+import type * as ClientModule from '@/shared/ipc/client';
+import type { FilmView, FolderView } from '@/shared/ipc/bindings';
 
-const { commands, listeners } = vi.hoisted(() => ({
-  commands: {
+const { ipc, drops } = vi.hoisted(() => ({
+  ipc: {
+    windowChrome: vi.fn(() => Promise.resolve({ backdrop: false })),
+    listFolders: vi.fn((): Promise<FolderView[]> => Promise.resolve([])),
+    listLibrary: vi.fn((): Promise<FilmView[]> => Promise.resolve([])),
     chooseFolder: vi.fn(),
-    addFolder: vi.fn(),
-    listFolders: vi.fn(),
-    listLibrary: vi.fn(),
-    rescan: vi.fn(),
   },
-  // What the window has subscribed to, so a test can push an event at it.
-  listeners: new Map<string, (event: { payload: unknown }) => void>(),
+  drops: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-vi.mock('../shared/ipc/bindings', () => ({
-  commands,
-  events: {
-    scanProgressed: { listen: listen('scan-progressed') },
-    scanFinished: { listen: listen('scan-finished') },
-    scanFailed: { listen: listen('scan-failed') },
+const emitter = () => ({ listen: () => Promise.resolve(() => undefined) });
+
+vi.mock('@/shared/ipc/bindings', () => ({
+  commands: {},
+  events: { scanProgressed: emitter(), scanFinished: emitter(), scanFailed: emitter() },
+}));
+vi.mock('@/shared/ipc/client', async () => {
+  const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
+  return { ...actual, ipc };
+});
+vi.mock('@/shared/window/drops', () => ({ onFilesDropped: drops }));
+vi.mock('@/shared/window/controls', () => ({
+  windowControls: {
+    minimise: vi.fn(),
+    toggleMaximise: vi.fn(),
+    close: vi.fn(),
+    isMaximised: vi.fn(() => Promise.resolve(false)),
+    onResized: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
 
-function listen(name: string) {
-  return (callback: (event: { payload: unknown }) => void) => {
-    listeners.set(name, callback);
-    return Promise.resolve(() => listeners.delete(name));
-  };
-}
+const { App } = await import('./App');
+const { useNavigation } = await import('./routes');
+const { useLibrary } = await import('@/features/library/useLibrary');
 
-function ok<T>(data: T) {
-  return Promise.resolve({ status: 'ok' as const, data });
-}
+const folder = { id: 1, path: '/films', addedAt: 0, films: 1, watching: true } satisfies FolderView;
 
-function failed(message: string) {
-  return Promise.resolve({ status: 'error' as const, error: { message } });
-}
-
-const folder: FolderView = {
-  id: 1,
-  path: '/films',
-  addedAt: 1_700_000_000_000,
-  films: 2,
-  watching: true,
-};
-
-const film: FilmView = {
+const film = {
   id: 7,
   folderId: 1,
   path: '/films/Heat.1995.mkv',
@@ -58,89 +51,96 @@ const film: FilmView = {
   posterPath: null,
   accent: null,
   missing: false,
-  tracks: [
-    {
-      id: 3,
-      path: '/films/Heat.1995.srt',
-      language: 'en',
-      forced: false,
-      hearingImpaired: false,
-      matchKind: 'exact',
-      cueCount: 1_402,
-    },
-  ],
+  tracks: [],
   position: null,
-};
+} satisfies FilmView;
 
-describe('App', () => {
+describe('the application', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listeners.clear();
-    commands.listFolders.mockReturnValue(ok([folder]));
-    commands.listLibrary.mockReturnValue(ok([film]));
+    document.documentElement.removeAttribute('data-backdrop');
+    useNavigation.setState({ route: { screen: 'library' }, previous: null });
+    useLibrary.setState({ folders: [], films: [], loaded: false, problem: null });
+    ipc.windowChrome.mockResolvedValue({ backdrop: false });
+    ipc.listFolders.mockResolvedValue([]);
+    ipc.listLibrary.mockResolvedValue([]);
   });
 
-  it('shows the folders being watched and what was found in them', async () => {
+  it('asks for a folder when nothing is being watched', async () => {
     render(<App />);
-
-    expect(await screen.findByText(/\/films \(2 films, watching\)/)).toBeInTheDocument();
-    expect(await screen.findByText(/Heat \(1995\), 1402 lines/)).toBeInTheDocument();
-  });
-
-  it('adds the folder that was chosen', async () => {
-    commands.chooseFolder.mockReturnValue(ok('/more films'));
-    commands.addFolder.mockReturnValue(ok({ ...folder, id: 2, path: '/more films' }));
-
-    render(<App />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a folder' }));
-
-    await waitFor(() => {
-      expect(commands.addFolder).toHaveBeenCalledWith('/more films');
-    });
-  });
-
-  it('asks for nothing when the picker was dismissed', async () => {
-    commands.chooseFolder.mockReturnValue(ok(null));
-
-    render(<App />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a folder' }));
-
-    await waitFor(() => {
-      expect(commands.chooseFolder).toHaveBeenCalled();
-    });
-    expect(commands.addFolder).not.toHaveBeenCalled();
-  });
-
-  it('follows a scan as it reports itself', async () => {
-    render(<App />);
-    await screen.findByText(/Heat/);
-
-    const progress: ScanProgressed = {
-      folderId: 1,
-      stage: 'indexing',
-      filesSeen: 40,
-      filmsFound: 20,
-      subtitlesFound: 20,
-      filmsPaired: 20,
-      subtitlesToRead: 20,
-      subtitlesRead: 12,
-      cuesIndexed: 9_000,
-      fractionRead: 0.6,
-    };
-    listeners.get('scan-progressed')?.({ payload: progress });
 
     expect(
-      await screen.findByText(/indexing: 20 films, 12 of 20 subtitle files read/),
+      await screen.findByRole('button', { name: /choose your films folder/i }),
     ).toBeInTheDocument();
   });
 
-  it('says what went wrong rather than showing nothing', async () => {
-    commands.listFolders.mockReturnValue(failed('the library database refused the request'));
+  it('shows the library instead once a folder is being watched', async () => {
+    ipc.listFolders.mockResolvedValue([folder]);
+    ipc.listLibrary.mockResolvedValue([film]);
+
+    render(<App />);
+
+    expect(await screen.findByText('Heat')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /choose your films folder/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('moves between the screens and back again', async () => {
+    ipc.listFolders.mockResolvedValue([folder]);
+    ipc.listLibrary.mockResolvedValue([film]);
+    render(<App />);
+    await screen.findByText('Heat');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByRole('heading', { name: /watched folders/i })).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByRole('heading', { name: /your films/i })).toBeInTheDocument();
+  });
+
+  it('opens a film, which is as far as the player goes for now', async () => {
+    ipc.listFolders.mockResolvedValue([folder]);
+    ipc.listLibrary.mockResolvedValue([film]);
+    render(<App />);
+
+    await userEvent.click(await screen.findByText('Heat'));
+
+    expect(await screen.findByText(/playback itself is not built yet/i)).toBeInTheDocument();
+  });
+
+  it('marks the window when the desktop shows through behind it', async () => {
+    ipc.windowChrome.mockResolvedValue({ backdrop: true });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.backdrop).toBe('mica');
+    });
+  });
+
+  it('leaves the window plain when it has no backdrop', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(ipc.windowChrome).toHaveBeenCalled();
+    });
+    expect(document.documentElement.dataset.backdrop).toBeUndefined();
+  });
+
+  it('says what went wrong when the library cannot be read', async () => {
+    ipc.listFolders.mockRejectedValue(new Error('the library database refused the request'));
 
     render(<App />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'the library database refused the request',
     );
+  });
+
+  it('listens for files dropped anywhere in the window', () => {
+    render(<App />);
+
+    expect(drops).toHaveBeenCalled();
   });
 });

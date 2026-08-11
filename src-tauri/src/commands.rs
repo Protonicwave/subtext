@@ -4,13 +4,25 @@
 //! front end cannot call something that is not here, or call it with the wrong
 //! shape, without the compiler saying so.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::dto::{Answer, Failure, FilmView, FolderView, Id, ScanProgressed};
+use crate::chrome::Chrome;
+use crate::dropped;
+use crate::dto::{Answer, Failure, FilmView, FolderView, Id, ScanProgressed, TrackView};
 use crate::state::AppState;
+
+/// What the window the front end is drawing into turned out to be.
+///
+/// Asked once at startup. The window has already been dressed by then, so this
+/// reports what happened rather than causing it.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn window_chrome(chrome: State<'_, Chrome>) -> Answer<Chrome> {
+    Ok(*chrome)
+}
 
 /// Opens the platform's own folder picker.
 ///
@@ -24,6 +36,36 @@ pub(crate) async fn choose_folder(app: AppHandle) -> Answer<Option<String>> {
     // answered, and the main thread is where the window is drawn.
     let chosen = app.dialog().file().blocking_pick_folder();
     Ok(chosen.map(|folder| folder.to_string()))
+}
+
+/// Opens the platform's own file picker, filtered to subtitle files.
+///
+/// What the attach action in the import sheet opens, for a film whose subtitle
+/// was not found beside it.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn choose_subtitle(app: AppHandle) -> Answer<Option<String>> {
+    let chosen = app
+        .dialog()
+        .file()
+        .add_filter("Subtitle files", &["srt"])
+        .blocking_pick_file();
+    Ok(chosen.map(|file| file.to_string()))
+}
+
+/// The folders that a set of dropped paths stand for.
+///
+/// Dropping a film means the folder it is in, since that is where its subtitles
+/// are and where the next film will be put. The front end adds what comes back
+/// the same way it adds a folder that was picked.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn folders_for_paths(paths: Vec<String>) -> Answer<Vec<String>> {
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    Ok(dropped::folders_of(&paths)
+        .iter()
+        .map(|folder| folder.display().to_string())
+        .collect())
 }
 
 /// Starts watching a folder and reads what is in it.
@@ -110,6 +152,43 @@ pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmV
             Ok(FilmView::of(film, tracks, position))
         })
         .collect()
+}
+
+/// Gives a subtitle file to a film because somebody said so.
+///
+/// The amber row in the import sheet. Reading and parsing the file is real work
+/// on a real thread rather than on the one answering commands, and it waits
+/// behind any scan that is running, so it must not hold up the runtime while it
+/// does.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn attach_subtitle(
+    app: AppHandle,
+    film_id: Id,
+    path: String,
+) -> Answer<TrackView> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let attached = state
+            .scanner()
+            .attach_subtitle(film_id.get(), Path::new(&path))
+            .map_err(Failure::of)?;
+
+        // Read back rather than assembled here, so that the row the sheet
+        // redraws says what the library says and not what we hoped it would.
+        state
+            .scanner()
+            .database()
+            .tracks()
+            .for_film(attached.film_id)
+            .map_err(Failure::of)?
+            .into_iter()
+            .find(|track| track.id == attached.track_id)
+            .map(TrackView::of)
+            .ok_or_else(|| Failure::saying("the subtitle was attached but could not be read back"))
+    })
+    .await
+    .map_err(|_| Failure::saying("attaching the subtitle did not finish"))?
 }
 
 /// Reads every watched folder again.

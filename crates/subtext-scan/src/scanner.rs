@@ -5,6 +5,7 @@ use std::sync::{Mutex, PoisonError};
 
 use subtext_index::{Database, WatchedFolder};
 
+use crate::attach::{self, Attached};
 use crate::error::Result;
 use crate::ingest::{self, ScanOutcome};
 use crate::progress::ProgressSink;
@@ -74,6 +75,16 @@ impl Scanner {
             .iter()
             .map(|folder| self.scan(folder, sink))
             .collect()
+    }
+
+    /// Gives a subtitle file to a film because somebody said so.
+    ///
+    /// Behind the same gate as a scan, so that a rescan cannot be part way
+    /// through deciding where this file belongs while the answer is being
+    /// written.
+    pub fn attach_subtitle(&self, film_id: i64, path: &Path) -> Result<Attached> {
+        let _guard = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+        attach::attach_subtitle(&self.database, film_id, path)
     }
 
     /// Rescans the folders that the given paths fall inside.

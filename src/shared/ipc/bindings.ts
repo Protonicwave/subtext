@@ -6,6 +6,13 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	/**
+	 *  What the window the front end is drawing into turned out to be.
+	 * 
+	 *  Asked once at startup. The window has already been dressed by then, so this
+	 *  reports what happened rather than causing it.
+	 */
+	windowChrome: () => typedError<Chrome, Failure>(__TAURI_INVOKE("window_chrome")),
+	/**
 	 *  Opens the platform's own folder picker.
 	 * 
 	 *  Separate from adding the folder, so that a front end that already knows the
@@ -13,6 +20,21 @@ export const commands = {
 	 *  use it.
 	 */
 	chooseFolder: () => typedError<string | null, Failure>(__TAURI_INVOKE("choose_folder")),
+	/**
+	 *  Opens the platform's own file picker, filtered to subtitle files.
+	 * 
+	 *  What the attach action in the import sheet opens, for a film whose subtitle
+	 *  was not found beside it.
+	 */
+	chooseSubtitle: () => typedError<string | null, Failure>(__TAURI_INVOKE("choose_subtitle")),
+	/**
+	 *  The folders that a set of dropped paths stand for.
+	 * 
+	 *  Dropping a film means the folder it is in, since that is where its subtitles
+	 *  are and where the next film will be put. The front end adds what comes back
+	 *  the same way it adds a folder that was picked.
+	 */
+	foldersForPaths: (paths: string[]) => typedError<string[], Failure>(__TAURI_INVOKE("folders_for_paths", { paths })),
 	/**
 	 *  Starts watching a folder and reads what is in it.
 	 * 
@@ -22,6 +44,15 @@ export const commands = {
 	 *  straight away.
 	 */
 	addFolder: (path: string) => typedError<FolderView, Failure>(__TAURI_INVOKE("add_folder", { path })),
+	/**
+	 *  Gives a subtitle file to a film because somebody said so.
+	 * 
+	 *  The amber row in the import sheet. Reading and parsing the file is real work
+	 *  on a real thread rather than on the one answering commands, and it waits
+	 *  behind any scan that is running, so it must not hold up the runtime while it
+	 *  does.
+	 */
+	attachSubtitle: (filmId: Id, path: string) => typedError<TrackView, Failure>(__TAURI_INVOKE("attach_subtitle", { filmId, path })),
 	/**  Stops watching a folder and forgets what was found in it. */
 	removeFolder: (id: Id) => typedError<boolean, Failure>(__TAURI_INVOKE("remove_folder", { id })),
 	/**  The folders being watched, with how many films each holds. */
@@ -64,6 +95,16 @@ export const events = {
 };
 
 /* Types */
+/**  What the front end needs to know about the window it is drawing into. */
+export type Chrome = {
+	/**
+	 *  The desktop shows through behind the window, so the surfaces drawn on
+	 *  top of it are the translucent ones. False everywhere the window is
+	 *  opaque, where the same surfaces would be washed out over nothing.
+	 */
+	backdrop: boolean,
+};
+
 /**
  *  Something that went wrong, said in a way a person can act on.
  * 

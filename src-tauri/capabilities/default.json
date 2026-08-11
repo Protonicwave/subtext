@@ -1,7 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window is allowed to ask the system for. Only the folder picker: everything else Subtext does goes through its own commands, which are scoped in Rust rather than here.",
+  "description": "What the main window is allowed to ask the system for. The file pickers, and the window controls that a frameless window has to draw for itself. Everything else Subtext does goes through its own commands, which are scoped in Rust rather than here.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close"
+  ]
 }

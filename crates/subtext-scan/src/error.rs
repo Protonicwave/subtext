@@ -21,6 +21,8 @@ pub enum Error {
     /// Nothing is left half written: batches are committed whole, so this
     /// means some files were not read, not that some were read badly.
     Interrupted,
+    /// A subtitle file could not be given to a film by hand.
+    Attach { path: PathBuf, reason: String },
 }
 
 impl fmt::Display for Error {
@@ -34,6 +36,9 @@ impl fmt::Display for Error {
                 write!(f, "folders cannot be watched for changes: {reason}")
             }
             Self::Interrupted => f.write_str("the scan stopped before it had finished"),
+            Self::Attach { path, reason } => {
+                write!(f, "{} could not be attached: {reason}", path.display())
+            }
         }
     }
 }
