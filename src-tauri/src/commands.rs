@@ -90,7 +90,7 @@ pub(crate) async fn add_folder(app: AppHandle, path: String) -> Answer<FolderVie
     state.watch(&folder.path)?;
     // Before anything is read, so that the first film to appear can already be
     // opened by the webview for its frame to be taken.
-    allowed::directory(&app, &folder.path)?;
+    allowed::folder(&app, &folder.path)?;
     let view = FolderView::of(&folder, 0, state.is_watching());
 
     let handle = app.clone();

@@ -16,6 +16,7 @@ tauri = { version = "2.11.5", features = ["protocol-asset"] }
 subtext-core.workspace = true
 subtext-index.workspace = true
 subtext-scan.workspace = true
+percent-encoding = "2.3.2"
 serde = { version = "1.0.229", features = ["derive"] }
 specta = "=2.0.0-rc.25"
 specta-typescript = "0.0.12"
