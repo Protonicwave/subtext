@@ -147,6 +147,23 @@ describe('the awkward cues a real file holds', () => {
     expect(timelineOf([]).longest).toBe(0);
   });
 
+  it('answers a frame of a full length film in well under a frame', () => {
+    // Two hours of dialogue, looked at once per frame for four minutes of it.
+    // The whole point of the binary search is that this is nothing: the
+    // transcript, the subtitles and the frame loop all rest on it.
+    const many = timelineOf(
+      Array.from({ length: 5_000 }, (_, at) => cue(at * 1_400, at * 1_400 + 1_200)),
+    );
+
+    const at = performance.now();
+    for (let frame = 0; frame < 15_000; frame += 1) activeAt(many, frame * 466);
+    const each = (performance.now() - at) / 15_000;
+
+    // A frame at sixty a second is 16.7ms, and this is a small fraction of one
+    // per cent of that even on a machine with something else running.
+    expect(each).toBeLessThan(0.05);
+  });
+
   it('finds a line at any point in a full length film', () => {
     // Two hours of dialogue, which is the size the search has to hold up at.
     const many = timelineOf(
