@@ -3,6 +3,7 @@ import { MotionConfig } from 'motion/react';
 import { useAppearance } from '@/shared/settings/appearance';
 import { useSettings } from '@/shared/settings/useSettings';
 import { useChrome } from '@/shared/window/chrome';
+import { CloseIcon } from '@/shared/ui/Icon';
 import { LibraryScreen } from '@/features/library/LibraryScreen';
 import { useLibrary } from '@/features/library/useLibrary';
 import { PlayerScreen } from '@/features/player/PlayerScreen';
@@ -24,9 +25,12 @@ export function App() {
   const loaded = useLibrary((library) => library.loaded);
   const folders = useLibrary((library) => library.folders);
   const problem = useLibrary((library) => library.problem);
+  const clearProblem = useLibrary((library) => library.clearProblem);
   const importProblem = useImport((state) => state.problem);
+  const dismissImport = useImport((state) => state.dismiss);
   const loadSettings = useSettings((state) => state.load);
   const settingsProblem = useSettings((state) => state.problem);
+  const clearSettingsProblem = useSettings((state) => state.clearProblem);
   const motion = useSettings((state) => state.settings.motion);
 
   useEffect(() => {
@@ -42,6 +46,16 @@ export function App() {
   // worth doing. Held back until the library has been read, so that the first
   // run screen does not flash up in front of somebody who has a library.
   const firstRun = loaded && folders.length === 0;
+
+  // The first of the three that has something to say, with the way to put it
+  // away again. None of these stops a person carrying on, so a strip that could
+  // not be dismissed would sit over the window for the rest of the session
+  // reporting a failure already read and understood.
+  const failure = [
+    { says: problem, clear: clearProblem },
+    { says: importProblem, clear: dismissImport },
+    { says: settingsProblem, clear: clearSettingsProblem },
+  ].find((each) => each.says !== null);
 
   return (
     /*
@@ -61,9 +75,17 @@ export function App() {
 
       {firstRun && <FirstRun />}
 
-      {(problem ?? importProblem ?? settingsProblem) !== null && (
+      {failure !== undefined && (
         <p role="alert" className={styles.problem}>
-          {problem ?? importProblem ?? settingsProblem}
+          {failure.says}
+          <button
+            type="button"
+            className={styles.dismiss}
+            aria-label="Dismiss"
+            onClick={failure.clear}
+          >
+            <CloseIcon size={11} />
+          </button>
         </p>
       )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon, FolderIcon } from '@/shared/ui/Icon';
-import { ipc } from '@/shared/ipc/client';
+import { ipc, reasonFor } from '@/shared/ipc/client';
 import { useImport } from '@/features/onboarding/useImport';
 import { useLibrary } from '@/features/library/useLibrary';
 import { Action, Choice } from './controls';
@@ -118,11 +118,20 @@ export function LibrarySection() {
  */
 function useRereadWhenPairingChanges() {
   const matching = useSetting('matching');
+  const failed = useImport((state) => state.failed);
   const paired = useRef(matching);
 
   useEffect(() => {
     if (matching === paired.current) return;
     paired.current = matching;
-    void ipc.rescan();
-  }, [matching]);
+
+    // Quiet while it works, but not quiet when it will not start. The setting
+    // has already moved, and a read that never happened would leave the folder
+    // list describing pairings made under the old answer.
+    ipc.rescan().catch((failure: unknown) => {
+      failed(
+        `The setting was kept, but your folders could not be read again: ${reasonFor(failure)}`,
+      );
+    });
+  }, [matching, failed]);
 }

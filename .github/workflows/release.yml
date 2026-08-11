@@ -1,0 +1,88 @@
+name: Release
+
+# Installers are built from a tag and nothing else, so that what is published is
+# always a commit somebody chose to publish.
+#
+# The release is left as a draft. The notes are written by hand once the
+# installers are attached and have been opened on a real machine, which is the
+# last check there is that the tag is worth releasing.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  installers:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One binary holding both architectures, so there is a single macOS
+          # download rather than a choice a person has to get right.
+          - os: macos-latest
+            name: macOS
+            target: universal-apple-darwin
+            args: --target universal-apple-darwin
+          - os: ubuntu-22.04
+            name: Linux
+            target: x86_64-unknown-linux-gnu
+            args: ''
+          - os: windows-latest
+            name: Windows
+            target: x86_64-pc-windows-msvc
+            args: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing happens where the certificates exist and is skipped where
+          # they do not, rather than failing the build. An unsigned installer
+          # still runs; it warns first, and the README says so.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Subtext ${{ github.ref_name }}
+          releaseDraft: true
+          args: ${{ matrix.args }}

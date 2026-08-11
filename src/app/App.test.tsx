@@ -146,6 +146,22 @@ describe('the application', () => {
     );
   });
 
+  /*
+   * None of these failures stops anything, so the strip has to be closable.
+   * One that was not would sit over the window for the rest of the session
+   * reporting something already read and dealt with.
+   */
+  it('puts a failure away when it is dismissed', async () => {
+    ipc.listFolders.mockRejectedValue(new Error('the library database refused the request'));
+
+    render(<App />);
+    await screen.findByRole('alert');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('listens for files dropped anywhere in the window', () => {
     render(<App />);
 

@@ -36,6 +36,7 @@ export function LibraryScreen() {
   const held = useLibrary((library) => library.films);
   const folders = useLibrary((library) => library.folders);
   const stopped = useLibrary((library) => library.resumable);
+  const loaded = useLibrary((library) => library.loaded);
   const chooseFolder = useImport((state) => state.chooseFolder);
   const openFilm = useNavigation((navigation) => navigation.openFilm);
 
@@ -98,11 +99,12 @@ export function LibraryScreen() {
         <header className={styles.top}>
           <h1 className={styles.title}>
             Your films
-            <small>
-              {films.length === 0
-                ? 'Nothing yet'
-                : `${count(films.length, 'film')} · ${lines.toLocaleString('en-GB')} lines of dialogue`}
-            </small>
+            {/*
+             * Announced, because this is the one place the screen says whether
+             * it is still reading, and somebody who cannot see the grid fill in
+             * has nothing else to go on.
+             */}
+            <small role="status">{summaryOf(loaded, films.length, lines)}</small>
           </h1>
           <Button tone="primary" onClick={() => void chooseFolder()}>
             <FolderIcon size={14} />
@@ -112,34 +114,49 @@ export function LibraryScreen() {
 
         <ContinueWatching films={resumable} onOpen={open} />
 
-        {films.length === 0 ? (
-          <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
-        ) : (
-          <div
-            className={styles.grid}
-            ref={grid}
-            style={{ height: `${String(virtualiser.getTotalSize())}px` }}
-          >
-            {virtualiser.getVirtualItems().map((row) => (
-              <div
-                key={row.key}
-                className={styles.line}
-                style={{
-                  height: `${String(row.size)}px`,
-                  transform: `translateY(${String(row.start)}px)`,
-                  gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
-                }}
-              >
-                {(rows[row.index] ?? []).map((film) => (
-                  <PosterTile key={film.id} film={film} onOpen={open} />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
+        {/*
+         * Nothing at all until the first read has come back. Every one of the
+         * messages below is a statement about what is on disk, and none of them
+         * is true yet: a library of a thousand films would be told for a moment
+         * that no folders are being watched.
+         */}
+        {loaded &&
+          (films.length === 0 ? (
+            <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
+          ) : (
+            <div
+              className={styles.grid}
+              ref={grid}
+              style={{ height: `${String(virtualiser.getTotalSize())}px` }}
+            >
+              {virtualiser.getVirtualItems().map((row) => (
+                <div
+                  key={row.key}
+                  className={styles.line}
+                  style={{
+                    height: `${String(row.size)}px`,
+                    transform: `translateY(${String(row.start)}px)`,
+                    gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {(rows[row.index] ?? []).map((film) => (
+                    <PosterTile key={film.id} film={film} onOpen={open} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
       </div>
     </div>
   );
+}
+
+/** The line under the heading: still reading, read and empty, or how much there is. */
+function summaryOf(loaded: boolean, films: number, lines: number): string {
+  if (!loaded) return 'Reading your films';
+  if (films === 0) return 'Nothing yet';
+
+  return `${count(films, 'film')} · ${lines.toLocaleString('en-GB')} lines of dialogue`;
 }
 
 /**
