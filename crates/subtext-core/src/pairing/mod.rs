@@ -4,7 +4,8 @@
 //! says what it is a subtitle for. Names are therefore reduced to a comparable
 //! form and matched in two passes: first on the names being the same, then on
 //! one name containing the other, which is what catches a film whose file
-//! carries a release group and a subtitle whose file does not.
+//! carries a release group and a subtitle whose file does not. The second pass
+//! is a preference: see [`Matching`].
 //!
 //! Where the evidence is not good enough the pairing is left undone rather
 //! than guessed at. An unpaired subtitle is a row in the import sheet with an
@@ -24,6 +25,22 @@ pub enum MatchKind {
     Exact,
     /// One name is the beginning of the other, word for word.
     Approximate,
+}
+
+/// How much evidence a pairing needs before it is made.
+///
+/// A preference rather than a constant, because the right answer depends on the
+/// folder. A library named by hand pairs exactly and anything approximate in it
+/// is a mistake waiting to happen; a library of downloads is full of films
+/// carrying a release group and subtitles that do not, and refusing those means
+/// attaching half of them by hand.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Matching {
+    /// One name beginning the other, word for word, is enough.
+    #[default]
+    Relaxed,
+    /// Only names that reduce to exactly the same thing.
+    Exact,
 }
 
 /// A subtitle file and the film it was paired with.
@@ -57,12 +74,22 @@ impl PairingReport {
     }
 }
 
-/// Pairs subtitle files with films by name.
+/// Pairs subtitle files with films by name, taking whatever evidence there is.
 ///
 /// Both slices hold file names, not paths. A film may end up with several
 /// subtitles; a subtitle belongs to at most one film.
 #[must_use]
 pub fn pair<F: AsRef<str>, S: AsRef<str>>(films: &[F], subtitles: &[S]) -> PairingReport {
+    pair_with(films, subtitles, Matching::Relaxed)
+}
+
+/// The same, holding out for as much evidence as was asked for.
+#[must_use]
+pub fn pair_with<F: AsRef<str>, S: AsRef<str>>(
+    films: &[F],
+    subtitles: &[S],
+    matching: Matching,
+) -> PairingReport {
     let films: Vec<ParsedName> = films
         .iter()
         .map(|name| ParsedName::from_file_name(name.as_ref()))
@@ -76,7 +103,7 @@ pub fn pair<F: AsRef<str>, S: AsRef<str>>(films: &[F], subtitles: &[S]) -> Pairi
     let mut unmatched_subtitles = Vec::new();
 
     for (at, subtitle) in subtitles.iter().enumerate() {
-        match find_film(&films, subtitle) {
+        match find_film(&films, subtitle, matching) {
             Some((film, kind)) => matches.push(SubtitleMatch {
                 subtitle: at,
                 film,
@@ -99,7 +126,11 @@ pub fn pair<F: AsRef<str>, S: AsRef<str>>(films: &[F], subtitles: &[S]) -> Pairi
     }
 }
 
-fn find_film(films: &[ParsedName], subtitle: &ParsedName) -> Option<(usize, MatchKind)> {
+fn find_film(
+    films: &[ParsedName],
+    subtitle: &ParsedName,
+    matching: Matching,
+) -> Option<(usize, MatchKind)> {
     if subtitle.key.is_empty() {
         return None;
     }
@@ -112,6 +143,10 @@ fn find_film(films: &[ParsedName], subtitle: &ParsedName) -> Option<(usize, Matc
         // Two films reducing to the same name is a question only the person
         // whose files they are can answer.
         return exact.next().is_none().then_some((at, MatchKind::Exact));
+    }
+
+    if matching == Matching::Exact {
+        return None;
     }
 
     let mut best: Option<(usize, usize)> = None;
@@ -158,7 +193,7 @@ fn shared_prefix(film: &[String], subtitle: &[String]) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MatchKind, pair};
+    use super::{MatchKind, Matching, pair, pair_with};
 
     #[test]
     fn pairs_names_that_reduce_to_the_same_thing() {
@@ -180,6 +215,48 @@ mod tests {
 
         assert_eq!(report.matches.len(), 1);
         assert_eq!(report.matches[0].kind, MatchKind::Approximate);
+    }
+
+    #[test]
+    fn holding_out_for_an_exact_name_refuses_a_shorter_one() {
+        let films = ["Arrival.2016.1080p.mkv"];
+        let subtitles = ["Arrival Original.srt"];
+
+        let report = pair_with(&films, &subtitles, Matching::Exact);
+        assert!(report.matches.is_empty());
+        assert_eq!(report.unmatched_subtitles, [0]);
+        assert_eq!(report.films_without_subtitles, [0]);
+
+        // The same pair, taking whatever evidence there is.
+        assert_eq!(
+            pair_with(&films, &subtitles, Matching::Relaxed)
+                .matches
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn holding_out_for_an_exact_name_still_pairs_the_names_that_agree() {
+        let report = pair_with(
+            &["The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv"],
+            &["The Matrix (1999).srt"],
+            Matching::Exact,
+        );
+
+        assert_eq!(report.matches.len(), 1);
+        assert_eq!(report.matches[0].kind, MatchKind::Exact);
+    }
+
+    #[test]
+    fn taking_whatever_evidence_there_is_is_what_pairing_does_by_default() {
+        let films = ["Arrival.2016.1080p.mkv"];
+        let subtitles = ["Arrival Original.srt"];
+
+        assert_eq!(
+            pair(&films, &subtitles).matches,
+            pair_with(&films, &subtitles, Matching::default()).matches
+        );
     }
 
     #[test]

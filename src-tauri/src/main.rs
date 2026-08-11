@@ -10,6 +10,7 @@ mod dto;
 mod ipc;
 mod posters;
 mod recent;
+mod settings;
 mod state;
 mod stream;
 
@@ -42,8 +43,6 @@ fn main() {
             bindings.mount_events(app);
 
             let handle = app.handle().clone();
-            app.manage(chrome::dress(&handle));
-
             let path = library_path(&handle).map_err(|failure| failure.message)?;
             let state = AppState::open(Database::open(path)?);
 
@@ -53,7 +52,15 @@ fn main() {
                     error.message
                 );
             }
+
+            // Before the window, which cannot be built until the preference
+            // deciding how its webview decodes video has been read, and which
+            // asks for the library as soon as it has been.
+            let hardware = settings::hardware_decoding(state.scanner().database());
             app.manage(state);
+
+            chrome::open(&handle, hardware).map_err(|failure| failure.message)?;
+            app.manage(chrome::dress(&handle));
 
             // The webview reads films and posters itself, and may read nothing
             // until it is told what. Done after the state is managed, since what

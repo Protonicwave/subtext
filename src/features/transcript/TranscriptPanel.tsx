@@ -10,6 +10,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { CueView } from '@/shared/ipc/bindings';
 import { clockOf } from '@/shared/media/clock';
 import { NONE } from '@/shared/media/cues';
+import { useSetting } from '@/shared/settings/useSettings';
 import { CloseIcon } from '@/shared/ui/Icon';
 import { classes } from '@/shared/ui/classes';
 import { passageOf, selectedIn } from './passage';
@@ -59,6 +60,7 @@ const PAGING = new Set(['PageUp', 'PageDown', 'Home', 'End']);
 
 export function TranscriptPanel({ cues, active, onSeek, onClose }: TranscriptPanelProps) {
   const scroller = useRef<HTMLDivElement>(null);
+  const typeface = useSetting('transcriptTypeface');
 
   // The virtualiser hands back answers that change as the panel is scrolled, so
   // a remembered component holding it would draw the rows it had when it was
@@ -110,7 +112,15 @@ export function TranscriptPanel({ cues, active, onSeek, onClose }: TranscriptPan
   };
 
   return (
-    <aside className={styles.panel} aria-label="Transcript">
+    <aside
+      className={styles.panel}
+      aria-label="Transcript"
+      style={
+        {
+          '--transcript-font': typeface === 'sans' ? 'var(--font-sans)' : 'var(--font-reading)',
+        } as CSSProperties
+      }
+    >
       <header className={styles.top}>
         <h2 className={styles.heading}>Transcript</h2>
         <p className={styles.count}>

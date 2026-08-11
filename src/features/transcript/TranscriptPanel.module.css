@@ -148,7 +148,7 @@
 }
 
 .said {
-  font-family: var(--font-reading);
+  font-family: var(--transcript-font, var(--font-reading));
   font-size: var(--text-md);
   line-height: var(--leading-snug);
   color: var(--colour-text-dim);

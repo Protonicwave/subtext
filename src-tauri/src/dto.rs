@@ -419,6 +419,18 @@ impl SnippetPart {
     }
 }
 
+/// One preference, as it is stored.
+///
+/// Both halves are text, and what the text means belongs to the settings
+/// screen. Sending them across as they are keeps a control that is added there
+/// from being a change here as well, and it is why adding one is a change to
+/// one file rather than to a command, a type and a screen.
+#[derive(Clone, Debug, Serialize, Type)]
+pub(crate) struct PreferenceView {
+    pub(crate) key: String,
+    pub(crate) value: String,
+}
+
 /// A film with no frame captured from it yet.
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]

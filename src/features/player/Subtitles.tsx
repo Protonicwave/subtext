@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CueView } from '@/shared/ipc/bindings';
+import type { SubtitleAppearance } from '@/shared/settings/schema';
 import { classes } from '@/shared/ui/classes';
-import type { SubtitleAppearance } from './defaults';
 import styles from './Subtitles.module.css';
 
 /**

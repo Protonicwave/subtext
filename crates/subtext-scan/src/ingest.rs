@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use subtext_core::{Cue, MatchKind, ParseWarning, SubtitleLabel, pair, parse_srt};
+use subtext_core::{Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, pair_with, parse_srt};
 use subtext_index::{Database, NewFilm, NewTrack, Stored, TrackMatch, TrackPairing, WatchedFolder};
 
 use crate::error::{Error, Result};
@@ -79,6 +79,10 @@ pub struct TrackWarnings {
 
 /// Scans one watched folder and brings the library into line with it.
 ///
+/// The matching says how much evidence a pairing needs. Asking for more of it
+/// than a pairing already in the library was made on takes that pairing away
+/// again, since a rescan is the library agreeing with the folder afresh.
+///
 /// Only one of these may run at a time against a given database, since a bulk
 /// ingest stands the search index triggers down for the whole file. [`Scanner`]
 /// is what enforces that.
@@ -87,6 +91,7 @@ pub struct TrackWarnings {
 pub fn scan_folder(
     database: &Database,
     folder: &WatchedFolder,
+    matching: Matching,
     sink: &dyn ProgressSink,
 ) -> Result<ScanOutcome> {
     let mut progress = ScanProgress::new(folder.id);
@@ -101,7 +106,7 @@ pub fn scan_folder(
     sink.report(&progress);
 
     let names = Names::of(&found);
-    let report = pair(&names.films, &names.subtitles);
+    let report = pair_with(&names.films, &names.subtitles, matching);
 
     let known_films = database.films().fingerprints(folder.id)?;
     let films: Vec<NewFilm<'_>> = found

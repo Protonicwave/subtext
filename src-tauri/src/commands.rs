@@ -13,8 +13,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, Answer, CueView, Failure, FilmView, FolderView, Id, PosterWanted, ScanProgressed,
-    SearchView, TrackView,
+    AccentView, Answer, CueView, Failure, FilmView, FolderView, Id, PosterWanted, PreferenceView,
+    ScanProgressed, SearchView, TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters, recent};
@@ -476,6 +476,72 @@ pub(crate) async fn attach_subtitle(
     })
     .await
     .map_err(|_| Failure::saying("attaching the subtitle did not finish"))?
+}
+
+/// Every preference that has been set, by key.
+///
+/// The whole lot in one call rather than a call per control. There are a few
+/// dozen of them, they are read once when the window opens, and the settings
+/// screen is not the only thing that wants them: the player, the transcript and
+/// the window itself are all drawn from these before anybody has opened
+/// settings at all.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn read_preferences(state: State<'_, AppState>) -> Answer<Vec<PreferenceView>> {
+    let stored = state
+        .scanner()
+        .database()
+        .preferences()
+        .all()
+        .map_err(Failure::of)?;
+
+    Ok(stored
+        .into_iter()
+        .map(|(key, value)| PreferenceView { key, value })
+        .collect())
+}
+
+/// Records one preference.
+///
+/// One row replaced, which is why this is not batched or thrown away on a
+/// timer: a control that has been changed has been changed, and a window closed
+/// a moment later should still open the way it was left.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn write_preference(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Answer<()> {
+    state
+        .scanner()
+        .database()
+        .preferences()
+        .set(&key, &value)
+        .map_err(Failure::of)
+}
+
+/// Builds the search index again, and then reads the folders afresh.
+///
+/// For a library whose search has stopped agreeing with its dialogue, which a
+/// scan that was interrupted or a file copied between machines can leave
+/// behind. Nothing is reparsed and no pairing is lost: the index is built from
+/// the cues already stored.
+///
+/// Returns straight away and reports itself through the scan events, like the
+/// scans it ends with.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn rebuild_index(app: AppHandle) -> Answer<()> {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = handle.state::<AppState>();
+        state.scanning(&handle, |scanner, sink| {
+            scanner.rebuild_index()?;
+            scanner.scan_all(sink)
+        });
+    });
+    Ok(())
 }
 
 /// Reads every watched folder again.

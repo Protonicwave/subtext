@@ -142,6 +142,36 @@ export const commands = {
 	pair: string,
 } | null, durationMs: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("save_poster", { filmId, image, accent, durationMs })),
 	/**
+	 *  Every preference that has been set, by key.
+	 * 
+	 *  The whole lot in one call rather than a call per control. There are a few
+	 *  dozen of them, they are read once when the window opens, and the settings
+	 *  screen is not the only thing that wants them: the player, the transcript and
+	 *  the window itself are all drawn from these before anybody has opened
+	 *  settings at all.
+	 */
+	readPreferences: () => typedError<PreferenceView[], Failure>(__TAURI_INVOKE("read_preferences")),
+	/**
+	 *  Records one preference.
+	 * 
+	 *  One row replaced, which is why this is not batched or thrown away on a
+	 *  timer: a control that has been changed has been changed, and a window closed
+	 *  a moment later should still open the way it was left.
+	 */
+	writePreference: (key: string, value: string) => typedError<null, Failure>(__TAURI_INVOKE("write_preference", { key, value })),
+	/**
+	 *  Builds the search index again, and then reads the folders afresh.
+	 * 
+	 *  For a library whose search has stopped agreeing with its dialogue, which a
+	 *  scan that was interrupted or a file copied between machines can leave
+	 *  behind. Nothing is reparsed and no pairing is lost: the index is built from
+	 *  the cues already stored.
+	 * 
+	 *  Returns straight away and reports itself through the scan events, like the
+	 *  scans it ends with.
+	 */
+	rebuildIndex: () => typedError<null, Failure>(__TAURI_INVOKE("rebuild_index")),
+	/**
 	 *  Reads every watched folder again.
 	 * 
 	 *  Cheap when nothing has moved: an unchanged folder is one stat per file and
@@ -199,6 +229,13 @@ export type Chrome = {
 	 *  opaque, where the same surfaces would be washed out over nothing.
 	 */
 	backdrop: boolean,
+	/**
+	 *  Whether turning hardware decoding off would do anything here. Only the
+	 *  Windows webview takes a switch for it; everywhere else the decision
+	 *  belongs to the platform, and the settings screen leaves out a control it
+	 *  would not be telling the truth about.
+	 */
+	switchableDecoding: boolean,
 };
 
 /**  One of the nine places a cue can ask to be drawn. */
@@ -327,6 +364,19 @@ export type PositionView = {
 export type PosterWanted = {
 	id: Id,
 	path: string,
+};
+
+/**
+ *  One preference, as it is stored.
+ * 
+ *  Both halves are text, and what the text means belongs to the settings
+ *  screen. Sending them across as they are keeps a control that is added there
+ *  from being a change here as well, and it is why adding one is a change to
+ *  one file rather than to a command, a type and a screen.
+ */
+export type PreferenceView = {
+	key: string,
+	value: string,
 };
 
 /**

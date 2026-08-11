@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NONE } from '@/shared/media/cues';
+import { useSettings } from '@/shared/settings/useSettings';
 
 /**
  * Whether the transcript is chasing the film or being read by hand.
@@ -30,7 +31,11 @@ export interface Follow {
  * @param goTo Puts a line in view. Must be stable: it is what this reacts on.
  */
 export function useFollow(active: number, goTo: (index: number) => void): Follow {
-  const [following, setFollowing] = useState(true);
+  // Whether it starts by following is a preference; whether it carries on is
+  // not, and nothing below reads the preference again.
+  const [following, setFollowing] = useState(
+    () => useSettings.getState().settings.transcriptFollow,
+  );
 
   useEffect(() => {
     if (!following || active === NONE) return;

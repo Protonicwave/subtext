@@ -15,7 +15,7 @@ mod track;
 pub use crate::cue::{Cue, CuePosition};
 pub use crate::film::Film;
 pub use crate::pairing::{
-    MatchKind, PairingReport, ParsedName, SubtitleLabel, SubtitleMatch, pair,
+    MatchKind, Matching, PairingReport, ParsedName, SubtitleLabel, SubtitleMatch, pair, pair_with,
 };
 pub use crate::parse::{ParseOutcome, ParseWarning, ParseWarningKind, parse_srt, parse_srt_text};
 pub use crate::time::Timestamp;

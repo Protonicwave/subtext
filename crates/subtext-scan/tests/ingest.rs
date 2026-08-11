@@ -8,7 +8,7 @@ mod common;
 
 use std::sync::Mutex;
 
-use subtext_core::{ParseWarningKind, Timestamp};
+use subtext_core::{Matching, ParseWarningKind, Timestamp};
 use subtext_index::{SearchOptions, TrackMatch};
 use subtext_scan::{ScanProgress, ScanStage, Silent};
 
@@ -92,6 +92,45 @@ fn two_films_of_the_same_name_leave_the_choice_to_a_person() {
     assert_eq!(outcome.films_paired, 0);
     assert_eq!(names(&outcome.unpaired_subtitles), ["Solaris.srt"]);
     assert_eq!(outcome.cues_indexed, 0);
+}
+
+#[test]
+fn asking_for_exact_names_leaves_an_approximate_pairing_unmade() {
+    let library = Fixture::new();
+    library.film("Arrival.2016.1080p.mkv");
+    library.subtitle("Arrival Original.srt", &["A line"]);
+
+    // What the library does by default: the names agree as far as the shorter
+    // one goes, which is enough.
+    let taken = library.scan();
+    assert_eq!(taken.films_paired, 1);
+    assert_eq!(taken.cues_indexed, 1);
+
+    library.scanner.set_matching(Matching::Exact);
+    let held_out = library.scan();
+
+    assert_eq!(held_out.films_paired, 0);
+    assert_eq!(
+        names(&held_out.unpaired_subtitles),
+        ["Arrival Original.srt"]
+    );
+    // The pairing the folder no longer supports goes with it, rather than
+    // outliving the preference that allowed it.
+    assert_eq!(held_out.tracks_removed, 1);
+    assert!(library.dialogue("Arrival.2016.1080p.mkv").is_empty());
+}
+
+#[test]
+fn asking_for_exact_names_keeps_the_pairings_that_agree() {
+    let library = Fixture::new();
+    library.film("Heat.1995.1080p.BluRay.x264-GROUP.mkv");
+    library.subtitle("Heat (1995).srt", &["A line", "And another"]);
+    library.scanner.set_matching(Matching::Exact);
+
+    let outcome = library.scan();
+
+    assert_eq!(outcome.films_paired, 1);
+    assert_eq!(outcome.cues_indexed, 2);
 }
 
 #[test]

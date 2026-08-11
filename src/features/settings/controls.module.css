@@ -1,0 +1,178 @@
+/*
+ * One row per setting: what it is on the left, the control for it on the right.
+ * The rows are separated by a hairline rather than by boxes, which is what lets
+ * a section of eight of them read as a list instead of as eight cards.
+ */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border: 0;
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * A legend is taken out of the grid by the browser unless it is put back, and
+ * this one is the label of the row like every other.
+ */
+legend.text {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+legend.text + * {
+  clear: both;
+}
+
+.text {
+  display: block;
+  min-width: 0;
+}
+
+.text b {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.text small {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-faint);
+}
+
+/* The strip of alternatives, drawn as one control rather than as buttons. */
+.strip {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-md);
+}
+
+.option {
+  cursor: pointer;
+}
+
+.option span {
+  display: block;
+  padding: 5px var(--space-3);
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  color: var(--colour-text-dim);
+  white-space: nowrap;
+  transition:
+    background var(--duration-instant),
+    color var(--duration-instant);
+}
+
+.option:hover span {
+  color: var(--colour-text);
+}
+
+.option input:checked + span {
+  background: var(--colour-surface-hover);
+  color: var(--colour-text);
+  box-shadow: inset 0 0 0 1px var(--colour-line-strong);
+}
+
+/*
+ * The radio itself does the work and is never seen. Not display: none, which
+ * would take it out of the tab order and out of the accessibility tree with it.
+ */
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.option input:focus-visible + span {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+}
+
+/* The switch, drawn over the checkbox that is doing the work. */
+.switch {
+  appearance: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--colour-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--colour-line-strong);
+  cursor: pointer;
+  transition: background var(--duration-quick) var(--ease-out);
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--colour-text-dim);
+  transition:
+    transform var(--duration-quick) var(--ease-out),
+    background var(--duration-quick) var(--ease-out);
+}
+
+.switch:checked {
+  background: var(--colour-accent);
+  box-shadow: none;
+}
+
+.switch:checked::after {
+  transform: translateX(16px);
+  background: var(--colour-on-accent);
+}
+
+.slider {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+  width: 190px;
+}
+
+.reading {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-text-dim);
+}
+
+.slider input {
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--colour-surface-raised);
+  cursor: pointer;
+}
+
+.slider input::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--colour-accent);
+  /* The ring is what keeps the handle readable where it sits over the track. */
+  box-shadow: 0 0 0 3px var(--colour-bg);
+}
+
+.slider input:focus-visible {
+  outline-offset: 6px;
+}

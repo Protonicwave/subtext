@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Id } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
+import { useSettings } from '@/shared/settings/useSettings';
 import { useLibrary } from '@/features/library/useLibrary';
-import { PLAYBACK } from './defaults';
 import { isFinished } from './resume';
 
 /**
@@ -32,6 +32,15 @@ import { isFinished } from './resume';
  */
 const WORTH_KEEPING = 1_000;
 
+/**
+ * How often a position is written down while a film is playing.
+ *
+ * Not a preference. Nobody has an opinion about it, and the only thing it
+ * changes is how much of the last few seconds a window closed without warning
+ * costs.
+ */
+const SAVE_EVERY = 5_000;
+
 interface Watching {
   filmId: Id;
   positionMs: number;
@@ -59,7 +68,7 @@ export function useKeepPosition(
 
     const timer = setInterval(() => {
       void save(watching.current);
-    }, PLAYBACK.saveEveryMs);
+    }, SAVE_EVERY);
 
     return () => {
       clearInterval(timer);
@@ -92,7 +101,7 @@ async function save({ filmId, positionMs, durationMs }: Watching): Promise<void>
       filmId,
       Math.round(positionMs),
       durationMs === null ? null : Math.round(durationMs),
-      isFinished(positionMs, durationMs, PLAYBACK.watchedFraction),
+      isFinished(positionMs, durationMs, useSettings.getState().settings.watchedFraction),
     );
   } catch {
     // Nothing to tell somebody watching a film. The position is a convenience,

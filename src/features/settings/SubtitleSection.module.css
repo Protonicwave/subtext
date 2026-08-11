@@ -1,0 +1,31 @@
+/*
+ * The frame the preview is drawn in.
+ *
+ * A container of its own size, exactly as the player's frame is, because the
+ * subtitle sizes are in units of picture height and would otherwise be measured
+ * against nothing.
+ */
+.preview {
+  position: relative;
+  container-type: size;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--colour-line);
+  overflow: hidden;
+  background-color: #05060a;
+  background-size: cover;
+  background-position: center;
+}
+
+/*
+ * A wash over the frame, so that a bright poster does not make every colour
+ * look wrong. It stands in for the fact that a film is mostly darker than its
+ * own poster and moving besides.
+ */
+.preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgb(0 0 0 / 55%), rgb(0 0 0 / 20%) 55%);
+}

@@ -6,7 +6,9 @@ import type { FilmView, FolderView } from '@/shared/ipc/bindings';
 
 const { ipc, drops } = vi.hoisted(() => ({
   ipc: {
-    windowChrome: vi.fn(() => Promise.resolve({ backdrop: false })),
+    windowChrome: vi.fn(() => Promise.resolve({ backdrop: false, switchableDecoding: false })),
+    readPreferences: vi.fn(() => Promise.resolve([])),
+    writePreference: vi.fn(() => Promise.resolve(null)),
     listFolders: vi.fn((): Promise<FolderView[]> => Promise.resolve([])),
     listLibrary: vi.fn((): Promise<FilmView[]> => Promise.resolve([])),
     continueWatching: vi.fn((): Promise<FilmView[]> => Promise.resolve([])),
@@ -62,7 +64,7 @@ describe('the application', () => {
     document.documentElement.removeAttribute('data-backdrop');
     useNavigation.setState({ route: { screen: 'library' }, previous: null });
     useLibrary.setState({ folders: [], films: [], resumable: [], loaded: false, problem: null });
-    ipc.windowChrome.mockResolvedValue({ backdrop: false });
+    ipc.windowChrome.mockResolvedValue({ backdrop: false, switchableDecoding: false });
     ipc.listFolders.mockResolvedValue([]);
     ipc.listLibrary.mockResolvedValue([]);
     ipc.continueWatching.mockResolvedValue([]);
@@ -116,7 +118,7 @@ describe('the application', () => {
   });
 
   it('marks the window when the desktop shows through behind it', async () => {
-    ipc.windowChrome.mockResolvedValue({ backdrop: true });
+    ipc.windowChrome.mockResolvedValue({ backdrop: true, switchableDecoding: false });
 
     render(<App />);
 

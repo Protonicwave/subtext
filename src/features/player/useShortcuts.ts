@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { PLAYBACK } from './defaults';
+import { useSettings } from '@/shared/settings/useSettings';
 import type { Stepping } from './useStepping';
 import type { Transport } from './usePlayback';
 
@@ -45,8 +45,10 @@ export function useShortcuts(actions: Actions) {
       const { transport, stepping, toggleFullscreen, toggleTranscript, wake } = latest.current;
 
       // What the arrows mean, which is a matter of preference and of whether
-      // the film has any dialogue for them to land on.
-      const byLine = PLAYBACK.dialogueArrows && stepping.available;
+      // the film has any dialogue for them to land on. Read at the moment the
+      // key is pressed, like the actions above it.
+      const { dialogueArrows, skipMs } = useSettings.getState().settings;
+      const byLine = dialogueArrows && stepping.available;
 
       switch (event.key) {
         case ' ':
@@ -55,11 +57,11 @@ export function useShortcuts(actions: Actions) {
           break;
         case 'ArrowLeft':
           if (byLine) stepping.back();
-          else transport.skipBy(-PLAYBACK.skipMs);
+          else transport.skipBy(-skipMs);
           break;
         case 'ArrowRight':
           if (byLine) stepping.on();
-          else transport.skipBy(PLAYBACK.skipMs);
+          else transport.skipBy(skipMs);
           break;
         case 'm':
           transport.toggleMute();

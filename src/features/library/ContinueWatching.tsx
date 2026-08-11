@@ -2,7 +2,9 @@ import type { CSSProperties } from 'react';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { sourceOf } from '@/shared/media/source';
 import { classes } from '@/shared/ui/classes';
-import { fallbackFor, paletteOf } from './fallback';
+import { useSetting } from '@/shared/settings/useSettings';
+import { paletteFor } from './accent';
+import { fallbackFor } from './fallback';
 import { useFrames } from './frames';
 import { remainingOf } from './remaining';
 import styles from './ContinueWatching.module.css';
@@ -26,6 +28,7 @@ interface ContinueWatchingProps {
 
 export function ContinueWatching({ films, onOpen }: ContinueWatchingProps) {
   const frames = useFrames((held) => held.frames);
+  const accent = useSetting('accent');
   if (films.length === 0) return null;
 
   return (
@@ -36,7 +39,7 @@ export function ContinueWatching({ films, onOpen }: ContinueWatchingProps) {
 
       <ul className={styles.cards}>
         {films.map((film) => {
-          const palette = paletteOf(film);
+          const palette = paletteFor(film, accent);
           const still =
             frames[film.id]?.url ?? (film.posterPath === null ? null : sourceOf(film.posterPath));
 

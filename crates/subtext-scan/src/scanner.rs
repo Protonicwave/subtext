@@ -1,8 +1,10 @@
 //! The library, kept in line with what is on disk.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
+use subtext_core::Matching;
 use subtext_index::{Database, WatchedFolder};
 
 use crate::attach::{self, Attached};
@@ -21,6 +23,10 @@ use crate::progress::ProgressSink;
 pub struct Scanner {
     database: Database,
     gate: Mutex<()>,
+    /// Whether a subtitle needs a name that agrees exactly with its film. Held
+    /// here rather than passed to each scan, because it is a preference that
+    /// outlives any one of them and the folder watcher starts scans of its own.
+    exact_matching: AtomicBool,
 }
 
 impl Scanner {
@@ -29,12 +35,44 @@ impl Scanner {
         Self {
             database,
             gate: Mutex::new(()),
+            exact_matching: AtomicBool::new(false),
         }
     }
 
     #[must_use]
     pub fn database(&self) -> &Database {
         &self.database
+    }
+
+    /// Says how much evidence a pairing needs from here on.
+    ///
+    /// Takes effect on the next scan rather than on what is already stored: a
+    /// pairing that has been made stays made until something rereads the folder
+    /// it was made in.
+    pub fn set_matching(&self, matching: Matching) {
+        self.exact_matching
+            .store(matching == Matching::Exact, Ordering::Relaxed);
+    }
+
+    fn matching(&self) -> Matching {
+        if self.exact_matching.load(Ordering::Relaxed) {
+            Matching::Exact
+        } else {
+            Matching::Relaxed
+        }
+    }
+
+    /// Builds the search index again from the dialogue already stored.
+    ///
+    /// Nothing is reread and no pairing changes: this is for an index that has
+    /// fallen behind the cues it describes, which is what an interrupted scan
+    /// or a copied library file can leave behind. Behind the same gate as a
+    /// scan, since one writing cues while the index is being rebuilt would
+    /// leave the very state this repairs.
+    pub fn rebuild_index(&self) -> Result<()> {
+        let _guard = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+        self.database.rebuild_search_index()?;
+        Ok(())
     }
 
     /// Starts watching a folder, or returns the one already being watched.
@@ -66,7 +104,7 @@ impl Scanner {
         // The gate guards no data of its own, so a thread that panicked while
         // holding it has left nothing behind to be poisoned by.
         let _guard = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        ingest::scan_folder(&self.database, folder, sink)
+        ingest::scan_folder(&self.database, folder, self.matching(), sink)
     }
 
     /// The same for every watched folder, oldest first.
