@@ -35,6 +35,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       transport={transport}
       stepping={stepping}
       density={shapeOf([0.2, 1, 0])}
+      preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
       visible={visible}
       fullscreen={false}
       transcript={false}
@@ -111,6 +112,21 @@ describe('the control bar', () => {
     // Two copies of the one shape: the second is clipped to how much has been
     // played, so filling it in as the film runs costs nothing per frame.
     expect(document.querySelectorAll(`path[d="${shapeOf([0.2, 1, 0])}"]`)).toHaveLength(2);
+  });
+
+  it('shows the moment under the pointer, and what is said there', () => {
+    show();
+    const track = screen.getByRole('slider', { name: /position in the film/i }).parentElement;
+    if (track === null) throw new Error('the scrubber should sit in a track');
+
+    // jsdom lays nothing out, so the box is nothing wide and the pointer is at
+    // the start of it. Which moment it works out is arithmetic tested
+    // elsewhere; what this is about is that resting over the bar shows one.
+    fireEvent.pointerMove(track, { clientX: 0 });
+    expect(screen.getByText('I take scores.')).toBeInTheDocument();
+
+    fireEvent.pointerLeave(track);
+    expect(screen.queryByText('I take scores.')).not.toBeInTheDocument();
   });
 
   it('will not offer to seek a film whose length is unknown', () => {

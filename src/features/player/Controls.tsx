@@ -1,4 +1,10 @@
-import { type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import {
+  type ChangeEvent,
+  type CSSProperties,
+  type PointerEvent,
+  type ReactNode,
+  useState,
+} from 'react';
 import {
   ExitFullscreenIcon,
   FullscreenIcon,
@@ -16,6 +22,7 @@ import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
 import { BANDS } from './density';
 import { PLAYBACK } from './defaults';
+import { ScrubberPreview } from './ScrubberPreview';
 import type { Stepping } from './useStepping';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';
@@ -31,6 +38,14 @@ import styles from './Controls.module.css';
  * behind it.
  */
 
+/** What the bar needs to show the moment the pointer is resting over. */
+export interface Preview {
+  /** The film, through the protocol that serves it. */
+  source: string;
+  /** What is said around a moment, where anything is. */
+  spokenAt: (ms: number) => string | null;
+}
+
 interface ControlsProps {
   playback: Playback;
   transport: Transport;
@@ -38,6 +53,8 @@ interface ControlsProps {
   stepping: Stepping;
   /** The dialogue drawn along the scrubber, as a path. */
   density: string;
+  /** What the bar shows about the moment under the pointer. */
+  preview: Preview;
   visible: boolean;
   fullscreen: boolean;
   /** The transcript is beside the film. */
@@ -53,6 +70,7 @@ export function Controls({
   transport,
   stepping,
   density,
+  preview,
   visible,
   fullscreen,
   transcript,
@@ -65,6 +83,19 @@ export function Controls({
   const seconds = Math.round(PLAYBACK.skipMs / 1000);
   const onScrub = (event: ChangeEvent<HTMLInputElement>) => {
     transport.seekTo(Number(event.target.value));
+  };
+
+  // How far along the bar the pointer is, from zero to one, or nothing when it
+  // is somewhere else. Kept as a fraction rather than as a moment, because it
+  // is what places the preview as well as what names the moment it shows.
+  const [along, setAlong] = useState<number | null>(null);
+
+  const onHover = (event: PointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    // A bar of no width has the pointer at the start of it, which is the only
+    // moment such a bar could be pointing at.
+    const at = box.width > 0 ? (event.clientX - box.left) / box.width : 0;
+    setAlong(Math.max(0, Math.min(1, at)));
   };
 
   return (
@@ -83,7 +114,25 @@ export function Controls({
       <div
         className={styles.track}
         style={{ '--played': played(positionMs, durationMs) } as CSSProperties}
+        onPointerMove={onHover}
+        onPointerLeave={() => {
+          setAlong(null);
+        }}
       >
+        {/*
+         * Only while the pointer is over the bar. What draws it opens the film
+         * a second time, and holding a decoder on a four gigabyte file to
+         * answer a question nobody is asking is not worth the memory.
+         */}
+        {along !== null && durationMs !== null && (
+          <ScrubberPreview
+            source={preview.source}
+            atMs={along * durationMs}
+            along={along}
+            line={preview.spokenAt(along * durationMs)}
+          />
+        )}
+
         {/*
          * The film's dialogue, drawn behind the scrubber. Two copies of the
          * same shape: the second is clipped to how much has been played, which

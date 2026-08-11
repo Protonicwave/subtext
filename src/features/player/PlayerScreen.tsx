@@ -2,7 +2,7 @@ import { type CSSProperties, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
-import { timelineOf } from '@/shared/media/cues';
+import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
 import { useNavigation } from '@/app/routes';
 import { useFilmAccent } from '@/features/library/accent';
@@ -15,6 +15,7 @@ import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { PLAYBACK, SUBTITLES } from './defaults';
 import { shapeFor } from './density';
+import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
 import { useControls } from './useControls';
@@ -104,6 +105,14 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     playback.durationMs,
   );
 
+  const preview = useMemo(
+    () => ({
+      source: streamOf(film.path),
+      spokenAt: (ms: number) => timeline.cues[nearestFrom(timeline, ms, NEAR_ENOUGH)]?.text ?? null,
+    }),
+    [film.path, timeline],
+  );
+
   const palette = paletteOf(film);
   const poster = film.posterPath === null ? undefined : sourceOf(film.posterPath);
 
@@ -155,6 +164,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
             transport={transport}
             stepping={stepping}
             density={density}
+            preview={preview}
             visible={visible}
             fullscreen={fullscreen}
             transcript={open}

@@ -1,0 +1,61 @@
+/*
+ * The moment under the pointer, floating above the bar. Held inside the width
+ * of the control bar by the clamp rather than by measuring anything: the panel
+ * is a fixed width, so half of it is all the arithmetic this needs.
+ */
+.preview {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: clamp(var(--preview-half), calc(var(--along, 0) * 100%), calc(100% - var(--preview-half)));
+  translate: -50% 0;
+  width: var(--preview-width);
+  overflow: hidden;
+  border: 1px solid var(--colour-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-raised);
+  box-shadow: var(--shadow-raised);
+  pointer-events: none;
+
+  --preview-width: 208px;
+  --preview-half: calc(var(--preview-width) / 2);
+}
+
+/*
+ * The frame, at the shape a film is. Black behind it, so the moment before it
+ * has been decoded is a dark rectangle rather than an empty one.
+ */
+.frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+}
+
+.caption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.at {
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-text-faint);
+}
+
+/*
+ * What is said there, in the reading face, and clipped to three lines. A
+ * preview that grows to hold a long speech would cover the film it is about.
+ */
+.line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-family: var(--font-reading);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--colour-text);
+}
