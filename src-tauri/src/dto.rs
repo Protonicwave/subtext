@@ -110,7 +110,7 @@ pub(crate) struct FilmView {
     pub(crate) year: Option<u16>,
     pub(crate) duration_ms: Option<u32>,
     pub(crate) poster_path: Option<String>,
-    pub(crate) accent: Option<String>,
+    pub(crate) accent: Option<AccentView>,
     /// The file is not where it was. The film is kept anyway.
     pub(crate) missing: bool,
     pub(crate) tracks: Vec<TrackView>,
@@ -131,7 +131,7 @@ impl FilmView {
             year: film.year,
             duration_ms: film.duration.map(Timestamp::millis),
             poster_path: film.poster_path.map(|path| path.display().to_string()),
-            accent: film.accent,
+            accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
             tracks: tracks.into_iter().map(TrackView::of).collect(),
             position: position.map(PositionView::of),
@@ -183,6 +183,60 @@ impl MatchKindView {
             TrackMatch::ByHand => Self::ByHand,
         }
     }
+}
+
+/// The colour pair taken from a film's own frame.
+///
+/// Kept in one column as two hex triples separated by a space, because nothing
+/// ever queries one colour without the other and a second column would only be
+/// a second thing to keep in step.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AccentView {
+    /// The colour the film's glow and its accent are drawn in.
+    pub(crate) primary: String,
+    /// The second colour of the pair, which the ambient wash uses.
+    pub(crate) pair: String,
+}
+
+impl AccentView {
+    /// Reads back what [`Self::stored`] wrote, or nothing if the column holds
+    /// something else. Anything unreadable leaves the film on the default
+    /// accent, which is a duller library and not a broken one.
+    fn parse(stored: &str) -> Option<Self> {
+        let (primary, pair) = stored.split_once(' ')?;
+        (is_hex(primary) && is_hex(pair)).then(|| Self {
+            primary: primary.to_owned(),
+            pair: pair.to_owned(),
+        })
+    }
+
+    /// The pair as one column, refusing anything that is not a hex triple.
+    ///
+    /// These two strings are written into CSS custom properties, so this is the
+    /// point at which a value that came from the front end stops being trusted.
+    pub(crate) fn stored(&self) -> Result<String, Failure> {
+        if !is_hex(&self.primary) || !is_hex(&self.pair) {
+            return Err(Failure::saying("that is not a pair of colours"));
+        }
+        Ok(format!("{} {}", self.primary, self.pair))
+    }
+}
+
+/// Whether a string is a colour of the form `#rrggbb`.
+fn is_hex(colour: &str) -> bool {
+    let Some(digits) = colour.strip_prefix('#') else {
+        return false;
+    };
+    digits.len() == 6 && digits.bytes().all(|digit| digit.is_ascii_hexdigit())
+}
+
+/// A film with no frame captured from it yet.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PosterWanted {
+    pub(crate) id: Id,
+    pub(crate) path: String,
 }
 
 /// Where a film was left.
@@ -342,4 +396,56 @@ fn paths(paths: &[std::path::PathBuf]) -> Vec<String> {
         .iter()
         .map(|path| path.display().to_string())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    // A test that cannot get at the value it is about to check has nothing to
+    // say, so it stops rather than passing quietly.
+    #![allow(clippy::expect_used)]
+
+    use super::AccentView;
+
+    fn accent(primary: &str, pair: &str) -> AccentView {
+        AccentView {
+            primary: primary.to_owned(),
+            pair: pair.to_owned(),
+        }
+    }
+
+    #[test]
+    fn an_accent_survives_a_round_trip() {
+        let stored = accent("#e8a33d", "#2b6c7a")
+            .stored()
+            .expect("a pair of hex colours should be storable");
+        assert_eq!(stored, "#e8a33d #2b6c7a");
+
+        let read = AccentView::parse(&stored).expect("what was written should read back");
+        assert_eq!(read.primary, "#e8a33d");
+        assert_eq!(read.pair, "#2b6c7a");
+    }
+
+    #[test]
+    fn anything_that_is_not_a_colour_is_refused() {
+        // These end up in a CSS custom property, so the interesting case is not
+        // a typo but a value chosen to close the declaration and open another.
+        for rubbish in [
+            "red",
+            "#e8a33",
+            "#e8a33dd",
+            "e8a33d",
+            "#ggghhh",
+            "#e8a33d;--colour-bg:#fff",
+        ] {
+            assert!(accent(rubbish, "#2b6c7a").stored().is_err());
+            assert!(accent("#2b6c7a", rubbish).stored().is_err());
+        }
+    }
+
+    #[test]
+    fn a_column_holding_something_else_leaves_the_film_on_the_default() {
+        for stored in ["", "#e8a33d", "#e8a33d #2b6c7a #fff", "red green"] {
+            assert!(AccentView::parse(stored).is_none());
+        }
+    }
 }

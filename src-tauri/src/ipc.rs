@@ -35,6 +35,8 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::remove_folder,
             commands::list_folders,
             commands::list_library,
+            commands::posters_wanted,
+            commands::save_poster,
             commands::rescan,
             commands::scan_progress,
             commands::is_scanning,

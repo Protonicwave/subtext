@@ -6,13 +6,17 @@
 
 use std::path::{Path, PathBuf};
 
+use subtext_core::Timestamp;
+use subtext_index::Database;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
-use crate::dropped;
-use crate::dto::{Answer, Failure, FilmView, FolderView, Id, ScanProgressed, TrackView};
+use crate::dto::{
+    AccentView, Answer, Failure, FilmView, FolderView, Id, PosterWanted, ScanProgressed, TrackView,
+};
 use crate::state::AppState;
+use crate::{allowed, dropped, posters};
 
 /// What the window the front end is drawing into turned out to be.
 ///
@@ -84,6 +88,9 @@ pub(crate) async fn add_folder(app: AppHandle, path: String) -> Answer<FolderVie
         .map_err(Failure::of)?;
 
     state.watch(&folder.path)?;
+    // Before anything is read, so that the first film to appear can already be
+    // opened by the webview for its frame to be taken.
+    allowed::directory(&app, &folder.path)?;
     let view = FolderView::of(&folder, 0, state.is_watching());
 
     let handle = app.clone();
@@ -152,6 +159,117 @@ pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmV
             Ok(FilmView::of(film, tracks, position))
         })
         .collect()
+}
+
+/// The films with no frame captured from them yet.
+///
+/// A poster is wanted when the film has none, when the file it names is not
+/// there any more, and when the film's own file has changed since the frame was
+/// taken. The last of those needs nothing stored to compare against: the name a
+/// poster is filed under is derived from the film's path and modification time,
+/// so a film whose row names a different file is a film whose frame is stale.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn posters_wanted(app: AppHandle) -> Answer<Vec<PosterWanted>> {
+    let directory = posters::directory(&app)?;
+    let state = app.state::<AppState>();
+    let films = state
+        .scanner()
+        .database()
+        .films()
+        .list()
+        .map_err(Failure::of)?;
+
+    Ok(films
+        .into_iter()
+        // A file that is not there cannot be opened, and the library draws
+        // those as missing rather than waiting for a frame that never comes.
+        .filter(|film| !film.is_missing())
+        .filter(|film| {
+            let wanted = directory.join(posters::file_name(&film.path, film.modified_at));
+            film.poster_path.as_deref() != Some(wanted.as_path()) || !wanted.is_file()
+        })
+        .map(|film| PosterWanted {
+            id: Id::of(film.id),
+            path: film.path.display().to_string(),
+        })
+        .collect())
+}
+
+/// Records the frame captured from a film, and what was learnt taking it.
+///
+/// The encoding and the colours are the front end's work, because the frame is
+/// already decoded there and sending four megabytes of pixels across to have
+/// them squeezed here would cost more than it saved. What arrives is a WebP of
+/// a few tens of kilobytes.
+///
+/// The running time comes with it: opening the file is the only way to find out
+/// how long a film is, and the capture has just done that. Without it a partly
+/// watched film has a position and no fraction to draw it as.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn save_poster(
+    app: AppHandle,
+    film_id: Id,
+    image: Vec<u8>,
+    accent: Option<AccentView>,
+    duration_ms: Option<u32>,
+) -> Answer<FilmView> {
+    let accent = accent.map(|accent| accent.stored()).transpose()?;
+
+    // Writing tens of kilobytes and two rows is short work, but it is still a
+    // file and a database, and neither belongs on the thread answering commands.
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = posters::directory(&app)?;
+        let state = app.state::<AppState>();
+        let database = state.scanner().database();
+
+        let film = database
+            .films()
+            .by_id(film_id.get())
+            .map_err(Failure::of)?
+            .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+
+        let poster = directory.join(posters::file_name(&film.path, film.modified_at));
+        std::fs::write(&poster, &image).map_err(Failure::of)?;
+
+        // The frame taken from the file this film used to be is of no use to
+        // anybody, and leaving it would grow the cache by one file per change.
+        if let Some(stale) = film.poster_path.as_deref().filter(|old| *old != poster) {
+            let _ = std::fs::remove_file(stale);
+        }
+
+        database
+            .films()
+            .set_poster(film.id, &poster, accent.as_deref())
+            .map_err(Failure::of)?;
+
+        if let Some(duration) = duration_ms {
+            database
+                .films()
+                .set_duration(film.id, Timestamp::from_millis(duration))
+                .map_err(Failure::of)?;
+        }
+
+        // Read back rather than assembled here, so the tile that redraws shows
+        // what the library holds and not what this function hoped it would.
+        read_back(database, film.id)
+    })
+    .await
+    .map_err(|_| Failure::saying("the poster could not be written"))?
+}
+
+/// One film as the library screen sees it, straight from the database.
+fn read_back(database: &Database, id: i64) -> Answer<FilmView> {
+    let film = database
+        .films()
+        .by_id(id)
+        .map_err(Failure::of)?
+        .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+    let tracks = database.tracks().for_film(id).map_err(Failure::of)?;
+    let position = database.positions().get(id).map_err(Failure::of)?;
+
+    Ok(FilmView::of(film, tracks, position))
 }
 
 /// Gives a subtitle file to a film because somebody said so.
