@@ -29,6 +29,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "track correction",
         sql: include_str!("migrations/0002_track_correction.sql"),
     },
+    Migration {
+        version: 3,
+        name: "chosen track",
+        sql: include_str!("migrations/0003_track_choice.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -163,6 +168,18 @@ mod tests {
             .unwrap();
         assert_eq!(offset, 0);
         assert!((rate - 1.0).abs() < f64::EPSILON);
+
+        // The same for the film, which now records which of its tracks it is
+        // watched with and says nothing about a film brought forward.
+        let (chosen, off): (Option<i64>, bool) = connection
+            .query_row(
+                "SELECT chosen_track_id, subtitles_off FROM film WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(chosen, None);
+        assert!(!off);
     }
 
     #[test]
