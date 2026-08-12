@@ -29,3 +29,71 @@
   inset: 0;
   background: linear-gradient(to top, rgb(0 0 0 / 55%), rgb(0 0 0 / 20%) 55%);
 }
+
+/*
+ * What the two timing preferences do, drawn along the same six seconds.
+ *
+ * The top row is the file as it was written and the bottom is what the player
+ * would be handed. The difference between the two rows is the whole of what
+ * these settings are, and it is not visible in a still frame of a subtitle.
+ */
+.timing {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--timing-labels) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+
+  /* Shared with the playhead, which is positioned across the lanes and not in them. */
+  --timing-labels: 5.5rem;
+}
+
+.label {
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.lane {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--colour-surface);
+  box-shadow: inset 0 0 0 1px var(--colour-line);
+}
+
+.said,
+.up {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-full);
+  /* A cue of no length would otherwise be a bar of no width and no bar at all. */
+  min-width: 2px;
+}
+
+.said {
+  background: var(--colour-text-faint);
+}
+
+.up {
+  background: var(--colour-accent);
+}
+
+/*
+ * Where the preview has got to. Moved by writing the share along it onto the
+ * element, which is why the arithmetic for the left edge is here: it is the
+ * label column plus that share of what is left.
+ */
+.head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(
+    var(--timing-labels) + var(--space-3) + var(--at, 0) *
+      (100% - var(--timing-labels) - var(--space-3))
+  );
+  width: 1px;
+  background: var(--colour-text);
+  pointer-events: none;
+}

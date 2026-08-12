@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
@@ -137,6 +137,32 @@ describe('the settings screen', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Panel' }));
 
     expect(useSettings.getState().settings.subtitleBackground).toBe('panel');
+  });
+
+  it('shows what the timing preferences do to a line rather than describing it', async () => {
+    render(<SettingsScreen />);
+    const subtitles = await open('Subtitles');
+
+    // The two rows are the file as written against what the player would be
+    // handed, and the difference between them is what these two settings are.
+    expect(
+      within(subtitles).getByRole('img', {
+        name: 'A line appears 90 milliseconds before it is spoken, and is held for at least 0.85 seconds.',
+      }),
+    ).toBeInTheDocument();
+
+    act(() => {
+      useSettings.setState({
+        settings: { ...DEFAULTS, subtitleLeadInMs: 0, subtitleMinimumMs: 0 },
+        problem: null,
+      });
+    });
+
+    expect(
+      within(subtitles).getByRole('img', {
+        name: 'A line appears exactly when it is spoken, and is held for as long as the file asks.',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('offers the decoding switch only where turning it off would do something', async () => {
