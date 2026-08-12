@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
@@ -446,7 +446,12 @@ describe('playing a film', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /French/ }));
 
     expect(ipc.setFilmTrack).toHaveBeenCalledWith(7, 4);
-    expect(await screen.findByText('Je fais des casses.')).toBeInTheDocument();
+    // The transcript beside the film is the same timeline the subtitles are
+    // drawn from, so it following is the same fact said where it can be seen at
+    // a moment the film is not on a line.
+    const transcript = await screen.findByRole('complementary', { name: /transcript/i });
+    expect(await within(transcript).findByText('Je fais des casses.')).toBeInTheDocument();
+    expect(within(transcript).queryByText('I take scores.')).not.toBeInTheDocument();
     // The picture was never touched: a different track is a different array of
     // cues and nothing else.
     expect(video().paused).toBe(false);
