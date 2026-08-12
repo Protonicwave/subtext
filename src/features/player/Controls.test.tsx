@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
 import { shapeOf } from './density';
 import { DEFAULTS } from '@/shared/settings/schema';
 import type { Stepping } from './useStepping';
+import type { Sync } from './useSync';
 import type { Playback, Transport } from './usePlayback';
 
 const playing: Playback = {
@@ -28,6 +29,16 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
     toggleMute: vi.fn(),
   };
   const stepping: Stepping = { available, back: vi.fn(), on: vi.fn() };
+  const sync: Sync = {
+    available,
+    offsetMs: 0,
+    rate: 1,
+    pending: false,
+    nudge: vi.fn(),
+    setRate: vi.fn(),
+    reset: vi.fn(),
+  };
+  const onToggleSync = vi.fn();
 
   render(
     <Controls
@@ -36,16 +47,19 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       stepping={stepping}
       density={shapeOf([0.2, 1, 0])}
       preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
+      sync={sync}
+      syncing={false}
       visible={visible}
       fullscreen={false}
       transcript={false}
       onToggleFullscreen={vi.fn()}
+      onToggleSync={onToggleSync}
       onToggleTranscript={vi.fn()}
       onHold={vi.fn()}
     />,
   );
 
-  return { transport, stepping };
+  return { transport, stepping, sync, onToggleSync };
 }
 
 describe('the control bar', () => {
@@ -150,6 +164,16 @@ describe('the control bar', () => {
 
     expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+  });
+
+  it('offers the timing controls, and not for a film with no subtitle', async () => {
+    const { onToggleSync } = show();
+    await userEvent.click(screen.getByRole('button', { name: 'Subtitle timing' }));
+    expect(onToggleSync).toHaveBeenCalled();
+
+    cleanup();
+    show({}, true, false);
+    expect(screen.getByRole('button', { name: 'Subtitle timing' })).toBeDisabled();
   });
 
   it('takes the controls out of reach once they have gone', () => {

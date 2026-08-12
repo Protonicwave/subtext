@@ -15,6 +15,7 @@ import {
   PreviousLineIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  SyncIcon,
   TranscriptIcon,
   VolumeIcon,
 } from '@/shared/ui/Icon';
@@ -23,7 +24,9 @@ import { classes } from '@/shared/ui/classes';
 import { BANDS } from './density';
 import { useSetting } from '@/shared/settings/useSettings';
 import { ScrubberPreview } from './ScrubberPreview';
+import { SyncPanel } from './SyncPanel';
 import type { Stepping } from './useStepping';
+import type { Sync } from './useSync';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';
 
@@ -55,11 +58,16 @@ interface ControlsProps {
   density: string;
   /** What the bar shows about the moment under the pointer. */
   preview: Preview;
+  /** Putting the subtitles back in step with the film. */
+  sync: Sync;
+  /** The timing controls are showing. */
+  syncing: boolean;
   visible: boolean;
   fullscreen: boolean;
   /** The transcript is beside the film. */
   transcript: boolean;
   onToggleFullscreen: () => void;
+  onToggleSync: () => void;
   onToggleTranscript: () => void;
   /** The pointer is resting here, so the bar should not go away under it. */
   onHold: (holding: boolean) => void;
@@ -71,10 +79,13 @@ export function Controls({
   stepping,
   density,
   preview,
+  sync,
+  syncing,
   visible,
   fullscreen,
   transcript,
   onToggleFullscreen,
+  onToggleSync,
   onToggleTranscript,
   onHold,
 }: ControlsProps) {
@@ -112,6 +123,8 @@ export function Controls({
         onHold(false);
       }}
     >
+      {syncing && <SyncPanel sync={sync} onClose={onToggleSync} />}
+
       <div
         className={styles.track}
         style={{ '--played': played(positionMs, durationMs) } as CSSProperties}
@@ -232,6 +245,19 @@ export function Controls({
             aria-valuetext={`${String(Math.round((muted ? 0 : volume) * 100))} per cent`}
           />
         </div>
+
+        {/*
+         * Only where there is a subtitle to put in step. A film with none has
+         * nothing for this to move.
+         */}
+        <Control
+          label={syncing ? 'Hide the subtitle timing' : 'Subtitle timing'}
+          onClick={onToggleSync}
+          disabled={!sync.available}
+          className={syncing ? styles.on : undefined}
+        >
+          <SyncIcon size={17} />
+        </Control>
 
         <Control
           label={transcript ? 'Hide the transcript' : 'Show the transcript'}

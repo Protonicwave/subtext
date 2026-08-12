@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useSettings } from '@/shared/settings/useSettings';
 import type { Stepping } from './useStepping';
+import { STEP_MS, type Sync } from './useSync';
 import type { Transport } from './usePlayback';
 
 /**
@@ -20,7 +21,10 @@ import type { Transport } from './usePlayback';
 export interface Actions {
   transport: Transport;
   stepping: Stepping;
+  /** Moving the subtitles against the film, which is done by ear. */
+  sync: Sync;
   toggleFullscreen: () => void;
+  toggleSync: () => void;
   toggleTranscript: () => void;
   /** Something happened, so the controls should be on screen to show what. */
   wake: () => void;
@@ -42,7 +46,8 @@ export function useShortcuts(actions: Actions) {
       if (isTyping(event.target)) return;
       if (isCovered()) return;
 
-      const { transport, stepping, toggleFullscreen, toggleTranscript, wake } = latest.current;
+      const { transport, stepping, sync, toggleFullscreen, toggleSync, toggleTranscript, wake } =
+        latest.current;
 
       // What the arrows mean, which is a matter of preference and of whether
       // the film has any dialogue for them to land on. Read at the moment the
@@ -71,6 +76,24 @@ export function useShortcuts(actions: Actions) {
           break;
         case 't':
           toggleTranscript();
+          break;
+        /*
+         * The brackets, because they read as moving something one way or the
+         * other and neither is spoken for. A film with no subtitle has nothing
+         * to move, and the key then does nothing rather than reporting a value
+         * for a track that is not there.
+         */
+        case '[':
+          if (!sync.available) return;
+          sync.nudge(-STEP_MS);
+          break;
+        case ']':
+          if (!sync.available) return;
+          sync.nudge(STEP_MS);
+          break;
+        case 's':
+          if (!sync.available) return;
+          toggleSync();
           break;
         default:
           return;

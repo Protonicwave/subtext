@@ -196,6 +196,16 @@ export function TranscriptIcon(props: IconProps) {
   );
 }
 
+/** Two lines of a subtitle, and the arrow that moves them against the film. */
+export function SyncIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.7}>
+      <path d="M6 6.5h12M8.5 10.5h7" />
+      <path d="M4 16.5h16M7 13.5l-3 3 3 3M17 13.5l3 3-3 3" />
+    </Icon>
+  );
+}
+
 export function FullscreenIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -41,6 +41,7 @@ const film = {
       forced: false,
       hearingImpaired: false,
       matchKind: 'exact' as const,
+      correction: { offsetMs: 0, rate: 1 },
       cueCount: 1_204,
     },
   ],

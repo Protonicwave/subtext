@@ -1,0 +1,93 @@
+/*
+ * The timing controls, sitting on the control bar rather than over the picture.
+ * Somebody adjusting the timing is watching the film to hear whether it is
+ * right, so this has to stay out of the way of the thing it is about.
+ */
+.panel {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 300px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--colour-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.title {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--colour-text);
+}
+
+/* The number being felt for, which is the one thing on here worth reading. */
+.readout {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-accent);
+}
+
+.nudge {
+  flex: 1;
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--colour-line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--colour-text);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background var(--duration-instant) var(--ease-out);
+}
+
+.nudge:hover:not(:disabled) {
+  background: var(--colour-surface-hover);
+}
+
+.nudge:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Going back to the file as written is a way out, not one of the two answers. */
+.quiet {
+  color: var(--colour-text-dim);
+}
+
+.note {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-faint);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--colour-text-dim);
+}
+
+.select {
+  width: 172px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--colour-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+  color: var(--colour-text);
+  font-family: inherit;
+  font-size: var(--text-xs);
+}
