@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, FIELDS, settingsFrom, storedAs } from './schema';
+import { DEFAULTS, FIELDS, comfortOf, settingsFrom, storedAs } from './schema';
 
 describe('the settings a library file holds', () => {
   it('reads back what was written, whatever kind of setting it is', () => {
@@ -8,6 +8,8 @@ describe('the settings a library file holds', () => {
       ['subtitleSize', 5.5],
       ['dialogueArrows', false],
       ['grain', 0],
+      ['subtitleLeadInMs', 120],
+      ['subtitleMinimumMs', 0],
     ] as const) {
       const written = storedAs(name, value);
       expect(settingsFrom([written])[name]).toBe(value);
@@ -61,5 +63,14 @@ describe('the settings a library file holds', () => {
 
   it('reads an empty value as no value rather than as nothing at all', () => {
     expect(settingsFrom([{ key: FIELDS.glow.key, value: '' }]).glow).toBe(DEFAULTS.glow);
+  });
+
+  it('hands the timeline the two settings it is built from', () => {
+    // The mapping lives here rather than in the two places that build a
+    // timeline, so that neither of them can be given something the other is not.
+    expect(comfortOf(DEFAULTS)).toStrictEqual({
+      leadInMs: DEFAULTS.subtitleLeadInMs,
+      minimumMs: DEFAULTS.subtitleMinimumMs,
+    });
   });
 });
