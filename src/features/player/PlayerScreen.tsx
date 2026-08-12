@@ -26,6 +26,7 @@ import { type Transport, usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
 import { useStepping } from './useStepping';
 import { offsetLabel, useSync } from './useSync';
+import { useTrack } from './useTrack';
 import styles from './PlayerScreen.module.css';
 
 /**
@@ -94,8 +95,11 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   // A film opened from a search result starts at the line that was found; one
   // opened from the library starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
-  const dialogue = useCues(film);
-  const sync = useSync(film);
+  // Which subtitle is being read comes first: the dialogue and the timing
+  // controls are both about that track and not about the film.
+  const choice = useTrack(film);
+  const dialogue = useCues(choice.active);
+  const sync = useSync(choice.active);
   // Built once per film, with the reading comfort preferences folded in as it
   // is built. Nothing downstream of here knows they were applied, and nothing
   // in the frame loop does any of this work again.
@@ -121,10 +125,24 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const toggleSync = useCallback(() => {
     setSyncing((showing) => !showing);
   }, []);
+  const [choosing, setChoosing] = useState(false);
+  const toggleTracks = useCallback(() => {
+    setChoosing((showing) => !showing);
+  }, []);
 
   useJumpTo(at, transport);
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
-  useShortcuts({ transport, stepping, sync, toggleFullscreen, toggleSync, toggleTranscript, wake });
+  useShortcuts({
+    transport,
+    stepping,
+    sync,
+    choice,
+    toggleFullscreen,
+    toggleSync,
+    toggleTracks,
+    toggleTranscript,
+    wake,
+  });
 
   // Worked out once per film and remembered, which is what makes it free to
   // ask for on every redraw of the control bar.
@@ -209,11 +227,14 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             preview={preview}
             sync={sync}
             syncing={syncing}
+            choice={choice}
+            choosing={choosing}
             visible={visible}
             fullscreen={fullscreen}
             transcript={open}
             onToggleFullscreen={toggleFullscreen}
             onToggleSync={toggleSync}
+            onToggleTracks={toggleTracks}
             onToggleTranscript={toggleTranscript}
             onHold={hold}
           />

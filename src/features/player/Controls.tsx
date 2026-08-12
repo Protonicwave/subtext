@@ -15,6 +15,7 @@ import {
   PreviousLineIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  SubtitlesIcon,
   SyncIcon,
   TranscriptIcon,
   VolumeIcon,
@@ -25,8 +26,10 @@ import { BANDS } from './density';
 import { useSetting } from '@/shared/settings/useSettings';
 import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
+import { TrackMenu } from './TrackMenu';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
+import type { TrackChoice } from './useTrack';
 import type { Playback, Transport } from './usePlayback';
 import styles from './Controls.module.css';
 
@@ -62,6 +65,11 @@ interface ControlsProps {
   sync: Sync;
   /** The timing controls are showing. */
   syncing: boolean;
+  /** Which subtitle the film is read with. */
+  choice: TrackChoice;
+  /** The subtitle menu is showing. */
+  choosing: boolean;
+  onToggleTracks: () => void;
   visible: boolean;
   fullscreen: boolean;
   /** The transcript is beside the film. */
@@ -81,11 +89,14 @@ export function Controls({
   preview,
   sync,
   syncing,
+  choice,
+  choosing,
   visible,
   fullscreen,
   transcript,
   onToggleFullscreen,
   onToggleSync,
+  onToggleTracks,
   onToggleTranscript,
   onHold,
 }: ControlsProps) {
@@ -123,7 +134,14 @@ export function Controls({
         onHold(false);
       }}
     >
-      {syncing && <SyncPanel sync={sync} onClose={onToggleSync} />}
+      {/*
+       * One at a time, and both on the left of the bar under the buttons that
+       * open them. They are about the same thing from either end, and two
+       * panels beside each other would be a menu open over a control somebody
+       * is still using.
+       */}
+      {choosing && <TrackMenu choice={choice} onClose={onToggleTracks} />}
+      {syncing && !choosing && <SyncPanel sync={sync} onClose={onToggleSync} />}
 
       <div
         className={styles.track}
@@ -245,6 +263,19 @@ export function Controls({
             aria-valuetext={`${String(Math.round((muted ? 0 : volume) * 100))} per cent`}
           />
         </div>
+
+        {/*
+         * Only where the film has subtitles at all. One track is still worth
+         * the button, since turning it off is one of the answers.
+         */}
+        <Control
+          label={choosing ? 'Hide the subtitle menu' : 'Subtitles'}
+          onClick={onToggleTracks}
+          disabled={!choice.available}
+          className={choosing ? styles.on : undefined}
+        >
+          <SubtitlesIcon size={17} />
+        </Control>
 
         {/*
          * Only where there is a subtitle to put in step. A film with none has

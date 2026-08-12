@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
-import type { FilmView } from '@/shared/ipc/bindings';
+import type { FilmView, TrackView } from '@/shared/ipc/bindings';
 
 const { ipc } = vi.hoisted(() => ({
   ipc: { setTrackCorrection: vi.fn() },
@@ -15,7 +15,22 @@ vi.mock('@/shared/ipc/client', async () => {
 const { useLibrary } = await import('@/features/library/useLibrary');
 const { STEP_MS, offsetLabel, useSync } = await import('./useSync');
 
-function filmWith(offsetMs: number, rate = 1, tracks = 1): FilmView {
+/** The track being watched, as the player hands it over. */
+function trackWith(offsetMs: number, rate = 1): TrackView {
+  return {
+    id: 3,
+    path: '/films/Heat.1995.srt',
+    language: 'en',
+    forced: false,
+    hearingImpaired: false,
+    matchKind: 'exact',
+    cueCount: 1_200,
+    correction: { offsetMs, rate },
+  };
+}
+
+/** The film the write comes back as, which is what the library then holds. */
+function filmWith(offsetMs: number, rate = 1): FilmView {
   return {
     id: 7,
     folderId: 1,
@@ -26,16 +41,9 @@ function filmWith(offsetMs: number, rate = 1, tracks = 1): FilmView {
     posterPath: null,
     accent: null,
     missing: false,
-    tracks: Array.from({ length: tracks }, () => ({
-      id: 3,
-      path: '/films/Heat.1995.srt',
-      language: 'en',
-      forced: false,
-      hearingImpaired: false,
-      matchKind: 'exact' as const,
-      cueCount: 1_200,
-      correction: { offsetMs, rate },
-    })),
+    tracks: [trackWith(offsetMs, rate)],
+    chosenTrackId: null,
+    subtitlesOff: false,
     position: null,
   };
 }
@@ -52,7 +60,7 @@ afterEach(() => {
 
 describe('putting a subtitle back in step by ear', () => {
   it('shows the value being felt for before anything is written down', () => {
-    const { result } = renderHook(() => useSync(filmWith(0)));
+    const { result } = renderHook(() => useSync(trackWith(0)));
 
     act(() => {
       result.current.nudge(STEP_MS);
@@ -64,7 +72,7 @@ describe('putting a subtitle back in step by ear', () => {
   });
 
   it('counts a run of presses as one adjustment and writes it once', async () => {
-    const { result } = renderHook(() => useSync(filmWith(0)));
+    const { result } = renderHook(() => useSync(trackWith(0)));
 
     for (let press = 0; press < 4; press += 1) {
       act(() => {
@@ -91,7 +99,7 @@ describe('putting a subtitle back in step by ear', () => {
   });
 
   it('carries on from the value already stored', () => {
-    const { result } = renderHook(() => useSync(filmWith(-2_000)));
+    const { result } = renderHook(() => useSync(trackWith(-2_000)));
     expect(result.current.offsetMs).toBe(-2_000);
 
     act(() => {
@@ -105,7 +113,7 @@ describe('putting a subtitle back in step by ear', () => {
     const corrected = filmWith(400);
     ipc.setTrackCorrection.mockResolvedValue(corrected);
 
-    const { result } = renderHook(() => useSync(filmWith(0)));
+    const { result } = renderHook(() => useSync(trackWith(0)));
     act(() => {
       result.current.nudge(400);
     });
@@ -119,7 +127,7 @@ describe('putting a subtitle back in step by ear', () => {
   });
 
   it('writes a rate straight away, since it is chosen rather than felt for', async () => {
-    const { result } = renderHook(() => useSync(filmWith(250)));
+    const { result } = renderHook(() => useSync(trackWith(250)));
 
     await act(async () => {
       result.current.setRate(1.042_709_376);
@@ -133,7 +141,7 @@ describe('putting a subtitle back in step by ear', () => {
   });
 
   it('goes back to the file exactly as it was written', async () => {
-    const { result } = renderHook(() => useSync(filmWith(-1_500, 1.05)));
+    const { result } = renderHook(() => useSync(trackWith(-1_500, 1.05)));
 
     await act(async () => {
       result.current.reset();
@@ -146,7 +154,7 @@ describe('putting a subtitle back in step by ear', () => {
   it('keeps the value on screen when it could not be written down', async () => {
     ipc.setTrackCorrection.mockRejectedValue(new Error('the database is locked'));
 
-    const { result } = renderHook(() => useSync(filmWith(0)));
+    const { result } = renderHook(() => useSync(trackWith(0)));
     act(() => {
       result.current.nudge(STEP_MS);
     });
@@ -160,7 +168,7 @@ describe('putting a subtitle back in step by ear', () => {
   });
 
   it('offers nothing for a film with no subtitle to move', () => {
-    const { result } = renderHook(() => useSync(filmWith(0, 1, 0)));
+    const { result } = renderHook(() => useSync(null));
 
     expect(result.current.available).toBe(false);
     act(() => {

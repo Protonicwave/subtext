@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { FilmView } from '@/shared/ipc/bindings';
+import type { TrackView } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { useLibrary } from '@/features/library/useLibrary';
 
 /**
  * Putting a subtitle back in step with its film, by ear.
+ *
+ * The track is the one the film is being watched with, since a correction
+ * belongs to a track rather than to a film: two subtitles for the same film can
+ * be out by different amounts, and switching between them switches the value
+ * this is adjusting.
  *
  * Nudging is provisional. The value on screen is applied through the timeline
  * the player already builds, which costs one pass over the cues and nothing per
@@ -63,8 +68,7 @@ export interface Sync {
   reset: () => void;
 }
 
-export function useSync(film: FilmView): Sync {
-  const track = film.tracks[0];
+export function useSync(track: TrackView | null): Sync {
   const trackId = track?.id ?? null;
   const kept = track?.correction.offsetMs ?? 0;
   const rate = track?.correction.rate ?? 1;

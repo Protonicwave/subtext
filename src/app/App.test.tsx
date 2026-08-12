@@ -55,6 +55,8 @@ const film = {
   accent: null,
   missing: false,
   tracks: [],
+  chosenTrackId: null,
+  subtitlesOff: false,
   position: null,
 } satisfies FilmView;
 

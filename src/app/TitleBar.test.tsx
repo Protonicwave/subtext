@@ -41,6 +41,8 @@ const heat = {
   accent: null,
   missing: false,
   tracks: [],
+  chosenTrackId: null,
+  subtitlesOff: false,
   position: null,
 } satisfies FilmView;
 

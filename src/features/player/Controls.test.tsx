@@ -6,6 +6,7 @@ import { shapeOf } from './density';
 import { DEFAULTS } from '@/shared/settings/schema';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
+import type { TrackChoice } from './useTrack';
 import type { Playback, Transport } from './usePlayback';
 
 const playing: Playback = {
@@ -38,7 +39,15 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
     setRate: vi.fn(),
     reset: vi.fn(),
   };
+  const choice: TrackChoice = {
+    tracks: [],
+    active: null,
+    off: false,
+    available,
+    choose: vi.fn(),
+  };
   const onToggleSync = vi.fn();
+  const onToggleTracks = vi.fn();
 
   render(
     <Controls
@@ -49,17 +58,20 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
       sync={sync}
       syncing={false}
+      choice={choice}
+      choosing={false}
       visible={visible}
       fullscreen={false}
       transcript={false}
       onToggleFullscreen={vi.fn()}
       onToggleSync={onToggleSync}
+      onToggleTracks={onToggleTracks}
       onToggleTranscript={vi.fn()}
       onHold={vi.fn()}
     />,
   );
 
-  return { transport, stepping, sync, onToggleSync };
+  return { transport, stepping, sync, choice, onToggleSync, onToggleTracks };
 }
 
 describe('the control bar', () => {
@@ -174,6 +186,16 @@ describe('the control bar', () => {
     cleanup();
     show({}, true, false);
     expect(screen.getByRole('button', { name: 'Subtitle timing' })).toBeDisabled();
+  });
+
+  it('offers the subtitle menu, and not for a film with no subtitle', async () => {
+    const { onToggleTracks } = show();
+    await userEvent.click(screen.getByRole('button', { name: 'Subtitles' }));
+    expect(onToggleTracks).toHaveBeenCalled();
+
+    cleanup();
+    show({}, true, false);
+    expect(screen.getByRole('button', { name: 'Subtitles' })).toBeDisabled();
   });
 
   it('takes the controls out of reach once they have gone', () => {

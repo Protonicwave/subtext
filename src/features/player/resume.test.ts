@@ -14,6 +14,8 @@ function film(position: PositionView | null): FilmView {
     accent: null,
     missing: false,
     tracks: [],
+    chosenTrackId: null,
+    subtitlesOff: false,
     position,
   };
 }

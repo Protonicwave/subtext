@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
-import type { CueView, FilmView } from '@/shared/ipc/bindings';
+import type { CueView, FilmView, TrackView } from '@/shared/ipc/bindings';
 import { opens, positionOf, pretendMediaWorks, reaches, refuses } from '@/test/media';
 
 const { ipc } = vi.hoisted(() => ({
@@ -12,6 +12,9 @@ const { ipc } = vi.hoisted(() => ({
     // leaves what was nudged on screen, which keeps this file about the picture
     // rather than about the database.
     setTrackCorrection: vi.fn(() => Promise.reject(new Error('not under test'))),
+    // Refused unless a test says otherwise, so that choosing a track is only
+    // answered where the answer is what the test is about.
+    setFilmTrack: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
     savePosition: vi.fn(() => Promise.resolve(null)),
     listFolders: vi.fn(() => Promise.resolve([])),
     listLibrary: vi.fn(() => Promise.resolve([])),
@@ -53,6 +56,17 @@ const RUNS = 10_260_000;
  */
 const LEAD = DEFAULTS.subtitleLeadInMs;
 
+const english = {
+  id: 3,
+  path: '/films/Heat.1995.srt',
+  language: 'en',
+  forced: false,
+  hearingImpaired: false,
+  matchKind: 'exact' as const,
+  correction: { offsetMs: 0, rate: 1 },
+  cueCount: 2,
+} satisfies TrackView;
+
 const film = {
   id: 7,
   folderId: 1,
@@ -63,18 +77,9 @@ const film = {
   posterPath: null,
   accent: null,
   missing: false,
-  tracks: [
-    {
-      id: 3,
-      path: '/films/Heat.1995.srt',
-      language: 'en',
-      forced: false,
-      hearingImpaired: false,
-      matchKind: 'exact' as const,
-      correction: { offsetMs: 0, rate: 1 },
-      cueCount: 2,
-    },
-  ],
+  tracks: [english],
+  chosenTrackId: null,
+  subtitlesOff: false,
   position: null,
 } satisfies FilmView;
 
@@ -395,6 +400,57 @@ describe('playing a film', () => {
 
     expect(await screen.findByText('I take scores.')).toBeInTheDocument();
     expect(screen.getByText(/Subtitles \+1\.00s/)).toBeInTheDocument();
+  });
+
+  /*
+   * A forced track is a handful of lines over the signs. Opening on one is the
+   * mistake taking whichever sorted first used to make, and it looks from the
+   * outside like a film that has almost no subtitles.
+   */
+  it('opens on the full subtitle rather than on the forced one', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
+    ]);
+
+    const { video } = open({
+      tracks: [
+        { ...english, id: 3, path: '/films/Heat.forced.srt', forced: true },
+        { ...english, id: 4 },
+      ],
+    });
+    opens(video(), RUNS);
+
+    await screen.findByText('I take scores.');
+    expect(ipc.trackCues).toHaveBeenCalledWith(4);
+  });
+
+  it('swaps the dialogue for another track without stopping the film', async () => {
+    const tracks = [
+      { ...english, id: 3 },
+      { ...english, id: 4, language: 'fr', path: '/films/Heat.fr.srt' },
+    ];
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
+    ]);
+    ipc.setFilmTrack.mockResolvedValueOnce({ ...film, tracks, chosenTrackId: 4 });
+
+    const { video } = open({ tracks });
+    opens(video(), RUNS);
+    await screen.findByText('I take scores.');
+
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 4_000, text: 'Je fais des casses.', position: null },
+    ]);
+
+    await userEvent.keyboard('c');
+    await userEvent.click(await screen.findByRole('radio', { name: /French/ }));
+
+    expect(ipc.setFilmTrack).toHaveBeenCalledWith(7, 4);
+    expect(await screen.findByText('Je fais des casses.')).toBeInTheDocument();
+    // The picture was never touched: a different track is a different array of
+    // cues and nothing else.
+    expect(video().paused).toBe(false);
+    expect(positionOf(video())).toBe(0);
   });
 
   it('leaves the nudge keys alone for a film with no subtitle to move', async () => {
