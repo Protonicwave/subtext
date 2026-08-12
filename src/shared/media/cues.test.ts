@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { CueView } from '@/shared/ipc/bindings';
-import { NONE, activeAt, nearestFrom, nextFrom, previousFrom, timelineOf } from './cues';
+import {
+  AS_WRITTEN,
+  type Comfort,
+  NONE,
+  activeAt,
+  nearestFrom,
+  nextFrom,
+  previousFrom,
+  timelineOf,
+} from './cues';
 
 function cue(startMs: number, endMs: number, text = 'line'): CueView {
   return { index: 1, startMs, endMs, text, position: null };
@@ -176,5 +185,116 @@ describe('the awkward cues a real file holds', () => {
     expect(activeAt(many, 3_500_000)).toBe(2_500);
     expect(activeAt(many, 3_500_000 + 1_300)).toBe(NONE);
     expect(activeAt(many, 4_999 * 1_400 + 100)).toBe(4_999);
+  });
+});
+
+describe('giving a line long enough to be read', () => {
+  /** Enough of each to be obvious in the numbers below. */
+  const comfort: Comfort = { leadInMs: 100, minimumMs: 1_000 };
+
+  /** What the lookup would be given, as pairs, so the numbers read plainly. */
+  function drawn(cues: readonly CueView[], using: Comfort = comfort): [number, number][] {
+    return timelineOf(cues, using).cues.map((shown) => [shown.startMs, shown.endMs]);
+  }
+
+  it('puts a line up before it is spoken and holds the end where it was', () => {
+    expect(drawn([cue(5_000, 8_000)])).toStrictEqual([[4_900, 8_000]]);
+  });
+
+  it('holds a line too short to read for the minimum', () => {
+    expect(drawn([cue(5_000, 5_300)])).toStrictEqual([[4_900, 5_900]]);
+  });
+
+  it('leaves a line already long enough alone', () => {
+    expect(drawn([cue(5_000, 20_000)])).toStrictEqual([[4_900, 20_000]]);
+  });
+
+  it('honours the file exactly when asked for nothing', () => {
+    const cues = [cue(5_000, 5_100), cue(9_000, 9_200)];
+
+    // The same array, not a copy of it: a film nobody has changed the settings
+    // for pays nothing at all for this.
+    expect(timelineOf(cues, AS_WRITTEN).cues).toBe(cues);
+    expect(timelineOf(cues).cues).toBe(cues);
+  });
+
+  it('never puts a line up before the film starts', () => {
+    expect(drawn([cue(0, 2_000)])).toStrictEqual([[0, 2_000]]);
+    expect(drawn([cue(40, 2_000)])).toStrictEqual([[0, 2_000]]);
+  });
+
+  it('takes what lead-in there is where the gap is smaller than it wants', () => {
+    // Sixty milliseconds between the two, and a hundred asked for.
+    expect(drawn([cue(1_000, 2_000), cue(2_060, 4_000)])).toStrictEqual([
+      [900, 2_000],
+      [2_000, 4_000],
+    ]);
+  });
+
+  it('leaves back to back lines back to back', () => {
+    // No gap at all, so neither the lead-in nor the minimum has anywhere to go.
+    expect(drawn([cue(1_000, 2_000), cue(2_000, 2_400), cue(2_400, 4_000)])).toStrictEqual([
+      [900, 2_000],
+      [2_000, 2_400],
+      [2_400, 4_000],
+    ]);
+  });
+
+  it('extends a short line as far as the next one and no further', () => {
+    // Half a second of room where a full second was wanted.
+    expect(drawn([cue(1_000, 1_200), cue(1_700, 3_000)])).toStrictEqual([
+      [900, 1_600],
+      [1_600, 3_000],
+    ]);
+  });
+
+  it('never puts two lines on screen that were not there already', () => {
+    const cues = [cue(1_000, 1_100), cue(1_500, 1_600), cue(1_650, 1_700), cue(3_000, 3_100)];
+    const shown = timelineOf(cues, comfort).cues;
+
+    for (let at = 1; at < shown.length; at += 1) {
+      expect(shown[at - 1]?.endMs).toBeLessThanOrEqual(shown[at]?.startMs ?? 0);
+    }
+  });
+
+  it('leaves the overlaps a file wrote for itself', () => {
+    // A sign held under two lines of dialogue. The long cue keeps its end, and
+    // the first line, which begins while the sign is up, is not led in over it.
+    //
+    // The second line is, because the line before it finished long ago. It was
+    // already sharing the screen with the sign, so the lead-in is not what put
+    // it there and denying it would cost every line under a sign its lead-in.
+    expect(drawn([cue(0, 30_000, 'sign'), cue(5_000, 5_200), cue(20_000, 21_000)])).toStrictEqual([
+      [0, 30_000],
+      [5_000, 6_000],
+      [19_900, 21_000],
+    ]);
+  });
+
+  it('measures the longest cue after the adjustment and not before it', () => {
+    // Two hundred milliseconds as written, a second once it is held.
+    expect(timelineOf([cue(1_000, 1_200)], comfort).longest).toBe(1_000);
+  });
+
+  it('keeps a held line on screen for as long as it is held', () => {
+    const held = timelineOf([cue(1_000, 1_200), cue(9_000, 10_000)], comfort);
+
+    expect(activeAt(held, 950)).toBe(0);
+    expect(activeAt(held, 1_500)).toBe(0);
+    expect(activeAt(held, 1_899)).toBe(0);
+    expect(activeAt(held, 1_900)).toBe(NONE);
+  });
+
+  it('builds the timeline of a full length film in well under a frame', () => {
+    // Two hours of dialogue, adjusted once when the film opens. The target is
+    // two milliseconds, and the margin here is for a machine under load.
+    const cues = Array.from({ length: 5_000 }, (_, at) => cue(at * 1_400, at * 1_400 + 1_200));
+
+    const at = performance.now();
+    const built = timelineOf(cues, comfort);
+    const took = performance.now() - at;
+
+    expect(built.cues).toHaveLength(5_000);
+    expect(took).toBeLessThan(2);
   });
 });

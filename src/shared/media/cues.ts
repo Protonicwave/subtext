@@ -36,17 +36,102 @@ export interface Timeline {
    * what bounds the walk back through the overlap: once a cue started longer
    * ago than the longest cue lasts, neither it nor anything before it can be on
    * screen, and the search stops.
+   *
+   * Measured after the reading comfort adjustment rather than before it, since
+   * both preferences make cues longer. A bound taken from the file as written
+   * would end the walk back early and drop a line that is still up.
    */
   readonly longest: number;
 }
 
-export function timelineOf(cues: readonly CueView[]): Timeline {
+/**
+ * How long a line is given to be read, over and above what the file says.
+ *
+ * Broadcast practice puts a line up slightly before it is spoken and holds it
+ * for a minimum however short it is, because reading is slower than hearing. A
+ * cue that begins on the first syllable is right and still reads as late. Most
+ * amateur files snap to the syllable, so this is applied to all of them.
+ *
+ * It says nothing about the cues themselves, which is why it is a preference
+ * applied here rather than a correction stored beside them.
+ */
+export interface Comfort {
+  /**
+   * How far before its written start a line appears.
+   *
+   * The start only. Holding a line for longer is the convention; moving it
+   * wholesale would put the end of it before the end of the sentence.
+   */
+  readonly leadInMs: number;
+  /** The shortest time any line stays on screen, reached by extending the end. */
+  readonly minimumMs: number;
+}
+
+/** The file honoured exactly, which is what a lookup gets when nobody says otherwise. */
+export const AS_WRITTEN: Comfort = { leadInMs: 0, minimumMs: 0 };
+
+export function timelineOf(cues: readonly CueView[], comfort: Comfort = AS_WRITTEN): Timeline {
+  const read = readable(cues, comfort);
+
   let longest = 0;
-  for (const cue of cues) {
+  for (const cue of read) {
     const length = cue.endMs - cue.startMs;
     if (length > longest) longest = length;
   }
-  return { cues, longest };
+  return { cues: read, longest };
+}
+
+/**
+ * The cues as they are to be drawn, in one pass over them.
+ *
+ * Neither preference may put two lines on screen that were not there already:
+ * a line is led in no further than the end of the line before it, and extended
+ * no further than the start of the line after it. Where a file overlaps its own
+ * cues those overlaps are left as they are, since the file meant them and this
+ * is not the place to argue.
+ */
+function readable(cues: readonly CueView[], { leadInMs, minimumMs }: Comfort): readonly CueView[] {
+  // Nothing asked for, so nothing copied. Worth the line: it is the whole cost
+  // of the feature for anybody who has turned both of them off.
+  if (leadInMs <= 0 && minimumMs <= 0) return cues;
+
+  const read: CueView[] = [];
+  // The end of the line before this one, as written. What the lead-in of this
+  // one is not allowed past.
+  let after = 0;
+
+  for (let at = 0; at < cues.length; at += 1) {
+    const cue = cues[at];
+    if (cue === undefined) continue;
+
+    const startMs = shownFrom(cue.startMs, after, leadInMs);
+    // Where the next line will appear, worked out the same way it will be when
+    // its own turn comes. This is what the extension stops at.
+    const next = cues[at + 1];
+    const until =
+      next === undefined ? Number.POSITIVE_INFINITY : shownFrom(next.startMs, cue.endMs, leadInMs);
+
+    read.push({
+      ...cue,
+      startMs,
+      // Never shortened: a cue already running past the next one is a file that
+      // overlaps, and taking time off it would be a change nobody asked for.
+      endMs: Math.max(cue.endMs, Math.min(startMs + minimumMs, until)),
+    });
+
+    after = cue.endMs;
+  }
+
+  return read;
+}
+
+/** When a line appears, given when the one before it finished. */
+function shownFrom(startMs: number, afterMs: number, leadInMs: number): number {
+  // Not before the film begins, and not back over the line before. Where that
+  // line already runs past this one the floor is this line's own start, which
+  // leaves it where the file put it.
+  const floor = Math.max(0, Math.min(afterMs, startMs));
+  return Math.max(startMs - leadInMs, floor);
 }
 
 /**
