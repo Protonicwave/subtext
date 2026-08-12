@@ -18,11 +18,18 @@ struct Migration {
 }
 
 /// Every step, in order. Append only.
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial schema",
-    sql: include_str!("migrations/0001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial schema",
+        sql: include_str!("migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "track correction",
+        sql: include_str!("migrations/0002_track_correction.sql"),
+    },
+];
 
 /// The schema version this build understands.
 pub(crate) fn supported_version() -> u32 {

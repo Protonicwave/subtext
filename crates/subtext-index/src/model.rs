@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use subtext_core::{MatchKind, SubtitleLabel, Timestamp};
+use subtext_core::{Correction, MatchKind, SubtitleLabel, Timestamp};
 
 /// A folder the library watches.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,6 +175,9 @@ pub struct TrackRecord {
     pub forced: bool,
     pub hearing_impaired: bool,
     pub match_kind: TrackMatch,
+    /// How the timings inside the file line up with the film, which is a
+    /// separate question from whether the file belongs to it at all.
+    pub correction: Correction,
     pub encoding: String,
     pub cue_count: usize,
     pub size_bytes: u64,

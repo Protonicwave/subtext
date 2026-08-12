@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use subtext_core::{Cue, CuePosition, Timestamp};
+use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 
 use crate::database::Database;
 use crate::error::Result;
@@ -11,7 +11,8 @@ use crate::model::{NewTrack, Stored, TrackMatch, TrackPairing, TrackRecord};
 use crate::repository::{count_to_sql, from_sql_count, from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, film_id, path, language, forced, hearing_impaired, \
-                       match_kind, encoding, cue_count, size_bytes, modified_at";
+                       match_kind, encoding, cue_count, size_bytes, modified_at, \
+                       offset_ms, rate";
 
 #[derive(Debug)]
 pub struct Tracks<'a> {
@@ -83,8 +84,10 @@ impl<'a> Tracks<'a> {
     pub fn repoint(&self, id: i64, film_id: i64, match_kind: TrackMatch) -> Result<bool> {
         self.database.with(|connection| {
             let moved = connection.execute(
-                "UPDATE subtitle_track SET film_id = ?2, match_kind = ?3
-                 WHERE id = ?1 AND match_kind <> 'by-hand'",
+                &format!(
+                    "UPDATE subtitle_track SET film_id = ?2, match_kind = ?3, {FORGET}
+                 WHERE id = ?1 AND match_kind <> 'by-hand'"
+                ),
                 params![id, film_id, match_kind.as_str()],
             )?;
             Ok(moved > 0)
@@ -93,18 +96,26 @@ impl<'a> Tracks<'a> {
 
     /// The cues of a track in playback order, as the player and the transcript
     /// want them.
+    ///
+    /// Corrected on the way out. This is the point at which an authored timing
+    /// becomes a playback timing, so nothing above here ever sees the other
+    /// kind, and a track with no correction takes exactly the path it did
+    /// before there was such a thing.
     pub fn cues(&self, track_id: i64) -> Result<Vec<Cue>> {
         self.database.with(|connection| {
+            let correction = correction_of(connection, track_id)?;
             let mut statement = connection.prepare(
                 "SELECT ordinal, start_ms, end_ms, position, text
                  FROM cue WHERE track_id = ?1 ORDER BY start_ms, ordinal",
             )?;
+            // A correction never reverses time, so the order the rows came back
+            // in is still the order the lines are spoken in.
             let cues = statement
                 .query_map([track_id], |row| {
                     Ok(Cue {
                         index: row.get(0)?,
-                        start: Timestamp::from_millis(row.get(1)?),
-                        end: Timestamp::from_millis(row.get(2)?),
+                        start: correction.apply(Timestamp::from_millis(row.get(1)?)),
+                        end: correction.apply(Timestamp::from_millis(row.get(2)?)),
                         position: row
                             .get::<_, Option<u8>>(3)?
                             .and_then(CuePosition::from_alignment),
@@ -127,6 +138,34 @@ impl<'a> Tracks<'a> {
                 .query_map([film_id], from_row)?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(tracks)
+        })
+    }
+
+    pub fn by_id(&self, id: i64) -> Result<Option<TrackRecord>> {
+        self.database.with(|connection| {
+            let track = connection
+                .query_row(
+                    &format!("SELECT {COLUMNS} FROM subtitle_track WHERE id = ?1"),
+                    [id],
+                    from_row,
+                )
+                .optional()?;
+            Ok(track)
+        })
+    }
+
+    /// Records how a track's timings line up with its film.
+    ///
+    /// Written once, when somebody has finished nudging rather than while they
+    /// are still doing it: every intermediate value would mean this write and a
+    /// re-read of the whole track behind it.
+    pub fn set_correction(&self, id: i64, correction: Correction) -> Result<bool> {
+        self.database.with(|connection| {
+            let written = connection.execute(
+                "UPDATE subtitle_track SET offset_ms = ?2, rate = ?3 WHERE id = ?1",
+                params![id, correction.offset_ms(), correction.rate()],
+            )?;
+            Ok(written > 0)
         })
     }
 
@@ -179,7 +218,10 @@ impl<'a> Tracks<'a> {
     pub fn attach(&self, track_id: i64, film_id: i64) -> Result<()> {
         self.database.with(|connection| {
             connection.execute(
-                "UPDATE subtitle_track SET film_id = ?2, match_kind = ?3 WHERE id = ?1",
+                &format!(
+                    "UPDATE subtitle_track SET film_id = ?2, match_kind = ?3, {FORGET}
+                     WHERE id = ?1"
+                ),
                 params![track_id, film_id, TrackMatch::ByHand.as_str()],
             )?;
             Ok(())
@@ -194,6 +236,18 @@ impl<'a> Tracks<'a> {
         })
     }
 }
+
+/// Drops a correction, for a track that has been given to a different film.
+///
+/// A correction is a number somebody arrived at by ear against one film. Once
+/// the track belongs to another it describes nothing, and carrying it over
+/// would put a track that had been made right against one release out of step
+/// with the next. A track staying where it is keeps what it was given, which is
+/// why the film is compared rather than assumed to have changed. Both
+/// expressions read the row as it was before this statement, so the comparison
+/// is against the old film and not the new one.
+const FORGET: &str = "offset_ms = CASE WHEN film_id = ?2 THEN offset_ms ELSE 0 END, \
+                      rate = CASE WHEN film_id = ?2 THEN rate ELSE 1.0 END";
 
 const UPSERT: &str = "INSERT INTO subtitle_track (
          film_id, path, language, forced, hearing_impaired,
@@ -258,6 +312,20 @@ fn upsert_one(connection: &Connection, track: &NewTrack<'_>) -> Result<Stored> {
     Ok(Stored { id, changed: false })
 }
 
+/// How a track's timings are to be read, or the identity if it has no row.
+///
+/// One small query before the cues rather than a join carrying the same two
+/// numbers alongside every line of the film.
+fn correction_of(connection: &Connection, track_id: i64) -> Result<Correction> {
+    let found = connection
+        .prepare_cached("SELECT offset_ms, rate FROM subtitle_track WHERE id = ?1")?
+        .query_row([track_id], |row| {
+            Ok(Correction::new(row.get(0)?, row.get(1)?))
+        })
+        .optional()?;
+    Ok(found.unwrap_or(Correction::IDENTITY))
+}
+
 /// The cues of one track, against a connection already inside a transaction.
 fn replace_cues_on(connection: &Connection, track_id: i64, cues: &[Cue]) -> Result<()> {
     connection
@@ -298,6 +366,7 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<TrackRecord> {
         cue_count: from_sql_count(row.get(8)?),
         size_bytes: from_sql_int(row.get(9)?),
         modified_at: row.get(10)?,
+        correction: Correction::new(row.get(11)?, row.get(12)?),
     })
 }
 

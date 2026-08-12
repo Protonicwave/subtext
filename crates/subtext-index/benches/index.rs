@@ -19,7 +19,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use criterion::{Criterion, Throughput};
-use subtext_core::{Cue, SubtitleLabel, Timestamp};
+use subtext_core::{Correction, Cue, SubtitleLabel, Timestamp};
 use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch};
 use tempfile::TempDir;
 
@@ -325,6 +325,30 @@ fn writing(criterion: &mut Criterion, corpus: &Corpus) {
                 .expect("cues")
         });
     });
+
+    // The same read with a correction on the track, which is the claim worth
+    // measuring: the arithmetic is two operations per timestamp against a query,
+    // a row decode and a string allocation per cue, and it should not show up
+    // against the read above.
+    corpus
+        .database
+        .tracks()
+        .set_correction(corpus.track_id, Correction::new(-1_200, 25.0 / 23.976))
+        .expect("the correction");
+    group.bench_function("read back, corrected", |bencher| {
+        bencher.iter(|| {
+            corpus
+                .database
+                .tracks()
+                .cues(black_box(corpus.track_id))
+                .expect("cues")
+        });
+    });
+    corpus
+        .database
+        .tracks()
+        .set_correction(corpus.track_id, Correction::IDENTITY)
+        .expect("the correction");
 
     group.finish();
 }

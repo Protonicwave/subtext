@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use rusqlite::ToSql;
-use subtext_core::Timestamp;
+use subtext_core::{Correction, Timestamp};
 
 use crate::database::Database;
 use crate::error::Result;
@@ -165,7 +165,7 @@ impl<'a> Search<'a> {
             let sql = format!(
                 "SELECT c.id, c.track_id, c.start_ms, c.end_ms, c.text,
                         snippet(cue_search, 0, ?2, ?3, '…', ?4),
-                        f.id, f.title, f.year
+                        f.id, f.title, f.year, t.offset_ms, t.rate
                  FROM cue_search
                  JOIN cue AS c ON c.id = cue_search.rowid
                  JOIN subtitle_track AS t ON t.id = c.track_id
@@ -222,11 +222,17 @@ impl<'a> Search<'a> {
                     film.withheld += 1;
                     continue;
                 }
+                // The same correction the player would have applied to this
+                // line, through the same operation, so that opening a result
+                // lands where the line is heard rather than where it was
+                // written. The track is already joined for the film, so this
+                // costs two columns and no extra query.
+                let correction = Correction::new(row.get(9)?, row.get(10)?);
                 film.hits.push(CueHit {
                     cue_id: row.get(0)?,
                     track_id: row.get(1)?,
-                    start: Timestamp::from_millis(row.get(2)?),
-                    end: Timestamp::from_millis(row.get(3)?),
+                    start: correction.apply(Timestamp::from_millis(row.get(2)?)),
+                    end: correction.apply(Timestamp::from_millis(row.get(3)?)),
                     text: row.get(4)?,
                     snippet: row.get(5)?,
                 });
