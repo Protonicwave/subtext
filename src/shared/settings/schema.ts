@@ -1,5 +1,6 @@
 import type { PreferenceView } from '@/shared/ipc/bindings';
 import type { Comfort } from '@/shared/media/cues';
+import { ANY_LANGUAGE, LANGUAGE_CODES } from '@/shared/media/languages';
 
 /**
  * Every preference: where it is kept, what it may be, and what the application
@@ -120,6 +121,12 @@ export const FIELDS = {
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),
 
+  /*
+   * Which track a film opens on, where nobody has chosen one for it and the
+   * pairing found more than one. It decides nothing else: a film that has been
+   * chosen for keeps what it was given whatever this says.
+   */
+  subtitleLanguage: choice('subtitles.language', [ANY_LANGUAGE, ...LANGUAGE_CODES], ANY_LANGUAGE),
   subtitleTypeface: choice('subtitles.typeface', ['sans', 'serif'], 'sans'),
   subtitleSize: amount('subtitles.size', { least: 2.4, most: 8, step: 0.1 }, 4.4),
   subtitleWeight: amount('subtitles.weight', { least: 400, most: 700, step: 100 }, 500),
