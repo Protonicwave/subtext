@@ -80,6 +80,20 @@ export const commands = {
 	 */
 	trackCues: (trackId: Id) => typedError<CueView[], Failure>(__TAURI_INVOKE("track_cues", { trackId })),
 	/**
+	 *  Records how a subtitle track's timings line up with its film.
+	 * 
+	 *  Written when somebody has settled on a value rather than while they are
+	 *  arriving at one. Every intermediate step of a nudge would be this write and
+	 *  a re-read of the whole track behind it, so the player shows the steps itself
+	 *  and calls this once at the end.
+	 * 
+	 *  The film comes back rather than the track alone, because a correction
+	 *  changes what the cues of that film are and the library screen holds the
+	 *  film. What comes back is read from the database, so a value outside the
+	 *  bounds the core enforces returns as the value that was actually kept.
+	 */
+	setTrackCorrection: (trackId: Id, correction: CorrectionView) => typedError<FilmView, Failure>(__TAURI_INVOKE("set_track_correction", { trackId, correction })),
+	/**
 	 *  Finds a line of dialogue anywhere in the library, or in one film.
 	 * 
 	 *  Called on a keystroke, so the work happens on a thread of its own rather
@@ -236,6 +250,23 @@ export type Chrome = {
 	 *  would not be telling the truth about.
 	 */
 	switchableDecoding: boolean,
+};
+
+/**
+ *  How a track's timings relate to the film it is paired with.
+ * 
+ *  One shape rather than two loose numbers, because neither means anything
+ *  without the other and both travel together in each direction: out on the
+ *  track, and back in when somebody has settled on a value.
+ */
+export type CorrectionView = {
+	/**  How far the whole track is moved, in milliseconds. Negative is earlier. */
+	offsetMs: number,
+	/**
+	 *  What the track is stretched by, for a file written against a release at
+	 *  a different framerate. One for almost every track.
+	 */
+	rate: number,
 };
 
 /**  One of the nine places a cue can ask to be drawn. */
@@ -472,6 +503,14 @@ export type TrackView = {
 	hearingImpaired: boolean,
 	matchKind: MatchKindView,
 	cueCount: number,
+	/**
+	 *  What the timings have been put through to match the film.
+	 * 
+	 *  Carried so that the sync control opens on the value in force rather than
+	 *  on nothing, and so that the player knows what the cues it was handed
+	 *  have already had done to them.
+	 */
+	correction: CorrectionView,
 };
 
 /* Tauri Specta runtime */

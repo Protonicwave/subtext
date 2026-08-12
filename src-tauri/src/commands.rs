@@ -13,8 +13,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, Answer, CueView, Failure, FilmView, FolderView, Id, PosterWanted, PreferenceView,
-    ScanProgressed, SearchView, TrackView,
+    AccentView, Answer, CorrectionView, CueView, Failure, FilmView, FolderView, Id, PosterWanted,
+    PreferenceView, ScanProgressed, SearchView, TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters, recent};
@@ -476,6 +476,39 @@ pub(crate) async fn attach_subtitle(
     })
     .await
     .map_err(|_| Failure::saying("attaching the subtitle did not finish"))?
+}
+
+/// Records how a subtitle track's timings line up with its film.
+///
+/// Written when somebody has settled on a value rather than while they are
+/// arriving at one. Every intermediate step of a nudge would be this write and
+/// a re-read of the whole track behind it, so the player shows the steps itself
+/// and calls this once at the end.
+///
+/// The film comes back rather than the track alone, because a correction
+/// changes what the cues of that film are and the library screen holds the
+/// film. What comes back is read from the database, so a value outside the
+/// bounds the core enforces returns as the value that was actually kept.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_track_correction(
+    state: State<'_, AppState>,
+    track_id: Id,
+    correction: CorrectionView,
+) -> Answer<FilmView> {
+    let database = state.scanner().database();
+    let track = database
+        .tracks()
+        .by_id(track_id.get())
+        .map_err(Failure::of)?
+        .ok_or_else(|| Failure::saying("that subtitle is no longer in the library"))?;
+
+    database
+        .tracks()
+        .set_correction(track.id, correction.wanted())
+        .map_err(Failure::of)?;
+
+    read_back(database, track.film_id)
 }
 
 /// Every preference that has been set, by key.

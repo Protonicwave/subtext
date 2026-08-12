@@ -37,6 +37,7 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::list_library,
             commands::continue_watching,
             commands::track_cues,
+            commands::set_track_correction,
             commands::search_dialogue,
             commands::recent_searches,
             commands::remember_search,
