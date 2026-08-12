@@ -70,8 +70,23 @@ export interface Comfort {
 /** The file honoured exactly, which is what a lookup gets when nobody says otherwise. */
 export const AS_WRITTEN: Comfort = { leadInMs: 0, minimumMs: 0 };
 
-export function timelineOf(cues: readonly CueView[], comfort: Comfort = AS_WRITTEN): Timeline {
-  const read = readable(cues, comfort);
+/**
+ * The timeline the player reads, with everything that changes a timing applied.
+ *
+ * `shiftMs` moves the whole track, and is how the sync control shows what it is
+ * doing while somebody is still arriving at a value. It is not where a
+ * correction lives: a correction is a property of the track, it is stored on
+ * its row and applied in Rust as the cues are read, and the cues handed to this
+ * function have already been through it. This is the provisional half, the
+ * difference between what is being tried and what has been written down, and it
+ * goes to zero the moment the value is committed and the track is read again.
+ */
+export function timelineOf(
+  cues: readonly CueView[],
+  comfort: Comfort = AS_WRITTEN,
+  shiftMs = 0,
+): Timeline {
+  const read = readable(cues, comfort, shiftMs);
 
   let longest = 0;
   for (const cue of read) {
@@ -90,39 +105,56 @@ export function timelineOf(cues: readonly CueView[], comfort: Comfort = AS_WRITT
  * cues those overlaps are left as they are, since the file meant them and this
  * is not the place to argue.
  */
-function readable(cues: readonly CueView[], { leadInMs, minimumMs }: Comfort): readonly CueView[] {
+function readable(
+  cues: readonly CueView[],
+  { leadInMs, minimumMs }: Comfort,
+  shiftMs: number,
+): readonly CueView[] {
   // Nothing asked for, so nothing copied. Worth the line: it is the whole cost
-  // of the feature for anybody who has turned both of them off.
-  if (leadInMs <= 0 && minimumMs <= 0) return cues;
+  // of the feature for anybody who has turned all of them off, which is every
+  // film nobody is adjusting.
+  if (leadInMs <= 0 && minimumMs <= 0 && shiftMs === 0) return cues;
 
   const read: CueView[] = [];
-  // The end of the line before this one, as written. What the lead-in of this
-  // one is not allowed past.
+  // The end of the line before this one, moved but not led in. What the
+  // lead-in of this one is not allowed past.
   let after = 0;
 
   for (let at = 0; at < cues.length; at += 1) {
     const cue = cues[at];
     if (cue === undefined) continue;
 
-    const startMs = shownFrom(cue.startMs, after, leadInMs);
+    // The shift first, since it says where the line is and the two preferences
+    // say how long it is given once it is there.
+    const moved = movedTo(cue.startMs, shiftMs);
+    const ends = movedTo(cue.endMs, shiftMs);
+
+    const startMs = shownFrom(moved, after, leadInMs);
     // Where the next line will appear, worked out the same way it will be when
     // its own turn comes. This is what the extension stops at.
     const next = cues[at + 1];
     const until =
-      next === undefined ? Number.POSITIVE_INFINITY : shownFrom(next.startMs, cue.endMs, leadInMs);
+      next === undefined
+        ? Number.POSITIVE_INFINITY
+        : shownFrom(movedTo(next.startMs, shiftMs), ends, leadInMs);
 
     read.push({
       ...cue,
       startMs,
       // Never shortened: a cue already running past the next one is a file that
       // overlaps, and taking time off it would be a change nobody asked for.
-      endMs: Math.max(cue.endMs, Math.min(startMs + minimumMs, until)),
+      endMs: Math.max(ends, Math.min(startMs + minimumMs, until)),
     });
 
-    after = cue.endMs;
+    after = ends;
   }
 
   return read;
+}
+
+/** Where a moment lands once the whole track has been moved, never before zero. */
+function movedTo(ms: number, shiftMs: number): number {
+  return Math.max(0, ms + shiftMs);
 }
 
 /** When a line appears, given when the one before it finished. */
