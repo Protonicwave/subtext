@@ -30,10 +30,24 @@ const { PlayerScreen } = await import('./PlayerScreen');
 const { useLibrary } = await import('./../library/useLibrary');
 const { usePanel } = await import('@/features/transcript/usePanel');
 const { useNavigation } = await import('@/app/routes');
+const { DEFAULTS } = await import('@/shared/settings/schema');
+const { useSettings } = await import('@/shared/settings/useSettings');
 
 pretendMediaWorks();
 
 const RUNS = 10_260_000;
+
+/**
+ * How far before its written start a line goes up, and therefore how far before
+ * it going anywhere by line lands.
+ *
+ * Stepping and the transcript both go to the moment the line is on screen from
+ * rather than to the moment it was written at, because they are the same
+ * timeline: one answer to where a line is, shared by everything that asks.
+ * Landing a little before the first syllable is also what somebody who missed
+ * the line wanted.
+ */
+const LEAD = DEFAULTS.subtitleLeadInMs;
 
 const film = {
   id: 7,
@@ -78,6 +92,7 @@ describe('playing a film', () => {
     vi.clearAllMocks();
     useNavigation.setState({ route: { screen: 'player', filmId: 7, at: null }, previous: null });
     usePanel.setState({ open: true });
+    useSettings.setState({ settings: DEFAULTS, problem: null });
   });
 
   it('points the element at the file through the protocol that serves it', () => {
@@ -268,7 +283,7 @@ describe('playing a film', () => {
 
     await userEvent.click(await screen.findByText('I rob banks.'));
 
-    expect(positionOf(video())).toBe(600_000);
+    expect(positionOf(video())).toBe(600_000 - LEAD);
   });
 
   it('lands the arrow keys on dialogue rather than on a fixed ten seconds', async () => {
@@ -283,10 +298,10 @@ describe('playing a film', () => {
     reaches(video(), 300_000);
 
     await userEvent.keyboard('{ArrowRight}');
-    expect(positionOf(video())).toBe(600_000);
+    expect(positionOf(video())).toBe(600_000 - LEAD);
 
     await userEvent.keyboard('{ArrowLeft}');
-    expect(positionOf(video())).toBe(60_000);
+    expect(positionOf(video())).toBe(60_000 - LEAD);
   });
 
   it('steps by line from the control bar', async () => {
@@ -299,7 +314,7 @@ describe('playing a film', () => {
     await screen.findByText('I take scores.');
 
     await userEvent.click(screen.getByRole('button', { name: /next line/i }));
-    expect(positionOf(video())).toBe(60_000);
+    expect(positionOf(video())).toBe(60_000 - LEAD);
   });
 
   it('draws the line being spoken at the moment it is spoken', async () => {
@@ -315,5 +330,37 @@ describe('playing a film', () => {
     reaches(video(), 2_000);
 
     expect(await screen.findByText('I take scores.')).toBeInTheDocument();
+  });
+
+  it('puts a line up a little early and holds a short one long enough to read', async () => {
+    // A quarter of a second as the file wrote it, which is not long enough for
+    // anybody, and it is asked for a moment before it was written to begin.
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 1_000, endMs: 1_250, text: 'Not really.', position: null },
+    ]);
+    usePanel.setState({ open: false });
+    useSettings.setState({
+      settings: { ...DEFAULTS, subtitleLeadInMs: 100, subtitleMinimumMs: 1_000 },
+      problem: null,
+    });
+
+    const { video } = open();
+    opens(video(), RUNS);
+    reaches(video(), 950);
+
+    expect(await screen.findByText('Not really.')).toBeInTheDocument();
+
+    // Gone once it has been up for as long as it was promised, and back if the
+    // film is put anywhere inside that. Looked at in this order because each
+    // assertion is then something the frame loop had to do, rather than a line
+    // that happened to still be there from the assertion before.
+    reaches(video(), 1_950);
+    await waitFor(() => {
+      expect(screen.queryByText('Not really.')).not.toBeInTheDocument();
+    });
+
+    // Past the end the file gave it, which is the whole point of the minimum.
+    reaches(video(), 1_400);
+    expect(await screen.findByText('Not really.')).toBeInTheDocument();
   });
 });
