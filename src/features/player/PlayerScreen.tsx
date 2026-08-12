@@ -10,7 +10,7 @@ import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
 import { usePanel } from '@/features/transcript/usePanel';
-import { appearanceOf } from '@/shared/settings/schema';
+import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
@@ -94,7 +94,11 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   // opened from the library starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
   const cues = useCues(film);
-  const timeline = useMemo(() => timelineOf(cues), [cues]);
+  // Built once per film, with the reading comfort preferences folded in as it
+  // is built. Nothing downstream of here knows they were applied, and nothing
+  // in the frame loop does any of this work again.
+  const comfort = useMemo(() => comfortOf(settings), [settings]);
+  const timeline = useMemo(() => timelineOf(cues, comfort), [cues, comfort]);
   const active = useActiveLine(video, timeline);
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);

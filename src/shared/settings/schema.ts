@@ -1,4 +1,5 @@
 import type { PreferenceView } from '@/shared/ipc/bindings';
+import type { Comfort } from '@/shared/media/cues';
 
 /**
  * Every preference: where it is kept, what it may be, and what the application
@@ -129,6 +130,17 @@ export const FIELDS = {
   ),
   subtitleBackground: choice('subtitles.background', ['none', 'shadow', 'panel'], 'shadow'),
   subtitlePosition: amount('subtitles.position', { least: 2, most: 24, step: 0.5 }, 7),
+  /*
+   * A little before the words, which is what broadcast subtitling does and what
+   * a line landing on its own first syllable fails to do. Zero for anybody who
+   * would rather have the file exactly as it was written.
+   */
+  subtitleLeadInMs: amount('subtitles.lead', { least: 0, most: 300, step: 10 }, 90),
+  /*
+   * Five sixths of a second, near enough: long enough that a one word answer
+   * can be read, short enough that it rarely reaches the line after it.
+   */
+  subtitleMinimumMs: amount('subtitles.minimum', { least: 0, most: 2_000, step: 50 }, 850),
 
   resume: choice('playback.resume', ['carry-on', 'beginning'], 'carry-on'),
   /*
@@ -207,6 +219,11 @@ export function storedAs<Name extends SettingName>(
   // there is nothing to write but the value said plainly. Reading it back is
   // the half that needs to know what it is looking at.
   return { key: FIELDS[name].key, value: String(value) };
+}
+
+/** How long a line is to be given, as the timeline takes it. */
+export function comfortOf(settings: Settings): Comfort {
+  return { leadInMs: settings.subtitleLeadInMs, minimumMs: settings.subtitleMinimumMs };
 }
 
 /** How the subtitles are to be drawn, as the renderer takes them. */

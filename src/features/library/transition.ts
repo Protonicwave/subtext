@@ -11,8 +11,3 @@ import type { Id } from '@/shared/ipc/bindings';
 export function frameId(id: Id): string {
   return `film-frame-${String(id)}`;
 }
-
-/** Whether the machine has been told to keep movement to a minimum. */
-export function stillnessWanted(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}

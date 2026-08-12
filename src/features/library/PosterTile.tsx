@@ -3,9 +3,10 @@ import { motion } from 'motion/react';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { sourceOf } from '@/shared/media/source';
 import { classes } from '@/shared/ui/classes';
+import { stillnessWanted } from '@/shared/ui/stillness';
 import { useFilmPalette } from './accent';
 import { fallbackFor } from './fallback';
-import { frameId, stillnessWanted } from './transition';
+import { frameId } from './transition';
 import { linesOf } from './useLibrary';
 import styles from './PosterTile.module.css';
 
