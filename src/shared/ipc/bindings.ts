@@ -94,6 +94,19 @@ export const commands = {
 	 */
 	setTrackCorrection: (trackId: Id, correction: CorrectionView) => typedError<FilmView, Failure>(__TAURI_INVOKE("set_track_correction", { trackId, correction })),
 	/**
+	 *  Records which subtitle track a film is watched with.
+	 * 
+	 *  A track to read it with, or nothing at all, which is a decision in its own
+	 *  right and is why turning subtitles off is written down rather than simply
+	 *  not choosing. The state a film starts in, where nobody has chosen, is not
+	 *  something this can write: it is what the row already says, and going back to
+	 *  it is not one of the answers the menu offers.
+	 * 
+	 *  The film comes back rather than an acknowledgement, because the choice
+	 *  changes which cues that film has and the library screen holds the film.
+	 */
+	setFilmTrack: (filmId: Id, trackId: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("set_film_track", { filmId, trackId })),
+	/**
 	 *  Finds a line of dialogue anywhere in the library, or in one film.
 	 * 
 	 *  Called on a keystroke, so the work happens on a thread of its own rather
@@ -347,6 +360,15 @@ export type FilmView = {
 	/**  The file is not where it was. The film is kept anyway. */
 	missing: boolean,
 	tracks: TrackView[],
+	/**
+	 *  The track this film is watched with, where somebody has said which.
+	 * 
+	 *  Null covers two different things, and the flag beside it is what tells
+	 *  them apart: nobody has chosen, in which case the front end picks one by
+	 *  its rule, or subtitles have been turned off and none is wanted.
+	 */
+	chosenTrackId: Id | null,
+	subtitlesOff: boolean,
 	position: PositionView | null,
 };
 
