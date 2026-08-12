@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use subtext_core::Timestamp;
-use subtext_index::{Database, SearchOptions};
+use subtext_index::{Database, SearchOptions, TrackChoice};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
@@ -509,6 +509,52 @@ pub(crate) async fn set_track_correction(
         .map_err(Failure::of)?;
 
     read_back(database, track.film_id)
+}
+
+/// Records which subtitle track a film is watched with.
+///
+/// A track to read it with, or nothing at all, which is a decision in its own
+/// right and is why turning subtitles off is written down rather than simply
+/// not choosing. The state a film starts in, where nobody has chosen, is not
+/// something this can write: it is what the row already says, and going back to
+/// it is not one of the answers the menu offers.
+///
+/// The film comes back rather than an acknowledgement, because the choice
+/// changes which cues that film has and the library screen holds the film.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_film_track(
+    state: State<'_, AppState>,
+    film_id: Id,
+    track_id: Option<Id>,
+) -> Answer<FilmView> {
+    let database = state.scanner().database();
+
+    let choice = match track_id {
+        Some(track_id) => {
+            let track = database
+                .tracks()
+                .by_id(track_id.get())
+                .map_err(Failure::of)?
+                .ok_or_else(|| Failure::saying("that subtitle is no longer in the library"))?;
+
+            // A track belongs to one film, and a film may only be watched with
+            // its own. Left unchecked this would write a row that no rule and
+            // no menu could ever explain.
+            if track.film_id != film_id.get() {
+                return Err(Failure::saying("that subtitle belongs to a different film"));
+            }
+            TrackChoice::Track(track.id)
+        }
+        None => TrackChoice::Off,
+    };
+
+    database
+        .films()
+        .set_choice(film_id.get(), choice)
+        .map_err(Failure::of)?;
+
+    read_back(database, film_id.get())
 }
 
 /// Every preference that has been set, by key.

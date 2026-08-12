@@ -4,7 +4,8 @@ import { type Comfort, NONE, activeAt, timelineOf } from '@/shared/media/cues';
 import { sourceOf } from '@/shared/media/source';
 import { useLibrary } from '@/features/library/useLibrary';
 import { Subtitles } from '@/features/player/Subtitles';
-import { Action, Choice, Slider } from './controls';
+import { ANY_LANGUAGE, LANGUAGE_CODES, languageNamed } from '@/shared/media/languages';
+import { Action, Choice, Picker, Slider } from './controls';
 import { SUBTITLE_COLOURS, appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
 import { Button } from '@/shared/ui/Button';
@@ -54,6 +55,16 @@ export function SubtitleSection() {
   return (
     <>
       <Preview />
+
+      <Picker
+        name="subtitleLanguage"
+        label="Preferred language"
+        hint="Which subtitle a film opens on when it was found with more than one and nobody has chosen. A film you have chosen for keeps what you gave it."
+        options={[
+          { value: ANY_LANGUAGE, label: 'No preference' },
+          ...LANGUAGE_CODES.map((code) => ({ value: code, label: languageNamed(code) })),
+        ]}
+      />
 
       <Choice
         name="subtitleTypeface"

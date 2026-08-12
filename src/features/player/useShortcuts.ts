@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useSettings } from '@/shared/settings/useSettings';
 import type { Stepping } from './useStepping';
 import { STEP_MS, type Sync } from './useSync';
+import type { TrackChoice } from './useTrack';
 import type { Transport } from './usePlayback';
 
 /**
@@ -23,8 +24,11 @@ export interface Actions {
   stepping: Stepping;
   /** Moving the subtitles against the film, which is done by ear. */
   sync: Sync;
+  /** Which subtitle is being read, and whether there is a choice to make. */
+  choice: TrackChoice;
   toggleFullscreen: () => void;
   toggleSync: () => void;
+  toggleTracks: () => void;
   toggleTranscript: () => void;
   /** Something happened, so the controls should be on screen to show what. */
   wake: () => void;
@@ -46,8 +50,17 @@ export function useShortcuts(actions: Actions) {
       if (isTyping(event.target)) return;
       if (isCovered()) return;
 
-      const { transport, stepping, sync, toggleFullscreen, toggleSync, toggleTranscript, wake } =
-        latest.current;
+      const {
+        transport,
+        stepping,
+        sync,
+        choice,
+        toggleFullscreen,
+        toggleSync,
+        toggleTracks,
+        toggleTranscript,
+        wake,
+      } = latest.current;
 
       // What the arrows mean, which is a matter of preference and of whether
       // the film has any dialogue for them to land on. Read at the moment the
@@ -94,6 +107,15 @@ export function useShortcuts(actions: Actions) {
         case 's':
           if (!sync.available) return;
           toggleSync();
+          break;
+        /*
+         * C for captions, which is what every other player calls this key. A
+         * film with no subtitle has nothing to choose between, and the key then
+         * does nothing rather than opening an empty menu.
+         */
+        case 'c':
+          if (!choice.available) return;
+          toggleTracks();
           break;
         default:
           return;

@@ -43,6 +43,8 @@ const film = {
       cueCount: 1_402,
     },
   ],
+  chosenTrackId: null,
+  subtitlesOff: false,
   position: null,
 } satisfies FilmView;
 

@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
-import type { CueView, FilmView, Id } from '@/shared/ipc/bindings';
+import type { CueView, Id, TrackView } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 
 /**
- * The dialogue of the film being played.
+ * The dialogue of the film being played, from the track it is being watched
+ * with.
  *
  * Read once, whole, when the player opens. A film of five thousand cues is a
  * few hundred kilobytes and the alternative is asking across the boundary while
  * the film is running, which is the one thing the index exists to avoid.
  *
- * A film with no subtitles is not a failure and produces no message: it plays,
- * and there is nothing to draw over it.
+ * Read again when the track changes, which is the same work a second time and
+ * is what switching subtitles during a film costs. The picture is not touched.
+ *
+ * A film with no subtitles, and a film whose subtitles have been turned off,
+ * are neither of them failures and produce no message: the film plays, and
+ * there is nothing to draw over it.
  */
 
 /** The lines of a film, and what had already been done to their timings. */
@@ -38,8 +43,7 @@ interface Read extends Dialogue {
   rate: number;
 }
 
-export function useCues(film: FilmView | undefined): Dialogue {
-  const chosen = film?.tracks[0];
+export function useCues(chosen: TrackView | null): Dialogue {
   const track = chosen?.id ?? null;
   // Read again when the correction changes, since the cues carry it. The offset
   // and the rate are named separately rather than as the object they came in,

@@ -41,6 +41,7 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['['], does: 'Subtitles a little earlier' },
       { keys: [']'], does: 'Subtitles a little later' },
       { keys: ['S'], does: 'Show or hide the subtitle timing controls' },
+      { keys: ['C'], does: 'Choose which subtitle to read, or none' },
     ],
   },
   {

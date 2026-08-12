@@ -67,6 +67,49 @@ export function Choice<Name extends SettingName>({
   );
 }
 
+/**
+ * One of many named alternatives, drawn as a list.
+ *
+ * The same thing [`Choice`] is, for a set too long to lay out as a strip. Thirty
+ * languages side by side would be a wall; a select is one line and the platform
+ * draws the list, which on every platform is a better list than one built here.
+ */
+export function Picker<Name extends SettingName>({
+  name,
+  label,
+  hint,
+  options,
+}: ChoiceProps<Name>) {
+  const chosen = useSettings((state) => state.settings[name]);
+  const change = useSettings((state) => state.change);
+  const field = useId();
+
+  return (
+    <div className={styles.row}>
+      <label className={styles.text} htmlFor={field}>
+        <b>{label}</b>
+        {hint !== undefined && <small>{hint}</small>}
+      </label>
+
+      <select
+        id={field}
+        className={styles.picker}
+        value={String(chosen)}
+        onChange={(event) => {
+          const picked = options.find((option) => String(option.value) === event.target.value);
+          if (picked !== undefined) change(name, picked.value);
+        }}
+      >
+        {options.map((option) => (
+          <option key={String(option.value)} value={String(option.value)}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** Something that is either done or not. */
 export function Switch({ name, label, hint }: Described & { name: ToggleName }) {
   const on = useSettings((state) => state.settings[name]);

@@ -53,6 +53,8 @@ pub struct FilmRecord {
     pub accent: Option<String>,
     /// When the file stopped being there, or `None` while it is present.
     pub missing_since: Option<i64>,
+    /// Which of the film's subtitle tracks it is watched with.
+    pub choice: TrackChoice,
     pub added_at: i64,
 }
 
@@ -60,6 +62,63 @@ impl FilmRecord {
     #[must_use]
     pub fn is_missing(&self) -> bool {
         self.missing_since.is_some()
+    }
+}
+
+/// Which subtitle track a film is watched with.
+///
+/// Three answers rather than two, because "show none of them" and "nobody has
+/// said" are different things. The first is a decision and is kept; the second
+/// leaves the track to be picked by a rule from what the pairing found, which
+/// is what almost every film in a library does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TrackChoice {
+    /// Nobody has chosen, so the rule decides.
+    #[default]
+    Unset,
+    /// This track, whatever the rule would have said.
+    Track(i64),
+    /// None of them.
+    Off,
+}
+
+impl TrackChoice {
+    /// The two columns the choice is stored as.
+    ///
+    /// Turning subtitles off forgets which track was being read. It is one
+    /// decision either way, and remembering the track behind an off switch
+    /// would mean a fourth state that only the database could tell apart.
+    #[must_use]
+    pub(crate) fn columns(self) -> (Option<i64>, bool) {
+        match self {
+            Self::Unset => (None, false),
+            Self::Track(id) => (Some(id), false),
+            Self::Off => (None, true),
+        }
+    }
+
+    /// Reads back what [`Self::columns`] wrote.
+    #[must_use]
+    pub(crate) fn from_columns(track_id: Option<i64>, off: bool) -> Self {
+        match (track_id, off) {
+            (_, true) => Self::Off,
+            (Some(id), false) => Self::Track(id),
+            (None, false) => Self::Unset,
+        }
+    }
+
+    /// The track that was chosen, where one was.
+    #[must_use]
+    pub fn track_id(self) -> Option<i64> {
+        match self {
+            Self::Track(id) => Some(id),
+            Self::Unset | Self::Off => None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_off(self) -> bool {
+        matches!(self, Self::Off)
     }
 }
 
@@ -222,7 +281,25 @@ pub struct Resumable {
 mod tests {
     use subtext_core::{MatchKind, Timestamp};
 
-    use super::{Fingerprint, PlaybackPosition, TrackMatch};
+    use super::{Fingerprint, PlaybackPosition, TrackChoice, TrackMatch};
+
+    #[test]
+    fn a_choice_survives_a_round_trip() {
+        for choice in [TrackChoice::Unset, TrackChoice::Track(4), TrackChoice::Off] {
+            let (track_id, off) = choice.columns();
+            assert_eq!(TrackChoice::from_columns(track_id, off), choice);
+        }
+
+        // The track a film was watched with before subtitles were turned off is
+        // not somewhere the rest of the application can see it, so a row that
+        // holds both reads as off rather than as either answer by chance.
+        assert_eq!(TrackChoice::from_columns(Some(4), true), TrackChoice::Off);
+
+        assert_eq!(TrackChoice::Track(4).track_id(), Some(4));
+        assert_eq!(TrackChoice::Off.track_id(), None);
+        assert!(TrackChoice::Off.is_off());
+        assert!(!TrackChoice::Unset.is_off());
+    }
 
     #[test]
     fn a_match_kind_survives_a_round_trip() {

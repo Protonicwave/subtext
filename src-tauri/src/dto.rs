@@ -117,6 +117,13 @@ pub(crate) struct FilmView {
     /// The file is not where it was. The film is kept anyway.
     pub(crate) missing: bool,
     pub(crate) tracks: Vec<TrackView>,
+    /// The track this film is watched with, where somebody has said which.
+    ///
+    /// Null covers two different things, and the flag beside it is what tells
+    /// them apart: nobody has chosen, in which case the front end picks one by
+    /// its rule, or subtitles have been turned off and none is wanted.
+    pub(crate) chosen_track_id: Option<Id>,
+    pub(crate) subtitles_off: bool,
     pub(crate) position: Option<PositionView>,
 }
 
@@ -137,6 +144,8 @@ impl FilmView {
             accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
             tracks: tracks.into_iter().map(TrackView::of).collect(),
+            chosen_track_id: film.choice.track_id().map(Id::of),
+            subtitles_off: film.choice.is_off(),
             position: position.map(PositionView::of),
         }
     }

@@ -206,6 +206,16 @@ export function SyncIcon(props: IconProps) {
   );
 }
 
+/** A frame with two lines of dialogue in the bottom of it. */
+export function SubtitlesIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.7}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M6.5 14.5h6M15 14.5h2.5" />
+    </Icon>
+  );
+}
+
 export function FullscreenIcon(props: IconProps) {
   return (
     <Icon {...props}>

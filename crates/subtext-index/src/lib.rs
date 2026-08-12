@@ -35,8 +35,8 @@ mod repository;
 pub use crate::database::Database;
 pub use crate::error::{Error, Result};
 pub use crate::model::{
-    FilmRecord, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored, TrackMatch,
-    TrackPairing, TrackRecord, WatchedFolder,
+    FilmRecord, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored, TrackChoice,
+    TrackMatch, TrackPairing, TrackRecord, WatchedFolder,
 };
 pub use crate::repository::{
     CueHit, FilmHits, Films, Folders, MATCH_END, MATCH_START, Positions, Preferences, Search,

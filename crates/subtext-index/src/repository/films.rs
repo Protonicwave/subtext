@@ -8,15 +8,16 @@ use subtext_core::Timestamp;
 use crate::clock::now_millis;
 use crate::database::Database;
 use crate::error::Result;
-use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored};
+use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored, TrackChoice};
 use crate::repository::{from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, folder_id, path, title, year, size_bytes, modified_at, \
-                       duration_ms, poster_path, accent, missing_since, added_at";
+                       duration_ms, poster_path, accent, missing_since, \
+                       chosen_track_id, subtitles_off, added_at";
 
 /// How many columns [`COLUMNS`] names, for queries that read a film alongside
 /// something else and need to know where the film ends.
-pub(super) const COLUMN_COUNT: usize = 12;
+pub(super) const COLUMN_COUNT: usize = 14;
 
 /// The same columns, qualified with a table alias for use in a join.
 pub(super) fn qualified_columns(alias: &str) -> String {
@@ -164,6 +165,26 @@ impl<'a> Films<'a> {
         })
     }
 
+    /// Records which subtitle track a film is watched with.
+    ///
+    /// Kept on the film rather than as a flag on the track, because it is a
+    /// choice between the tracks and not a property of any one of them: writing
+    /// it here is one row whichever track is picked, and a film cannot end up
+    /// with two tracks each believing they were chosen.
+    ///
+    /// A scan never touches this. The upsert above names the columns it writes
+    /// and these are not among them, so a rescan leaves a choice where it was.
+    pub fn set_choice(&self, id: i64, choice: TrackChoice) -> Result<bool> {
+        let (track_id, off) = choice.columns();
+        self.database.with(|connection| {
+            let written = connection.execute(
+                "UPDATE film SET chosen_track_id = ?2, subtitles_off = ?3 WHERE id = ?1",
+                params![id, track_id, off],
+            )?;
+            Ok(written > 0)
+        })
+    }
+
     /// Records the captured poster and the colour pair taken from it.
     pub fn set_poster(&self, id: i64, poster: &Path, accent: Option<&str>) -> Result<()> {
         let poster = path_text(poster)?;
@@ -272,7 +293,8 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
         poster_path: row.get::<_, Option<String>>(8)?.map(Into::into),
         accent: row.get(9)?,
         missing_since: row.get(10)?,
-        added_at: row.get(11)?,
+        choice: TrackChoice::from_columns(row.get(11)?, row.get(12)?),
+        added_at: row.get(13)?,
     })
 }
 
