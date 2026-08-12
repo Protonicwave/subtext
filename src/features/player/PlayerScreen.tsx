@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
@@ -25,6 +25,7 @@ import { useKeepPosition } from './useKeepPosition';
 import { type Transport, usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
 import { useStepping } from './useStepping';
+import { offsetLabel, useSync } from './useSync';
 import styles from './PlayerScreen.module.css';
 
 /**
@@ -93,12 +94,20 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   // A film opened from a search result starts at the line that was found; one
   // opened from the library starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
-  const cues = useCues(film);
+  const dialogue = useCues(film);
+  const sync = useSync(film);
   // Built once per film, with the reading comfort preferences folded in as it
   // is built. Nothing downstream of here knows they were applied, and nothing
   // in the frame loop does any of this work again.
   const comfort = useMemo(() => comfortOf(settings), [settings]);
-  const timeline = useMemo(() => timelineOf(cues, comfort), [cues, comfort]);
+  // How far the lines in hand still have to move. The correction they were read
+  // with is already in them, so this is only what has been nudged since and not
+  // yet written down, which is nought for a film nobody is adjusting.
+  const shift = sync.offsetMs - dialogue.offsetMs;
+  const timeline = useMemo(
+    () => timelineOf(dialogue.cues, comfort, shift),
+    [dialogue.cues, comfort, shift],
+  );
   const active = useActiveLine(video, timeline);
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
@@ -108,10 +117,14 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const close = usePanel((panel) => panel.close);
 
   const stepping = useStepping(timeline, transport);
+  const [syncing, setSyncing] = useState(false);
+  const toggleSync = useCallback(() => {
+    setSyncing((showing) => !showing);
+  }, []);
 
   useJumpTo(at, transport);
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
-  useShortcuts({ transport, stepping, toggleFullscreen, toggleTranscript, wake });
+  useShortcuts({ transport, stepping, sync, toggleFullscreen, toggleSync, toggleTranscript, wake });
 
   // Worked out once per film and remembered, which is what makes it free to
   // ask for on every redraw of the control bar.
@@ -167,6 +180,18 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
         <Subtitles cue={timeline.cues[active] ?? null} appearance={appearance} lifted={visible} />
 
         {/*
+         * What the nudge keys are doing, said over the picture for as long as
+         * the value is still being felt for. Somebody adjusting by ear is
+         * looking at the film rather than at the control bar, and this is the
+         * only way they see the number they are arriving at.
+         */}
+        {sync.pending && (
+          <p className={styles.offset} role="status">
+            Subtitles {offsetLabel(sync.offsetMs)}
+          </p>
+        )}
+
+        {/*
          * Opening a film off a drive that has been asleep takes a moment, and
          * so does a seek into a part of it that has not been read. Without
          * this the window looks as though it has stopped.
@@ -182,10 +207,13 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             stepping={stepping}
             density={density}
             preview={preview}
+            sync={sync}
+            syncing={syncing}
             visible={visible}
             fullscreen={fullscreen}
             transcript={open}
             onToggleFullscreen={toggleFullscreen}
+            onToggleSync={toggleSync}
             onToggleTranscript={toggleTranscript}
             onHold={hold}
           />

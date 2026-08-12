@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
-use subtext_core::{Cue, CuePosition, Timestamp};
+use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 use subtext_index::{
     CueHit, FilmHits, FilmRecord, MATCH_END, MATCH_START, PlaybackPosition, SearchResults,
     TrackMatch, TrackRecord, WatchedFolder,
@@ -153,6 +153,12 @@ pub(crate) struct TrackView {
     pub(crate) hearing_impaired: bool,
     pub(crate) match_kind: MatchKindView,
     pub(crate) cue_count: u32,
+    /// What the timings have been put through to match the film.
+    ///
+    /// Carried so that the sync control opens on the value in force rather than
+    /// on nothing, and so that the player knows what the cues it was handed
+    /// have already had done to them.
+    pub(crate) correction: CorrectionView,
 }
 
 impl TrackView {
@@ -165,7 +171,39 @@ impl TrackView {
             hearing_impaired: track.hearing_impaired,
             match_kind: MatchKindView::of(track.match_kind),
             cue_count: u32::try_from(track.cue_count).unwrap_or(u32::MAX),
+            correction: CorrectionView::of(track.correction),
         }
+    }
+}
+
+/// How a track's timings relate to the film it is paired with.
+///
+/// One shape rather than two loose numbers, because neither means anything
+/// without the other and both travel together in each direction: out on the
+/// track, and back in when somebody has settled on a value.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CorrectionView {
+    /// How far the whole track is moved, in milliseconds. Negative is earlier.
+    pub(crate) offset_ms: i32,
+    /// What the track is stretched by, for a file written against a release at
+    /// a different framerate. One for almost every track.
+    #[specta(type = Number)]
+    pub(crate) rate: f64,
+}
+
+impl CorrectionView {
+    fn of(correction: Correction) -> Self {
+        Self {
+            offset_ms: correction.offset_ms(),
+            rate: correction.rate(),
+        }
+    }
+
+    /// The correction as the core understands it, with anything out of range
+    /// brought back into it.
+    pub(crate) fn wanted(self) -> Correction {
+        Correction::new(self.offset_ms, self.rate)
     }
 }
 

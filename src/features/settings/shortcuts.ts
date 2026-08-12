@@ -38,6 +38,9 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['M'], does: 'Mute' },
       { keys: ['F'], does: 'Full screen' },
       { keys: ['T'], does: 'Show or hide the transcript' },
+      { keys: ['['], does: 'Subtitles a little earlier' },
+      { keys: [']'], does: 'Subtitles a little later' },
+      { keys: ['S'], does: 'Show or hide the subtitle timing controls' },
     ],
   },
   {

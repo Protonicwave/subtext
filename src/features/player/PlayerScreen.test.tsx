@@ -8,6 +8,10 @@ import { opens, positionOf, pretendMediaWorks, reaches, refuses } from '@/test/m
 const { ipc } = vi.hoisted(() => ({
   ipc: {
     trackCues: vi.fn(() => Promise.resolve<CueView[]>([])),
+    // Keeping the value is covered where the hook is tested. Refusing it here
+    // leaves what was nudged on screen, which keeps this file about the picture
+    // rather than about the database.
+    setTrackCorrection: vi.fn(() => Promise.reject(new Error('not under test'))),
     savePosition: vi.fn(() => Promise.resolve(null)),
     listFolders: vi.fn(() => Promise.resolve([])),
     listLibrary: vi.fn(() => Promise.resolve([])),
@@ -67,6 +71,7 @@ const film = {
       forced: false,
       hearingImpaired: false,
       matchKind: 'exact' as const,
+      correction: { offsetMs: 0, rate: 1 },
       cueCount: 2,
     },
   ],
@@ -362,5 +367,43 @@ describe('playing a film', () => {
     // Past the end the file gave it, which is the whole point of the minimum.
     reaches(video(), 1_400);
     expect(await screen.findByText('Not really.')).toBeInTheDocument();
+  });
+
+  it('moves the subtitles against the film while the value is being felt for', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 5_000, endMs: 7_000, text: 'I take scores.', position: null },
+    ]);
+    usePanel.setState({ open: false });
+    useSettings.setState({
+      settings: { ...DEFAULTS, subtitleLeadInMs: 0, subtitleMinimumMs: 0 },
+      problem: null,
+    });
+
+    const { video } = open();
+    opens(video(), RUNS);
+    // Half a second past the end of the line, where nothing is on screen.
+    reaches(video(), 7_500);
+    expect(screen.queryByText('I take scores.')).not.toBeInTheDocument();
+
+    // Twenty presses of a fiftieth of a second, which is the line's own second
+    // of lateness. Nothing is written down yet, and the picture has already
+    // caught up, which is what makes this findable by ear.
+    const typing = userEvent.setup();
+    for (let press = 0; press < 20; press += 1) {
+      await typing.keyboard(']');
+    }
+
+    expect(await screen.findByText('I take scores.')).toBeInTheDocument();
+    expect(screen.getByText(/Subtitles \+1\.00s/)).toBeInTheDocument();
+  });
+
+  it('leaves the nudge keys alone for a film with no subtitle to move', async () => {
+    const { video } = open({ tracks: [] });
+    opens(video(), RUNS);
+
+    const typing = userEvent.setup();
+    await typing.keyboard(']');
+
+    expect(screen.queryByText(/Subtitles/)).not.toBeInTheDocument();
   });
 });

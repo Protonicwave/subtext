@@ -305,3 +305,55 @@ describe('giving a line long enough to be read', () => {
     expect(quickest).toBeLessThan(2);
   });
 });
+
+describe('moving a whole track while somebody is still adjusting it', () => {
+  const comfort: Comfort = { leadInMs: 100, minimumMs: 1_000 };
+
+  function drawn(cues: readonly CueView[], shiftMs: number, using = AS_WRITTEN) {
+    return timelineOf(cues, using, shiftMs).cues.map((shown) => [shown.startMs, shown.endMs]);
+  }
+
+  it('moves every line by the same amount, start and end together', () => {
+    expect(drawn([cue(1_000, 2_000), cue(9_000, 10_000)], 500)).toStrictEqual([
+      [1_500, 2_500],
+      [9_500, 10_500],
+    ]);
+  });
+
+  it('moves a track that is running ahead of the film back', () => {
+    expect(drawn([cue(5_000, 6_000)], -2_500)).toStrictEqual([[2_500, 3_500]]);
+  });
+
+  it('keeps a line moved in front of the film at the start of it', () => {
+    expect(drawn([cue(1_000, 2_000)], -4_000)).toStrictEqual([[0, 0]]);
+  });
+
+  it('changes nothing at all when there is nothing to change', () => {
+    const cues = [cue(1_000, 2_000), cue(9_000, 10_000)];
+
+    // The same array, so a film nobody is adjusting pays nothing for the fact
+    // that adjusting one is possible.
+    expect(timelineOf(cues, AS_WRITTEN, 0).cues).toBe(cues);
+  });
+
+  it('gives the moved line the same reading room it would have had', () => {
+    // Led in by a hundred and held for a second, both around where the shift
+    // put the line rather than where the file did.
+    expect(drawn([cue(5_000, 5_300)], 2_000, comfort)).toStrictEqual([[6_900, 7_900]]);
+  });
+
+  it('never puts two lines on screen that were not there already', () => {
+    const cues = [cue(1_000, 1_100), cue(1_500, 1_600), cue(3_000, 3_100)];
+    const shown = timelineOf(cues, comfort, -700).cues;
+
+    for (let at = 1; at < shown.length; at += 1) {
+      expect(shown[at - 1]?.endMs).toBeLessThanOrEqual(shown[at]?.startMs ?? 0);
+    }
+  });
+
+  it('measures the longest cue after the move as well', () => {
+    // Both lines are pushed against the start of the film, where the first is
+    // squeezed to nothing and the second keeps only what is left of it.
+    expect(timelineOf([cue(0, 400), cue(500, 1_500)], AS_WRITTEN, -600).longest).toBe(900);
+  });
+});

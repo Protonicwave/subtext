@@ -54,6 +54,7 @@ const track = {
   forced: false,
   hearingImpaired: false,
   matchKind: 'exact',
+  correction: { offsetMs: 0, rate: 1 },
   cueCount: 1_402,
 } satisfies TrackView;
 
