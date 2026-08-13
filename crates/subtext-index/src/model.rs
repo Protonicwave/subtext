@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use subtext_core::{Correction, MatchKind, SubtitleLabel, Timestamp};
+use subtext_core::{Correction, Cue, MatchKind, SubtitleLabel, Timestamp};
 
 /// A folder the library watches.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -273,6 +273,15 @@ pub struct NewTrack<'a> {
     pub size_bytes: u64,
     pub modified_at: i64,
 }
+
+/// One track found inside a film, and the dialogue read out of it.
+///
+/// The dialogue is empty for a track of pictures, which is recorded so that it
+/// can be named rather than read.
+pub type StreamEntry<'a> = (NewTrack<'a>, &'a [Cue]);
+
+/// One film, and everything that was found inside it.
+pub type FilmStreams<'a> = (i64, Vec<StreamEntry<'a>>);
 
 /// A subtitle track in the library.
 #[derive(Clone, Debug)]

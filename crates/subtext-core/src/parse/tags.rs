@@ -9,13 +9,23 @@
 
 use crate::CuePosition;
 
-pub(crate) struct Cleaned {
+/// What a cue's lines came to once the markup was taken out of them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Cleaned {
+    /// The dialogue as plain text, with the line breaks the file asked for.
     pub text: String,
+    /// Where the file asked for the cue to be drawn, if it asked at all.
     pub position: Option<CuePosition>,
 }
 
 /// Joins the raw lines of one cue into plain text.
-pub(crate) fn clean(lines: &[&str]) -> Cleaned {
+///
+/// Public because subtitles carried inside a film reach the application as
+/// blocks rather than as a file, and the markup in them is the markup this
+/// already knows how to take out. The alternative is a second stripper that
+/// disagrees with this one somewhere nobody has looked yet.
+#[must_use]
+pub fn clean(lines: &[&str]) -> Cleaned {
     let mut text = String::new();
     let mut position = None;
     let mut buffer = String::new();

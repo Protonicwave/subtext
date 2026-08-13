@@ -2,14 +2,14 @@
 
 // The fixture stops a test outright when the library does not hold what the
 // test is about to ask it for.
-#![allow(clippy::unwrap_used, clippy::panic)]
+#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 mod common;
 
 use std::path::Path;
 
-use subtext_container::fixture::Entry;
-use subtext_index::{TrackOrigin, TrackRecord};
+use subtext_container::fixture::{Entry, Line};
+use subtext_index::{SearchOptions, TrackOrigin, TrackRecord};
 
 use crate::common::Fixture;
 
@@ -23,6 +23,23 @@ fn entries() -> Vec<Entry> {
             .in_language("fre")
             .forced(),
     ]
+}
+
+/// What the English track of a film says, in playback order.
+fn dialogue_inside(library: &Fixture, relative: &str) -> Vec<String> {
+    let track = tracks_of(library, relative)
+        .into_iter()
+        .find(|track| track.origin.is_stream() && track.language.as_deref() == Some("en"))
+        .expect("the film to carry an English track");
+
+    library
+        .database()
+        .tracks()
+        .cues(track.id)
+        .unwrap()
+        .into_iter()
+        .map(|cue| cue.text)
+        .collect()
 }
 
 fn tracks_of(library: &Fixture, relative: &str) -> Vec<TrackRecord> {
@@ -65,9 +82,95 @@ fn a_film_carrying_its_own_subtitles_says_so() {
         .unwrap();
     assert!(french.forced);
 
-    // Nothing has been read out of them yet, which is a separate piece of work
-    // from knowing they are there.
+    // Nothing was written into this one, so there is nothing to have read.
     assert!(tracks.iter().all(|track| track.cue_count == 0));
+}
+
+#[test]
+fn the_dialogue_inside_a_film_is_read_out_of_it() {
+    let library = Fixture::new();
+    library.matroska_saying(
+        "Heat.1995.1080p.mkv",
+        entries(),
+        vec![
+            Line::new(3, 1_000, 3_000, "Don't let yourself get attached"),
+            Line::new(3, 4_000, 6_500, "to anything you are not willing"),
+            Line::new(4, 1_000, 3_000, "Ne t'attache a rien"),
+        ],
+    );
+
+    let outcome = library.scan();
+    assert_eq!(outcome.embedded_tracks, 2);
+    assert_eq!(outcome.cues_indexed, 3);
+
+    assert_eq!(
+        dialogue_inside(&library, "Heat.1995.1080p.mkv"),
+        [
+            "Don't let yourself get attached",
+            "to anything you are not willing"
+        ]
+    );
+}
+
+/// What the whole sequence was for: a film with no subtitle file beside it is
+/// in the search index rather than being a poster and a video element.
+#[test]
+fn a_film_with_no_subtitle_file_can_still_be_searched() {
+    let library = Fixture::new();
+    library.matroska_saying(
+        "Heat.1995.1080p.mkv",
+        entries(),
+        vec![Line::new(3, 60_000, 63_000, "The action is the juice")],
+    );
+
+    library.scan();
+
+    let results = library
+        .database()
+        .search()
+        .find("juice", &SearchOptions::default())
+        .unwrap();
+
+    assert_eq!(results.films.len(), 1);
+    let hit = &results.films[0].hits[0];
+    // At the moment it is spoken, since a track muxed into a film was timed
+    // against those frames and needs no correcting to say so.
+    assert_eq!(hit.start.millis(), 60_000);
+}
+
+/// The property that keeps a library of Matroska films as cheap to rescan as
+/// any other, now that looking inside one means reading it rather than reading
+/// its header.
+#[test]
+fn a_library_nobody_has_touched_is_not_read_again() {
+    let library = Fixture::new();
+    library.matroska_saying(
+        "Heat.1995.1080p.mkv",
+        entries(),
+        vec![Line::new(
+            3,
+            1_000,
+            3_000,
+            "Don't let yourself get attached",
+        )],
+    );
+    library.matroska("Ronin.1998.1080p.mkv", entries());
+
+    let first = library.scan();
+    assert_eq!(first.films_probed, 2);
+    assert_eq!(first.cues_indexed, 1);
+
+    let again = library.scan();
+    assert_eq!(again.films_probed, 0);
+    assert_eq!(again.embedded_tracks, 0);
+    assert_eq!(again.cues_indexed, 0);
+
+    // And what was read the first time is still there, rather than having been
+    // cleared by a scan that decided there was nothing to write.
+    assert_eq!(
+        dialogue_inside(&library, "Heat.1995.1080p.mkv"),
+        ["Don't let yourself get attached"]
+    );
 }
 
 #[test]
@@ -105,22 +208,6 @@ fn a_track_inside_a_film_is_not_a_subtitle_file_that_has_been_deleted() {
     // subtitle files it knows about, and a track inside a film is not one.
     let outcome = library.scan();
     assert_eq!(outcome.tracks_removed, 0);
-    assert_eq!(tracks_of(&library, "Heat.1995.1080p.mkv").len(), 2);
-}
-
-#[test]
-fn a_library_nobody_has_touched_is_not_opened_again() {
-    let library = Fixture::new();
-    library.matroska("Heat.1995.1080p.mkv", entries());
-    library.matroska("Ronin.1998.1080p.mkv", entries());
-
-    assert_eq!(library.scan().films_probed, 2);
-
-    // The property the whole thing rests on: a rescan of a library of Matroska
-    // files costs what a rescan of any other library costs.
-    let again = library.scan();
-    assert_eq!(again.films_probed, 0);
-    assert_eq!(again.embedded_tracks, 0);
     assert_eq!(tracks_of(&library, "Heat.1995.1080p.mkv").len(), 2);
 }
 

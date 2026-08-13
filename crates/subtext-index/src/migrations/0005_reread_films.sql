@@ -1,0 +1,12 @@
+-- Look inside every film again, now that looking means reading the dialogue.
+--
+-- The previous version opened each film once, recorded which subtitle tracks
+-- were in it, and stopped there. Those rows are right about what a film carries
+-- and empty of what it says, and the film will never be opened again on its own
+-- account: its size and modification time still match what was read.
+--
+-- Forgetting when each film was looked inside is what puts them back in the way
+-- of the next scan. Nothing else is touched: the track rows keep their
+-- identifiers, so a chosen track and a correction still point at what they
+-- pointed at, and the scan fills in the cues underneath them.
+UPDATE film SET probed_at = NULL;

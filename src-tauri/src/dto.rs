@@ -648,6 +648,8 @@ pub(crate) struct ScanProgressed {
     pub(crate) films_paired: u32,
     pub(crate) subtitles_to_read: u32,
     pub(crate) subtitles_read: u32,
+    pub(crate) films_to_read: u32,
+    pub(crate) films_read: u32,
     pub(crate) cues_indexed: u32,
     /// How much of the reading is done, from zero to one.
     #[specta(type = Number)]
@@ -665,6 +667,8 @@ impl ScanProgressed {
             films_paired: count(progress.films_paired),
             subtitles_to_read: count(progress.subtitles_to_read),
             subtitles_read: count(progress.subtitles_read),
+            films_to_read: count(progress.films_to_read),
+            films_read: count(progress.films_read),
             cues_indexed: count(progress.cues_indexed),
             fraction_read: progress.fraction_read(),
         }

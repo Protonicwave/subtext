@@ -8,8 +8,10 @@ mod common;
 
 use std::path::Path;
 
-use subtext_core::SubtitleLabel;
-use subtext_index::{NewTrack, TrackChoice, TrackMatch, TrackOrigin, TrackRecord};
+use subtext_core::{Cue, SubtitleLabel, Timestamp};
+use subtext_index::{
+    FilmStreams, NewTrack, StreamEntry, TrackChoice, TrackMatch, TrackOrigin, TrackRecord,
+};
 
 use crate::common::Library;
 
@@ -35,6 +37,37 @@ fn stream<'a>(film_id: i64, path: &'a Path, number: u64, codec: &'a str) -> NewT
     }
 }
 
+/// A track with nothing read out of it, which is what a picture track is.
+fn unread<'a>(film_id: i64, path: &'a Path, number: u64, codec: &'a str) -> Entry<'a> {
+    (stream(film_id, path, number, codec), Vec::new())
+}
+
+/// A track and the lines read out of it, held so that the borrowed form
+/// `write_streams` takes can be made from it.
+type Entry<'a> = (NewTrack<'a>, Vec<Cue>);
+
+/// What `write_streams` takes, borrowed out of the entries above.
+fn film<'a>(film_id: i64, entries: &'a [Entry<'a>]) -> Vec<FilmStreams<'a>> {
+    vec![(
+        film_id,
+        entries
+            .iter()
+            .map(|(track, cues)| -> StreamEntry<'a> { (track.clone(), cues.as_slice()) })
+            .collect(),
+    )]
+}
+
+/// One line of dialogue, at ten seconds times its number.
+fn cue(number: u32, text: &str) -> Cue {
+    Cue {
+        index: number,
+        start: Timestamp::from_seconds(number * 10),
+        end: Timestamp::from_seconds(number * 10 + 4),
+        text: text.to_owned(),
+        position: None,
+    }
+}
+
 fn tracks_of(library: &Library, film_id: i64) -> Vec<TrackRecord> {
     library.database.tracks().for_film(film_id).unwrap()
 }
@@ -43,22 +76,25 @@ fn tracks_of(library: &Library, film_id: i64) -> Vec<TrackRecord> {
 fn several_tracks_of_one_film_share_its_path() {
     let library = Library::new();
     let folder = library.watch();
-    let film = library.add_film(folder, "Heat");
+    let film_id = library.add_film(folder, "Heat");
     let path = library.root.join("Heat.mkv");
 
     library
         .database
         .tracks()
-        .write_streams(&[(
-            film,
-            vec![
-                stream(film, &path, 2, "subrip"),
-                stream(film, &path, 3, "pgs"),
+        .write_streams(&film(
+            film_id,
+            &[
+                (
+                    stream(film_id, &path, 2, "subrip"),
+                    vec![cue(1, "Don't let yourself"), cue(2, "get attached")],
+                ),
+                unread(film_id, &path, 3, "pgs"),
             ],
-        )])
+        ))
         .unwrap();
 
-    let tracks = tracks_of(&library, film);
+    let tracks = tracks_of(&library, film_id);
     assert_eq!(tracks.len(), 2);
     assert!(tracks.iter().all(|track| track.origin.is_stream()));
     assert!(tracks.iter().all(|track| track.path == path));
@@ -66,34 +102,41 @@ fn several_tracks_of_one_film_share_its_path() {
     assert_eq!(tracks[0].codec, "subrip");
     assert_eq!(tracks[1].codec, "pgs");
 
-    // Nothing has been read out of them, which is a separate piece of work.
-    assert!(tracks.iter().all(|track| track.cue_count == 0));
+    // The text track's dialogue is there and the picture track's is not, since
+    // there is nothing here that turns pictures into words.
+    assert_eq!(tracks[0].cue_count, 2);
+    assert_eq!(tracks[1].cue_count, 0);
+    let cues = library.database.tracks().cues(tracks[0].id).unwrap();
+    assert_eq!(cues[0].text, "Don't let yourself");
 }
 
 #[test]
 fn a_film_probed_again_keeps_the_tracks_it_still_carries() {
     let library = Library::new();
     let folder = library.watch();
-    let film = library.add_film(folder, "Heat");
+    let film_id = library.add_film(folder, "Heat");
     let path = library.root.join("Heat.mkv");
-    let found = vec![
-        stream(film, &path, 2, "subrip"),
-        stream(film, &path, 3, "subrip"),
+    let found = [
+        (
+            stream(film_id, &path, 2, "subrip"),
+            vec![cue(1, "Don't let yourself")],
+        ),
+        unread(film_id, &path, 3, "subrip"),
     ];
 
     library
         .database
         .tracks()
-        .write_streams(&[(film, found.clone())])
+        .write_streams(&film(film_id, &found))
         .unwrap();
-    let before = tracks_of(&library, film);
+    let before = tracks_of(&library, film_id);
 
     library
         .database
         .tracks()
-        .write_streams(&[(film, found)])
+        .write_streams(&film(film_id, &found))
         .unwrap();
-    let after = tracks_of(&library, film);
+    let after = tracks_of(&library, film_id);
 
     // The identifiers are what a chosen track and a correction point at, so a
     // second probe finding the same tracks must not hand out new ones.
@@ -107,28 +150,28 @@ fn a_film_probed_again_keeps_the_tracks_it_still_carries() {
 fn a_track_the_film_no_longer_carries_is_taken_away() {
     let library = Library::new();
     let folder = library.watch();
-    let film = library.add_film(folder, "Heat");
+    let film_id = library.add_film(folder, "Heat");
     let path = library.root.join("Heat.mkv");
 
     library
         .database
         .tracks()
-        .write_streams(&[(
-            film,
-            vec![
-                stream(film, &path, 2, "subrip"),
-                stream(film, &path, 3, "subrip"),
+        .write_streams(&film(
+            film_id,
+            &[
+                unread(film_id, &path, 2, "subrip"),
+                unread(film_id, &path, 3, "subrip"),
             ],
-        )])
+        ))
         .unwrap();
 
     // The film replaced by an encode carrying one subtitle instead of two.
     library
         .database
         .tracks()
-        .write_streams(&[(film, vec![stream(film, &path, 2, "subrip")])])
+        .write_streams(&film(film_id, &[unread(film_id, &path, 2, "subrip")]))
         .unwrap();
-    let tracks = tracks_of(&library, film);
+    let tracks = tracks_of(&library, film_id);
     assert_eq!(tracks.len(), 1);
     assert_eq!(tracks[0].stream_number, 2);
 
@@ -137,31 +180,31 @@ fn a_track_the_film_no_longer_carries_is_taken_away() {
     library
         .database
         .tracks()
-        .write_streams(&[(film, Vec::new())])
+        .write_streams(&film(film_id, &[]))
         .unwrap();
-    assert!(tracks_of(&library, film).is_empty());
+    assert!(tracks_of(&library, film_id).is_empty());
 }
 
 #[test]
 fn a_subtitle_file_beside_the_film_is_left_alone_by_all_of_it() {
     let library = Library::new();
     let folder = library.watch();
-    let film = library.add_film(folder, "Heat");
-    let sidecar = library.add_track(film, "Heat");
+    let film_id = library.add_film(folder, "Heat");
+    let sidecar = library.add_track(film_id, "Heat");
     let path = library.root.join("Heat.mkv");
 
     library
         .database
         .tracks()
-        .write_streams(&[(film, vec![stream(film, &path, 2, "subrip")])])
+        .write_streams(&film(film_id, &[unread(film_id, &path, 2, "subrip")]))
         .unwrap();
     library
         .database
         .tracks()
-        .write_streams(&[(film, Vec::new())])
+        .write_streams(&film(film_id, &[]))
         .unwrap();
 
-    let tracks = tracks_of(&library, film);
+    let tracks = tracks_of(&library, film_id);
     assert_eq!(tracks.len(), 1);
     assert_eq!(tracks[0].id, sidecar);
 
@@ -176,29 +219,29 @@ fn a_subtitle_file_beside_the_film_is_left_alone_by_all_of_it() {
 fn a_chosen_track_that_goes_leaves_the_film_choosing_again() {
     let library = Library::new();
     let folder = library.watch();
-    let film = library.add_film(folder, "Heat");
+    let film_id = library.add_film(folder, "Heat");
     let path = library.root.join("Heat.mkv");
 
     library
         .database
         .tracks()
-        .write_streams(&[(film, vec![stream(film, &path, 2, "subrip")])])
+        .write_streams(&film(film_id, &[unread(film_id, &path, 2, "subrip")]))
         .unwrap();
-    let chosen = tracks_of(&library, film)[0].id;
+    let chosen = tracks_of(&library, film_id)[0].id;
     library
         .database
         .films()
-        .set_choice(film, TrackChoice::Track(chosen))
+        .set_choice(film_id, TrackChoice::Track(chosen))
         .unwrap();
 
     library
         .database
         .tracks()
-        .write_streams(&[(film, Vec::new())])
+        .write_streams(&film(film_id, &[]))
         .unwrap();
 
-    let film = library.database.films().by_id(film).unwrap().unwrap();
-    assert_eq!(film.choice, TrackChoice::Unset);
+    let stored = library.database.films().by_id(film_id).unwrap().unwrap();
+    assert_eq!(stored.choice, TrackChoice::Unset);
 }
 
 #[test]
@@ -216,7 +259,7 @@ fn a_film_is_looked_inside_once_and_then_left_alone() {
     library
         .database
         .tracks()
-        .write_streams(&[(first, Vec::new())])
+        .write_streams(&film(first, &[]))
         .unwrap();
     assert_eq!(
         library.database.films().unprobed(folder).unwrap(),

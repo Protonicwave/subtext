@@ -19,5 +19,9 @@ tempfile = "3.27.0"
 name = "probe"
 harness = false
 
+[[bench]]
+name = "extract"
+harness = false
+
 [lints]
 workspace = true

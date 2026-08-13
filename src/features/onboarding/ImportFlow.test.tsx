@@ -122,6 +122,8 @@ const progress = {
   filmsPaired: 1,
   subtitlesToRead: 1,
   subtitlesRead: 0,
+  filmsToRead: 2,
+  filmsRead: 1,
   cuesIndexed: 640,
   fractionRead: 0.5,
 } satisfies ScanProgressed;

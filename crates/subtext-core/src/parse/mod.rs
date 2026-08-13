@@ -2,7 +2,7 @@
 
 mod decode;
 mod srt;
-mod tags;
+pub mod tags;
 mod warning;
 
 pub use self::warning::{ParseWarning, ParseWarningKind};

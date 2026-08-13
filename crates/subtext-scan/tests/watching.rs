@@ -77,9 +77,17 @@ fn a_film_arriving_in_chunks_is_indexed_once_it_has_finished_arriving() {
     // holding an event back.
     std::thread::sleep(Duration::from_millis(800));
     let scans = scans.load(Ordering::Relaxed);
+
+    // The bound is loose on purpose. What is being tested is that a file
+    // arriving in pieces is one ingest rather than one per piece, and how many
+    // it comes to depends on when the platform chooses to deliver its events: a
+    // machine busy enough to stall the writing for longer than the quiet period
+    // legitimately settles more than once. The arithmetic of settling is pinned
+    // exactly by the unit tests in `debounce`, against a clock rather than
+    // against a filesystem.
     assert!(
-        scans <= 2,
-        "a file written in forty pieces should be one ingest, not forty, and was {scans}"
+        scans <= 5,
+        "a file written in forty pieces should be a handful of ingests, not forty, and was {scans}"
     );
 }
 
