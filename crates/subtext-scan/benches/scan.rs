@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use criterion::Criterion;
+use subtext_container::fixture::{Container, Entry};
 use subtext_index::Database;
 use subtext_scan::{Scanner, Silent, discover};
 use tempfile::TempDir;
@@ -163,8 +164,7 @@ impl Folder {
             };
 
             let name = format!("Film {at:04}.2001.1080p.BluRay.x264-GROUP");
-            std::fs::write(folder.join(format!("{name}.mkv")), b"not really a film")
-                .expect("a film");
+            std::fs::write(folder.join(format!("{name}.mkv")), film()).expect("a film");
             std::fs::write(
                 folder.join(format!("Film {at:04}.2001.en.srt")),
                 srt(at as u64 + 1),
@@ -187,6 +187,22 @@ impl Folder {
     fn library(&self) -> Database {
         Database::open(self.root.join("library.db")).expect("a database")
     }
+}
+
+/// A film's header, which is what a scan opens each one to read.
+///
+/// Real Matroska rather than a few bytes standing in for it, so that the cost
+/// of looking inside a thousand films is part of what the scan is measured at
+/// rather than something the corpus quietly avoids.
+fn film() -> Vec<u8> {
+    Container::new(vec![
+        Entry::video(1),
+        Entry::audio(2),
+        Entry::subtitle(3, "S_TEXT/UTF8").in_language("eng"),
+        Entry::subtitle(4, "S_HDMV/PGS").in_language("eng"),
+    ])
+    .with_seek_head()
+    .bytes()
 }
 
 /// The three measurements the targets are written against, each done once.
@@ -216,11 +232,17 @@ fn against_the_targets(folder: &Folder) {
         outcome.cues_indexed as f64 / indexing.as_secs_f64()
     );
 
+    println!(
+        "probe: {} films opened, {} tracks found inside them (target 3s for 1,000)",
+        outcome.films_probed, outcome.embedded_tracks
+    );
+
     let started = Instant::now();
     let again = scanner.scan(&watched, &Silent).expect("a rescan");
     println!(
-        "rescan, nothing changed: {} files read, {} cues written, in {:.2}s",
+        "rescan, nothing changed: {} files read, {} films opened, {} cues written, in {:.2}s",
         again.subtitles_read,
+        again.films_probed,
         again.cues_indexed,
         started.elapsed().as_secs_f64()
     );
