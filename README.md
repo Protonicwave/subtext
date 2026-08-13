@@ -57,13 +57,14 @@ CI runs all of these on Windows, macOS and Linux.
 
 ## Layout
 
-| Path                   | Contains                                                  |
-| ---------------------- | --------------------------------------------------------- |
-| `crates/subtext-core`  | Domain types, subtitle parsing, filename pairing. No I/O. |
-| `crates/subtext-index` | SQLite persistence, full text search, migrations.         |
-| `crates/subtext-scan`  | Filesystem walking, watching, the ingest pipeline.        |
-| `src-tauri`            | The application shell: commands, protocol, configuration. |
-| `src`                  | React front end.                                          |
+| Path                       | Contains                                                  |
+| -------------------------- | --------------------------------------------------------- |
+| `crates/subtext-core`      | Domain types, subtitle parsing, filename pairing. No I/O. |
+| `crates/subtext-container` | Reading the subtitle tracks inside a film file.           |
+| `crates/subtext-index`     | SQLite persistence, full text search, migrations.         |
+| `crates/subtext-scan`      | Filesystem walking, watching, the ingest pipeline.        |
+| `src-tauri`                | The application shell: commands, protocol, configuration. |
+| `src`                      | React front end.                                          |
 
 The crates do not depend on Tauri, so the parser and the index can be tested and benchmarked without launching the application.
 
