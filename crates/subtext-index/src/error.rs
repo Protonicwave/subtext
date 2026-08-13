@@ -20,6 +20,12 @@ pub enum Error {
     /// Rare enough that refusing the one file is better than storing paths as
     /// blobs everywhere to accommodate it.
     UnreadablePath,
+    /// A migration left a row pointing at something that is not there.
+    ///
+    /// Only reachable through a bug in a migration, and worth stopping for:
+    /// carrying on would mean working against a library that quietly disagrees
+    /// with itself.
+    Inconsistent,
     /// A connection was left behind by a thread that panicked while holding it.
     Unavailable,
 }
@@ -34,6 +40,7 @@ impl fmt::Display for Error {
                  (it is at version {found}, this build understands {supported})"
             ),
             Self::UnreadablePath => f.write_str("the path is not valid text"),
+            Self::Inconsistent => f.write_str("the library database is not consistent with itself"),
             Self::Unavailable => f.write_str("the library database is not available"),
         }
     }

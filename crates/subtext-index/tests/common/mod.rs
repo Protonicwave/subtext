@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 
 use subtext_core::{Cue, SubtitleLabel, Timestamp};
-use subtext_index::{Database, NewFilm, NewTrack, TrackMatch};
+use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
 use tempfile::TempDir;
 
 pub(crate) struct Library {
@@ -72,6 +72,9 @@ impl Library {
                     forced: false,
                     hearing_impaired: false,
                 },
+                origin: TrackOrigin::Sidecar,
+                stream_number: 0,
+                codec: "subrip",
                 match_kind: TrackMatch::Exact,
                 encoding: "UTF-8",
                 size_bytes: 60_000,
