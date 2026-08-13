@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use subtext_container::fixture::{Container, Entry};
+use subtext_container::fixture::{Container, Entry, Line};
 use subtext_index::{Database, WatchedFolder};
 use subtext_scan::{ScanOutcome, Scanner, Silent};
 use tempfile::TempDir;
@@ -65,12 +65,26 @@ impl Fixture {
         self.write(relative, b"not really a film")
     }
 
-    /// Writes a film that really is a Matroska file, carrying the tracks given.
-    ///
-    /// Header only. There is no picture in it, which is all a probe of one
-    /// looks at.
+    /// Writes a film that really is a Matroska file, carrying the tracks given
+    /// and nothing in them.
     pub(crate) fn matroska(&self, relative: &str, entries: Vec<Entry>) -> PathBuf {
         self.write(relative, &Container::new(entries).with_seek_head().bytes())
+    }
+
+    /// The same, with dialogue written into it as real blocks in real clusters.
+    pub(crate) fn matroska_saying(
+        &self,
+        relative: &str,
+        entries: Vec<Entry>,
+        lines: Vec<Line>,
+    ) -> PathBuf {
+        self.write(
+            relative,
+            &Container::new(entries)
+                .with_seek_head()
+                .with_dialogue(lines)
+                .bytes(),
+        )
     }
 
     /// Writes a subtitle file with one line of dialogue every ten seconds.

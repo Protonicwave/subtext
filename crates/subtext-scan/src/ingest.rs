@@ -14,10 +14,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use subtext_container::{StreamTrack, SubtitleCodec};
+use subtext_container::{EmbeddedTrack, SubtitleCodec};
 use subtext_core::{Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, pair_with, parse_srt};
 use subtext_index::{
-    Database, NewFilm, NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, WatchedFolder,
+    Database, FilmStreams, NewFilm, NewTrack, Stored, StreamEntry, TrackMatch, TrackOrigin,
+    TrackPairing, WatchedFolder,
 };
 
 use crate::error::{Error, Result};
@@ -139,7 +140,7 @@ pub fn scan_folder(
         .collect();
     let films_missing = database.films().mark_missing(&vanished)?;
 
-    let probes = probes_wanted(
+    let films_to_open = films_to_read(
         &found.films,
         &stored_films,
         &database.films().unprobed(folder.id)?,
@@ -164,7 +165,7 @@ pub fn scan_folder(
     progress.subtitles_to_read = plan.jobs.len();
     sink.report(&progress);
 
-    let written = read_and_write_all(database, &plan.jobs, &probes, sink, progress)?;
+    let written = read_and_write_all(database, &plan.jobs, &films_to_open, sink, progress)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
@@ -184,7 +185,7 @@ pub fn scan_folder(
         cues_indexed: written.cues,
         films_missing,
         tracks_removed: plan.removed.len(),
-        films_probed: probes.len(),
+        films_probed: films_to_open.len(),
         embedded_tracks: written.streams,
         unpaired_subtitles: plan.unpaired,
         films_without_subtitles: films_without_subtitles(
@@ -220,9 +221,9 @@ impl<'a> Names<'a> {
     }
 }
 
-/// One film that needs opening to see what it carries.
+/// One film that needs opening to see what it carries and to read it.
 #[derive(Clone, Debug)]
-struct ProbeJob {
+struct FilmJob {
     film_id: i64,
     path: PathBuf,
     /// The film's own fingerprint, recorded on the tracks found inside it so
@@ -233,18 +234,18 @@ struct ProbeJob {
 
 /// The films worth opening.
 ///
-/// A film that has not changed since it was last looked inside is left shut.
-/// That is what keeps a rescan of a library of Matroska files as cheap as a
-/// rescan of a library of anything else, and it is why the row records when it
-/// was read rather than only what was found.
-fn probes_wanted(films: &[FoundFile], stored: &[Stored], unprobed: &[i64]) -> Vec<ProbeJob> {
+/// A film that has not changed since it was last looked inside is left shut,
+/// and nothing is extracted from it. That is what keeps a rescan of a library
+/// of Matroska files as cheap as a rescan of a library of anything else, and it
+/// is why the row records when it was read rather than only what was found.
+fn films_to_read(films: &[FoundFile], stored: &[Stored], unprobed: &[i64]) -> Vec<FilmJob> {
     let never: HashSet<i64> = unprobed.iter().copied().collect();
 
     films
         .iter()
         .zip(stored)
         .filter(|(_, stored)| stored.changed || never.contains(&stored.id))
-        .map(|(file, stored)| ProbeJob {
+        .map(|(file, stored)| FilmJob {
             film_id: stored.id,
             path: file.path.clone(),
             size_bytes: file.size_bytes,
@@ -423,8 +424,8 @@ struct Parsed<'a> {
 }
 
 struct Probed<'a> {
-    job: &'a ProbeJob,
-    tracks: Vec<StreamTrack>,
+    job: &'a FilmJob,
+    tracks: Vec<EmbeddedTrack>,
 }
 
 /// One piece of reading, of either kind.
@@ -435,20 +436,20 @@ struct Probed<'a> {
 /// and would mean a second set of batches to commit.
 enum Job<'a> {
     Subtitle(&'a TrackJob),
-    Film(&'a ProbeJob),
+    Film(&'a FilmJob),
 }
 
 fn read_and_write_all(
     database: &Database,
     tracks: &[TrackJob],
-    probes: &[ProbeJob],
+    films: &[FilmJob],
     sink: &dyn ProgressSink,
     progress: ScanProgress,
 ) -> Result<Written> {
     let jobs: Vec<Job<'_>> = tracks
         .iter()
         .map(Job::Subtitle)
-        .chain(probes.iter().map(Job::Film))
+        .chain(films.iter().map(Job::Film))
         .collect();
 
     if jobs.is_empty() {
@@ -494,7 +495,7 @@ fn read_and_write(
 fn read_one<'a>(job: &Job<'a>) -> Message<'a> {
     match job {
         Job::Subtitle(job) => parse_one(job),
-        Job::Film(job) => probe_one(job),
+        Job::Film(job) => read_film(job),
     }
 }
 
@@ -512,14 +513,18 @@ fn parse_one(job: &TrackJob) -> Message<'_> {
     }))
 }
 
-/// What one film carries inside it.
+/// What one film carries inside it, and what those tracks say.
 ///
-/// Only the header is read, so this costs a file open and a couple of seeks
-/// however long the film is. A film that is not Matroska, or whose header makes
-/// no sense, reports nothing, which is the same as a film with no subtitles in
-/// it and is treated the same way.
-fn probe_one(job: &ProbeJob) -> Message<'_> {
-    match subtext_container::probe(&job.path) {
+/// This is the expensive one. The header is a few hundred bytes, but reading
+/// the dialogue means stepping over every frame of picture between one line and
+/// the next, which is why it is done once per film and never again while the
+/// file stays as it is.
+///
+/// A film that is not Matroska, or whose header makes no sense, reports
+/// nothing, which is the same as a film with no subtitles in it and is treated
+/// the same way.
+fn read_film(job: &FilmJob) -> Message<'_> {
+    match subtext_container::extract(&job.path) {
         Ok(tracks) => Message::Probed(Probed { job, tracks }),
         Err(_) => Message::Unreadable(job.path.clone()),
     }
@@ -564,7 +569,7 @@ fn write_batches(
     Ok(written)
 }
 
-/// Records what a batch of films turned out to carry.
+/// Records what a batch of films turned out to carry, and what it says.
 ///
 /// A film with nothing in it is written too. Being looked inside and found to
 /// hold nothing is an answer, and it is the one that stops the film being
@@ -578,35 +583,41 @@ fn flush_probed(
         return Ok(());
     }
 
-    let films: Vec<(i64, Vec<NewTrack<'_>>)> = batch
+    let films: Vec<FilmStreams<'_>> = batch
         .iter()
         .map(|film| {
             let tracks = film
                 .tracks
                 .iter()
-                .map(|track| stream_track(film.job, track))
+                .map(|found| stream_track(film.job, found))
                 .collect();
             (film.job.film_id, tracks)
         })
         .collect();
 
     written.streams += database.tracks().write_streams(&films)?;
-    batch.clear();
+    for film in batch.drain(..) {
+        written.cues += film
+            .tracks
+            .iter()
+            .map(|found| found.cues.len())
+            .sum::<usize>();
+    }
     Ok(())
 }
 
-/// One track inside a film, as a row.
-fn stream_track<'a>(job: &'a ProbeJob, track: &StreamTrack) -> NewTrack<'a> {
-    NewTrack {
+/// One track inside a film, as a row and the lines under it.
+fn stream_track<'a>(job: &'a FilmJob, found: &'a EmbeddedTrack) -> StreamEntry<'a> {
+    let track = NewTrack {
         film_id: job.film_id,
         path: &job.path,
         origin: TrackOrigin::Stream,
-        stream_number: track.number,
-        codec: track.codec.as_str(),
+        stream_number: found.track.number,
+        codec: found.track.codec.as_str(),
         label: SubtitleLabel {
-            language: track.language,
-            forced: track.forced,
-            hearing_impaired: track.hearing_impaired,
+            language: found.track.language,
+            forced: found.track.forced,
+            hearing_impaired: found.track.hearing_impaired,
         },
         // A track inside a film belongs to it by construction, which is a
         // stronger statement than any pairing of names could make.
@@ -618,7 +629,9 @@ fn stream_track<'a>(job: &'a ProbeJob, track: &StreamTrack) -> NewTrack<'a> {
         // has no existence apart from the file it was read out of.
         size_bytes: job.size_bytes,
         modified_at: job.modified_at,
-    }
+    };
+
+    (track, found.cues.as_slice())
 }
 
 fn flush(database: &Database, batch: &mut Vec<Parsed<'_>>, written: &mut Written) -> Result<()> {

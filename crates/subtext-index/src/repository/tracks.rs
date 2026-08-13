@@ -8,7 +8,9 @@ use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 use crate::clock::now_millis;
 use crate::database::Database;
 use crate::error::Result;
-use crate::model::{NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, TrackRecord};
+use crate::model::{
+    FilmStreams, NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, TrackRecord,
+};
 use crate::repository::{count_to_sql, from_sql_count, from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, film_id, path, language, forced, hearing_impaired, \
@@ -76,7 +78,8 @@ impl<'a> Tracks<'a> {
         })
     }
 
-    /// Records the tracks found inside a batch of films, in one transaction.
+    /// Records the tracks found inside a batch of films, and their dialogue,
+    /// in one transaction.
     ///
     /// Each film's list replaces whatever was recorded for it before: a track
     /// the film no longer carries is taken away, and one it still carries keeps
@@ -84,13 +87,13 @@ impl<'a> Tracks<'a> {
     /// it. A film that was looked inside and found to carry nothing is passed
     /// with an empty list, which is how a film that lost its tracks is cleared.
     ///
-    /// No cues. A probe reads a header and says what is in the file; reading
-    /// the dialogue out of it is a separate piece of work.
+    /// A track of pictures comes with no cues, since nothing turns those into
+    /// words, and is recorded so that it can be named rather than read.
     ///
     /// Recording what a film carries also records that it was looked inside,
     /// in the same transaction, so a scan that stopped half way through does
     /// not leave a film marked as read with nothing to show for it.
-    pub fn write_streams(&self, films: &[(i64, Vec<NewTrack<'_>>)]) -> Result<usize> {
+    pub fn write_streams(&self, films: &[FilmStreams<'_>]) -> Result<usize> {
         if films.is_empty() {
             return Ok(0);
         }
@@ -100,11 +103,22 @@ impl<'a> Tracks<'a> {
             let transaction = connection.transaction()?;
             let mut written = 0;
             for (film_id, tracks) in films {
-                for track in tracks {
-                    upsert_one(&transaction, track)?;
+                for (track, cues) in tracks {
+                    let stored = upsert_one(&transaction, track)?;
+                    // Written whether or not the row itself changed. A film is
+                    // only looked inside when it is new or has been replaced,
+                    // so there is nothing to save by comparing, and a row that
+                    // was recorded before there was any reading of dialogue
+                    // would otherwise keep its empty transcript for ever.
+                    replace_cues_on(&transaction, stored.id, cues)?;
                     written += 1;
                 }
-                remove_other_streams(&transaction, *film_id, tracks)?;
+
+                let numbers: Vec<u64> = tracks
+                    .iter()
+                    .map(|(track, _)| track.stream_number)
+                    .collect();
+                remove_other_streams(&transaction, *film_id, &numbers)?;
                 transaction
                     .prepare_cached("UPDATE film SET probed_at = ?2 WHERE id = ?1")?
                     .execute(params![film_id, at])?;
@@ -367,19 +381,11 @@ fn upsert_one(connection: &Connection, track: &NewTrack<'_>) -> Result<Stored> {
 /// A film re-encoded with fewer subtitles is the case this exists for. The
 /// numbers that are still there are named rather than the ones that have gone,
 /// since the probe knows the first and would have to work out the second.
-fn remove_other_streams(
-    connection: &Connection,
-    film_id: i64,
-    keeping: &[NewTrack<'_>],
-) -> Result<()> {
+fn remove_other_streams(connection: &Connection, film_id: i64, keeping: &[u64]) -> Result<()> {
     // A number no container gives a track, so a film that turned out to carry
     // none still leaves a list that parses and takes all of them away.
     let kept = std::iter::once("0".to_owned())
-        .chain(
-            keeping
-                .iter()
-                .map(|track| to_sql_int(track.stream_number).to_string()),
-        )
+        .chain(keeping.iter().map(|number| to_sql_int(*number).to_string()))
         .collect::<Vec<_>>()
         .join(", ");
 
