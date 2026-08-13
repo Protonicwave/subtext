@@ -7,8 +7,11 @@
 //! of code, it says exactly what each fixture contains, and the scanner's tests
 //! need the same thing a folder at a time.
 //!
-//! This writes headers only. There is no picture, no sound and no dialogue in
-//! anything it produces, which is all a probe of the header has any use for.
+//! A container with no dialogue in it is a header and nothing else, which is
+//! all a probe has any use for. Adding dialogue writes real clusters holding
+//! real blocks, since reading those back is the other half of what the crate
+//! does, and filler can be written alongside them so that a fixture costs the
+//! reader what a film costs it.
 
 /// The elements a fixture is built from.
 const EBML_HEADER: u32 = 0x1A45_DFA3;
@@ -22,6 +25,11 @@ const INFO: u32 = 0x1549_A966;
 const TIMESTAMP_SCALE: u32 = 0x002A_D7B1;
 const VOID: u32 = 0xEC;
 const CLUSTER: u32 = 0x1F43_B675;
+const TIMESTAMP: u32 = 0xE7;
+const SIMPLE_BLOCK: u32 = 0xA3;
+const BLOCK_GROUP: u32 = 0xA0;
+const BLOCK: u32 = 0xA1;
+const BLOCK_DURATION: u32 = 0x9B;
 const TRACKS: u32 = 0x1654_AE6B;
 const TRACK_ENTRY: u32 = 0xAE;
 const TRACK_NUMBER: u32 = 0xD7;
@@ -36,6 +44,21 @@ const FLAG_HEARING_IMPAIRED: u32 = 0x55AB;
 const VIDEO: u64 = 1;
 const AUDIO: u64 = 2;
 const SUBTITLE: u64 = 17;
+
+/// What one unit of a timestamp is worth in nanoseconds unless a fixture says
+/// otherwise, which is a millisecond.
+const DEFAULT_SCALE: u64 = 1_000_000;
+
+/// How many lines share a cluster.
+///
+/// Real files cut a cluster every few seconds, so a line's timing is the
+/// cluster's timestamp plus an offset rather than either on its own. Grouping
+/// them here is what makes a fixture exercise that arithmetic.
+const LINES_PER_CLUSTER: usize = 8;
+
+/// The furthest a block can be written from its cluster's timestamp, which is
+/// as far as a signed two byte offset reaches.
+const MAX_OFFSET: u64 = 32_767;
 
 /// One track in a fixture.
 #[derive(Clone, Debug)]
@@ -129,14 +152,63 @@ impl Entry {
     }
 }
 
-/// A Matroska file, as far as its header goes.
-#[derive(Clone, Debug, Default)]
+/// One line of dialogue in a fixture, and when it is on screen.
+#[derive(Clone, Debug)]
+pub struct Line {
+    track: u64,
+    start_ms: u64,
+    end_ms: u64,
+    payload: String,
+}
+
+impl Line {
+    /// A line of the given track, on screen between the two times.
+    ///
+    /// The payload is written into the block as it stands, so a fixture of
+    /// substation alpha dialogue passes the whole comma separated record and
+    /// one of plain text passes the words. Which of the two a reader should
+    /// expect is the track's codec identifier, not anything written here.
+    #[must_use]
+    pub fn new(track: u64, start_ms: u64, end_ms: u64, payload: &str) -> Self {
+        Self {
+            track,
+            start_ms,
+            end_ms,
+            payload: payload.to_owned(),
+        }
+    }
+}
+
+/// A Matroska file.
+#[derive(Clone, Debug)]
 pub struct Container {
     entries: Vec<Entry>,
     seek_head: bool,
     padding: usize,
     cluster: Option<u64>,
     tracks_after_cluster: bool,
+    lines: Vec<Line>,
+    durations: bool,
+    scale: u64,
+    /// A track number, how many filler blocks each cluster carries, and how
+    /// large each of them is.
+    picture: Option<(u64, usize, usize)>,
+}
+
+impl Default for Container {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            seek_head: false,
+            padding: 0,
+            cluster: None,
+            tracks_after_cluster: false,
+            lines: Vec::new(),
+            durations: true,
+            scale: DEFAULT_SCALE,
+            picture: None,
+        }
+    }
 }
 
 impl Container {
@@ -182,6 +254,40 @@ impl Container {
         self
     }
 
+    /// The dialogue the film carries, written as blocks in real clusters.
+    #[must_use]
+    pub fn with_dialogue(mut self, lines: Vec<Line>) -> Self {
+        self.lines = lines;
+        self
+    }
+
+    /// Writes the lines as simple blocks, which have nowhere to say how long a
+    /// line stays on screen.
+    #[must_use]
+    pub fn without_durations(mut self) -> Self {
+        self.durations = false;
+        self
+    }
+
+    /// What one unit of every timestamp in the file is worth, in nanoseconds.
+    #[must_use]
+    pub fn with_timestamp_scale(mut self, nanos: u64) -> Self {
+        self.scale = nanos;
+        self
+    }
+
+    /// Filler blocks of the given track in every cluster, standing in for the
+    /// picture and sound a film carries between one line and the next.
+    ///
+    /// What this is for is cost rather than content: a reader of dialogue has
+    /// to step over all of it, and a fixture with none of it would let a reader
+    /// that read every block wholesale look as quick as one that did not.
+    #[must_use]
+    pub fn with_picture(mut self, track: u64, blocks: usize, bytes: usize) -> Self {
+        self.picture = Some((track, blocks, bytes));
+        self
+    }
+
     /// The file, as bytes.
     ///
     /// A declared cluster is counted in the Segment's length without being
@@ -212,13 +318,14 @@ impl Container {
         if self.padding > 0 {
             body.extend(element(VOID, &vec![0; self.padding]));
         }
-        body.extend(element(INFO, &uint(TIMESTAMP_SCALE, 1_000_000)));
+        body.extend(element(INFO, &uint(TIMESTAMP_SCALE, self.scale)));
         if self.tracks_after_cluster {
             body.extend(element(CLUSTER, &[]));
         }
 
         let tracks_at = head_length + body.len();
         body.extend(element(TRACKS, &self.tracks()));
+        body.extend(self.clusters());
         if let Some(size) = self.cluster {
             body.extend(header(CLUSTER, size));
         }
@@ -234,6 +341,117 @@ impl Container {
     fn tracks(&self) -> Vec<u8> {
         self.entries.iter().flat_map(Entry::bytes).collect()
     }
+
+    /// Writes the film out one cluster at a time.
+    ///
+    /// The Segment's length is left unsaid, which is legal and is what a file
+    /// still being written carries, so that a fixture can be produced without
+    /// first being held in memory. That is what makes a film of several
+    /// gigabytes something a benchmark can measure against.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the writer reports.
+    pub fn write_to(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
+        out.write_all(&element(EBML_HEADER, &text(DOC_TYPE, "matroska")))?;
+        out.write_all(&id_bytes(SEGMENT))?;
+        out.write_all(&[0xFF])?;
+        out.write_all(&element(INFO, &uint(TIMESTAMP_SCALE, self.scale)))?;
+        out.write_all(&element(TRACKS, &self.tracks()))?;
+
+        let (lines, groups) = self.cut();
+        for (base, from, to) in groups {
+            out.write_all(&self.cluster(base, &lines[from..to]))?;
+        }
+        Ok(())
+    }
+
+    /// The dialogue, cut into clusters the way a muxer cuts it.
+    fn clusters(&self) -> Vec<u8> {
+        let (lines, groups) = self.cut();
+        groups
+            .into_iter()
+            .flat_map(|(base, from, to)| self.cluster(base, &lines[from..to]))
+            .collect()
+    }
+
+    /// Where the clusters fall: the lines in order, and for each cluster the
+    /// timestamp it carries and the lines it holds.
+    ///
+    /// A new cluster is started once it holds enough lines, and also once a
+    /// line is far enough past the cluster's timestamp that the two byte offset
+    /// in a block could not reach it, which is the reason real files cut them
+    /// at all.
+    fn cut(&self) -> (Vec<Line>, Vec<(u64, usize, usize)>) {
+        let mut lines = self.lines.clone();
+        lines.sort_by_key(|line| line.start_ms);
+
+        let mut groups = Vec::new();
+        let mut at = 0;
+        while at < lines.len() {
+            let base = self.units(lines[at].start_ms);
+            let mut end = at + 1;
+            while end < lines.len()
+                && end - at < LINES_PER_CLUSTER
+                && self.units(lines[end].start_ms).saturating_sub(base) <= MAX_OFFSET
+            {
+                end += 1;
+            }
+            groups.push((base, at, end));
+            at = end;
+        }
+
+        (lines, groups)
+    }
+
+    fn cluster(&self, base: u64, lines: &[Line]) -> Vec<u8> {
+        let mut body = uint(TIMESTAMP, base);
+
+        if let Some((track, blocks, bytes)) = self.picture {
+            for _ in 0..blocks {
+                body.extend(element(SIMPLE_BLOCK, &block(track, 0, &vec![0; bytes])));
+            }
+        }
+
+        for line in lines {
+            let offset =
+                i16::try_from(self.units(line.start_ms).saturating_sub(base)).unwrap_or(i16::MAX);
+            let written = block(line.track, offset, line.payload.as_bytes());
+
+            if self.durations {
+                let mut group = element(BLOCK, &written);
+                let length = self
+                    .units(line.end_ms)
+                    .saturating_sub(self.units(line.start_ms));
+                group.extend(uint(BLOCK_DURATION, length));
+                body.extend(element(BLOCK_GROUP, &group));
+            } else {
+                body.extend(element(SIMPLE_BLOCK, &written));
+            }
+        }
+
+        element(CLUSTER, &body)
+    }
+
+    /// A time in milliseconds, in the unit this file counts in.
+    fn units(&self, millis: u64) -> u64 {
+        millis
+            .saturating_mul(1_000_000)
+            .checked_div(self.scale)
+            .unwrap_or_default()
+    }
+}
+
+/// A block's payload: which track it belongs to, how far it is from its
+/// cluster's timestamp, a byte of flags, and then the content.
+fn block(track: u64, offset: i16, payload: &[u8]) -> Vec<u8> {
+    // A track number is written the way a length is, so the same code writes
+    // both. What differs is only what the number means.
+    let mut bytes = size_bytes(track);
+    bytes.extend(offset.to_be_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(payload);
+    bytes
 }
 
 /// An index pointing at the tracks, `at` bytes into the Segment.

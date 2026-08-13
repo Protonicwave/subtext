@@ -120,6 +120,23 @@ impl<R: Read + Seek> Reader<R> {
         Some(bytes)
     }
 
+    /// The first bytes of an element's payload, however large the element is.
+    ///
+    /// A block says which track it belongs to in its first few bytes and then
+    /// carries a frame of picture. Reading that much of one is what lets the
+    /// rest be stepped over unread.
+    pub(crate) fn prefix(&mut self, element: Element, most: usize) -> Option<Vec<u8>> {
+        let size = usize::try_from(element.size())
+            .unwrap_or(usize::MAX)
+            .min(most);
+        self.seek_to(element.start)?;
+
+        let mut bytes = vec![0; size];
+        self.source.read_exact(&mut bytes).ok()?;
+        self.at += size as u64;
+        Some(bytes)
+    }
+
     pub(crate) fn seek_to(&mut self, to: u64) -> Option<()> {
         if to > self.length {
             return None;
@@ -199,6 +216,22 @@ fn data_mask(width: u32) -> u8 {
     u8::try_from(0x00FF_u16 >> width).unwrap_or_default()
 }
 
+/// A variable length integer at the start of a slice, and the bytes it took.
+///
+/// The same encoding a length is written in, and read the same way, but this is
+/// a value rather than a size: a block's track number is written like this, and
+/// all data bits set is the number it looks like rather than a refusal to say.
+pub(crate) fn vint(bytes: &[u8]) -> Option<(u64, usize)> {
+    let first = *bytes.first()?;
+    let width = width_of(first, 8)?;
+
+    let mut value = u64::from(first & data_mask(width));
+    for at in 1..width as usize {
+        value = (value << 8) | u64::from(*bytes.get(at)?);
+    }
+    Some((value, width as usize))
+}
+
 /// The children of a payload already in memory, as identifiers and bytes.
 ///
 /// Elements inside a header are small and few, and reading them from a slice
@@ -263,7 +296,7 @@ mod tests {
 
     use std::io::Cursor;
 
-    use super::{Element, Reader, Size, as_flag, as_text, as_uint, data_mask, width_of};
+    use super::{Element, Reader, Size, as_flag, as_text, as_uint, data_mask, vint, width_of};
 
     fn reader(bytes: &[u8]) -> Reader<Cursor<Vec<u8>>> {
         Reader::open(Cursor::new(bytes.to_vec())).unwrap()
@@ -365,6 +398,32 @@ mod tests {
             end: super::MAX_PAYLOAD + 1,
         };
         assert_eq!(reader.payload(huge), None);
+    }
+
+    #[test]
+    fn a_prefix_is_taken_however_large_the_element_claims_to_be() {
+        let mut reader = reader(&[1, 2, 3, 4, 5]);
+        let element = Element {
+            id: 0xA3,
+            start: 0,
+            end: 5,
+        };
+        assert_eq!(reader.prefix(element, 3), Some(vec![1, 2, 3]));
+        // An element shorter than the prefix asked for gives what it has.
+        assert_eq!(reader.prefix(element, 9), Some(vec![1, 2, 3, 4, 5]));
+    }
+
+    #[test]
+    fn a_variable_length_value_keeps_the_number_it_was_written_as() {
+        assert_eq!(vint(&[0x81]), Some((1, 1)));
+        assert_eq!(vint(&[0x40, 0x01]), Some((1, 2)));
+        // All data bits set, which is a length that says nothing and a track
+        // number that says one hundred and twenty seven.
+        assert_eq!(vint(&[0xFF]), Some((127, 1)));
+
+        assert_eq!(vint(&[0x00]), None);
+        assert_eq!(vint(&[0x40]), None);
+        assert_eq!(vint(&[]), None);
     }
 
     #[test]

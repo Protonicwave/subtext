@@ -13,6 +13,11 @@ pub(crate) const SEEK: u32 = 0x4DBB;
 pub(crate) const SEEK_ID: u32 = 0x53AB;
 pub(crate) const SEEK_POSITION: u32 = 0x53AC;
 
+/// What the film says about itself, of which one field matters here.
+pub(crate) const INFO: u32 = 0x1549_A966;
+/// How many nanoseconds one unit of every timestamp in the file is.
+pub(crate) const TIMESTAMP_SCALE: u32 = 0x002A_D7B1;
+
 /// The tracks, and what each of them says it is.
 pub(crate) const TRACKS: u32 = 0x1654_AE6B;
 pub(crate) const TRACK_ENTRY: u32 = 0xAE;
@@ -25,8 +30,15 @@ pub(crate) const FLAG_DEFAULT: u32 = 0x88;
 pub(crate) const FLAG_FORCED: u32 = 0x55AA;
 pub(crate) const FLAG_HEARING_IMPAIRED: u32 = 0x55AB;
 
-/// The frames, which everything a file says about itself comes before.
+/// The frames themselves, which everything a file says about itself comes
+/// before. They are grouped into clusters that each carry a timestamp the
+/// blocks inside them are counted from.
 pub(crate) const CLUSTER: u32 = 0x1F43_B675;
+pub(crate) const TIMESTAMP: u32 = 0xE7;
+pub(crate) const SIMPLE_BLOCK: u32 = 0xA3;
+pub(crate) const BLOCK_GROUP: u32 = 0xA0;
+pub(crate) const BLOCK: u32 = 0xA1;
+pub(crate) const BLOCK_DURATION: u32 = 0x9B;
 
 /// The track type subtitles are declared under.
 pub(crate) const SUBTITLE: u64 = 0x11;
