@@ -180,6 +180,11 @@ impl Line {
 }
 
 /// A Matroska file.
+///
+/// The flags are the awkward shapes a file can take, each of them one a reader
+/// has to cope with. They are independent of one another and a fixture picks
+/// whichever it is about, which is what a builder is for.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug)]
 pub struct Container {
     entries: Vec<Entry>,
@@ -189,6 +194,7 @@ pub struct Container {
     tracks_after_cluster: bool,
     lines: Vec<Line>,
     durations: bool,
+    unbounded_clusters: bool,
     scale: u64,
     /// A track number, how many filler blocks each cluster carries, and how
     /// large each of them is.
@@ -205,6 +211,7 @@ impl Default for Container {
             tracks_after_cluster: false,
             lines: Vec::new(),
             durations: true,
+            unbounded_clusters: false,
             scale: DEFAULT_SCALE,
             picture: None,
         }
@@ -258,6 +265,15 @@ impl Container {
     #[must_use]
     pub fn with_dialogue(mut self, lines: Vec<Line>) -> Self {
         self.lines = lines;
+        self
+    }
+
+    /// Writes the clusters with no length at all, which is legal, and is what a
+    /// file being recorded as it is written carries: each one runs until the
+    /// next begins.
+    #[must_use]
+    pub fn with_unbounded_clusters(mut self) -> Self {
+        self.unbounded_clusters = true;
         self
     }
 
@@ -430,7 +446,15 @@ impl Container {
             }
         }
 
-        element(CLUSTER, &body)
+        if !self.unbounded_clusters {
+            return element(CLUSTER, &body);
+        }
+        // A length of all ones, which says nothing about how far the cluster
+        // runs.
+        let mut bytes = id_bytes(CLUSTER);
+        bytes.push(0xFF);
+        bytes.extend(body);
+        bytes
     }
 
     /// A time in milliseconds, in the unit this file counts in.

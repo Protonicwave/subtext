@@ -230,6 +230,30 @@ fn dialogue_is_found_among_the_picture_it_is_muxed_with() {
     assert_eq!(lines(&read(&container), 3), ["Hello there", "and goodbye"]);
 }
 
+/// A file recorded as it was written, where no cluster knows how long it is
+/// until the next one starts.
+#[test]
+fn clusters_with_no_length_do_not_swallow_the_ones_after_them() {
+    let bounded = film();
+    let unbounded = film().with_unbounded_clusters();
+
+    let lines: Vec<String> = read(&bounded)[0]
+        .cues
+        .iter()
+        .map(|cue| cue.text.clone())
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines, lines_of(&read(&unbounded)));
+}
+
+/// The text of every cue of the first track, for comparing two readings.
+fn lines_of(tracks: &[EmbeddedTrack]) -> Vec<String> {
+    tracks
+        .first()
+        .map(|track| track.cues.iter().map(|cue| cue.text.clone()).collect())
+        .unwrap_or_default()
+}
+
 #[test]
 fn a_film_with_no_dialogue_in_it_reads_as_none() {
     let container = Container::new(vec![

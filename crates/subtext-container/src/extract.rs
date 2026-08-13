@@ -234,21 +234,26 @@ fn walk<R: Read + Seek>(
         let Some(child) = reader.element(segment.end) else {
             return;
         };
-        at = child.end;
-
-        if child.id == ids::CLUSTER {
-            cluster(reader, child, scale, wanted);
-        }
+        at = if child.id == ids::CLUSTER {
+            cluster(reader, child, scale, wanted)
+        } else {
+            child.end
+        };
     }
 }
 
 /// One cluster: a timestamp everything in it is counted from, and the blocks.
+///
+/// Reports where the cluster turned out to end, which is not always where its
+/// header said. A cluster written with no length runs to whatever comes next,
+/// and what comes next is the following cluster, so the file's own claim would
+/// swallow the rest of the film and the dialogue in it.
 fn cluster<R: Read + Seek>(
     reader: &mut Reader<R>,
     cluster: Element,
     scale: u64,
     wanted: &mut [Reading],
-) {
+) -> u64 {
     // The specification puts the timestamp first, before any block that is
     // counted from it. A cluster that does not say has one of nothing, which is
     // what a file with a single cluster means anyway.
@@ -256,11 +261,12 @@ fn cluster<R: Read + Seek>(
     let mut at = cluster.start;
 
     while at < cluster.end {
+        let began = at;
         if reader.seek_to(at).is_none() {
-            return;
+            return cluster.end;
         }
         let Some(child) = reader.element(cluster.end) else {
-            return;
+            return cluster.end;
         };
         at = child.end;
 
@@ -268,9 +274,14 @@ fn cluster<R: Read + Seek>(
             ids::TIMESTAMP => base = uint_of(reader, child).unwrap_or(base),
             ids::SIMPLE_BLOCK => block(reader, child, base, None, scale, wanted),
             ids::BLOCK_GROUP => group(reader, child, base, scale, wanted),
+            // The next cluster, which this one only appears to contain. It
+            // begins where its header does, which is where this stopped.
+            ids::CLUSTER => return began,
             _ => {}
         }
     }
+
+    cluster.end
 }
 
 /// A block and the length the file gives it.
