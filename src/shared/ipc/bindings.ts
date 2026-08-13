@@ -516,10 +516,42 @@ export type SnippetPart = {
 /**  Which step of a scan is running. */
 export type StageView = "discovering" | "pairing" | "indexing" | "finished";
 
-/**  A subtitle file paired with a film. */
+/**
+ *  What a track is made of, which is what decides whether it can be read.
+ * 
+ *  The codec itself does not cross the boundary. Everything a screen has to say
+ *  about a track comes down to these three cases, and sending the name instead
+ *  would mean the front end keeping its own list of which codecs are which.
+ */
+export type TrackFormView = 
+/**  Dialogue, which becomes a transcript and lines in the search index. */
+"text" | 
+/**
+ *  Images of dialogue, as Blu-ray discs and DVDs carry. Naming them is as
+ *  far as this goes: reading them would mean optical character
+ *  recognition, a large dependency and an accuracy figure nothing else
+ *  here has to apologise for.
+ */
+"pictures" | 
+/**  Something this build has no name for. */
+"unrecognised";
+
+/**  Whether a track is a file beside the film or a stream inside it. */
+export type TrackOriginView = "sidecar" | "stream";
+
+/**  A subtitle track of a film, whether beside it or inside it. */
 export type TrackView = {
 	id: Id,
 	path: string,
+	origin: TrackOriginView,
+	/**
+	 *  The number the container knows the track by, which is what tells two
+	 *  tracks of one film apart when they say the same thing about themselves.
+	 *  Zero for a subtitle file.
+	 */
+	streamNumber: number,
+	/**  Whether the dialogue in this track can be read. */
+	form: TrackFormView,
 	language: string | null,
 	forced: boolean,
 	hearingImpaired: boolean,

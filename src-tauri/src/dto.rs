@@ -9,10 +9,11 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
+use subtext_container::SubtitleCodec;
 use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 use subtext_index::{
     CueHit, FilmHits, FilmRecord, MATCH_END, MATCH_START, PlaybackPosition, SearchResults,
-    TrackMatch, TrackRecord, WatchedFolder,
+    TrackMatch, TrackOrigin, TrackRecord, WatchedFolder,
 };
 use subtext_scan::{ScanOutcome, ScanProgress, ScanStage};
 use tauri_specta::Event;
@@ -151,12 +152,19 @@ impl FilmView {
     }
 }
 
-/// A subtitle file paired with a film.
+/// A subtitle track of a film, whether beside it or inside it.
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TrackView {
     pub(crate) id: Id,
     pub(crate) path: String,
+    pub(crate) origin: TrackOriginView,
+    /// The number the container knows the track by, which is what tells two
+    /// tracks of one film apart when they say the same thing about themselves.
+    /// Zero for a subtitle file.
+    pub(crate) stream_number: u32,
+    /// Whether the dialogue in this track can be read.
+    pub(crate) form: TrackFormView,
     pub(crate) language: Option<String>,
     pub(crate) forced: bool,
     pub(crate) hearing_impaired: bool,
@@ -175,6 +183,9 @@ impl TrackView {
         Self {
             id: Id::of(track.id),
             path: track.path.display().to_string(),
+            origin: TrackOriginView::of(track.origin),
+            stream_number: u32::try_from(track.stream_number).unwrap_or_default(),
+            form: TrackFormView::of(&track.codec),
             language: track.language,
             forced: track.forced,
             hearing_impaired: track.hearing_impaired,
@@ -213,6 +224,55 @@ impl CorrectionView {
     /// brought back into it.
     pub(crate) fn wanted(self) -> Correction {
         Correction::new(self.offset_ms, self.rate)
+    }
+}
+
+/// Whether a track is a file beside the film or a stream inside it.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum TrackOriginView {
+    Sidecar,
+    Stream,
+}
+
+impl TrackOriginView {
+    fn of(origin: TrackOrigin) -> Self {
+        match origin {
+            TrackOrigin::Sidecar => Self::Sidecar,
+            TrackOrigin::Stream => Self::Stream,
+        }
+    }
+}
+
+/// What a track is made of, which is what decides whether it can be read.
+///
+/// The codec itself does not cross the boundary. Everything a screen has to say
+/// about a track comes down to these three cases, and sending the name instead
+/// would mean the front end keeping its own list of which codecs are which.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum TrackFormView {
+    /// Dialogue, which becomes a transcript and lines in the search index.
+    Text,
+    /// Images of dialogue, as Blu-ray discs and DVDs carry. Naming them is as
+    /// far as this goes: reading them would mean optical character
+    /// recognition, a large dependency and an accuracy figure nothing else
+    /// here has to apologise for.
+    Pictures,
+    /// Something this build has no name for.
+    Unrecognised,
+}
+
+impl TrackFormView {
+    fn of(codec: &str) -> Self {
+        let codec = SubtitleCodec::from_stored(codec);
+        if codec.is_text() {
+            return Self::Text;
+        }
+        if codec.is_bitmap() {
+            return Self::Pictures;
+        }
+        Self::Unrecognised
     }
 }
 

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { FilmView, Id, TrackView } from '@/shared/ipc/bindings';
 import { ANY_LANGUAGE } from '@/shared/media/languages';
-import { activeTrackOf, defaultTrackOf, trackNameOf, trackNoteOf } from './tracks';
+import {
+  activeTrackOf,
+  defaultTrackOf,
+  readableTracksOf,
+  trackNameOf,
+  trackNoteOf,
+  trackProblemOf,
+} from './tracks';
 
 function track(id: Id, changes: Partial<TrackView> = {}): TrackView {
   return {
@@ -10,6 +17,9 @@ function track(id: Id, changes: Partial<TrackView> = {}): TrackView {
     language: null,
     forced: false,
     hearingImpaired: false,
+    origin: 'sidecar',
+    streamNumber: 0,
+    form: 'text',
     matchKind: 'exact',
     cueCount: 900,
     correction: { offsetMs: 0, rate: 1 },
@@ -126,6 +136,37 @@ describe('the track a film is watched with', () => {
   });
 });
 
+describe('the tracks worth offering', () => {
+  it('leaves out the ones nothing can be read from', () => {
+    const text = track(1, { language: 'en' });
+    const pictures = track(2, { language: 'en', form: 'pictures' });
+    const unknown = track(3, { language: 'en', form: 'unrecognised' });
+
+    expect(readableTracksOf([text, pictures, unknown])).toEqual([text]);
+  });
+
+  /*
+   * A track found inside a film before its lines have been read out of it. It
+   * is in the library and it says nothing, so a menu offering it would be a
+   * menu whose entries draw an empty screen.
+   */
+  it('leaves out a track with no lines in it yet', () => {
+    const empty = track(1, { language: 'en', origin: 'stream', cueCount: 0 });
+    expect(readableTracksOf([empty])).toEqual([]);
+  });
+
+  it('is what the rule and the choice both work from', () => {
+    const pictures = track(1, { language: 'en', form: 'pictures' });
+    const text = track(2, { language: 'de' });
+
+    expect(defaultTrackOf([pictures, text], 'en')).toBe(pictures);
+    // The rule would take the English one. It cannot be read, so the film is
+    // watched with the one that can.
+    expect(activeTrackOf(film([pictures, text]), 'en')).toBe(text);
+    expect(activeTrackOf(film([pictures, text], { chosenTrackId: 1 }), 'en')).toBe(text);
+  });
+});
+
 describe('describing a track', () => {
   it('names the language it is in', () => {
     expect(trackNameOf(track(1, { language: 'en' }))).toBe('English');
@@ -133,6 +174,30 @@ describe('describing a track', () => {
 
   it('names an unlabelled track after its file', () => {
     expect(trackNameOf(track(1, { path: '/films/Heat.1995.srt' }))).toBe('Heat.1995.srt');
+  });
+
+  /*
+   * A track inside a film has no file name of its own, and several of them can
+   * say the same thing about themselves, so the number is what tells them
+   * apart.
+   */
+  it('names an unlabelled track inside a film after its number', () => {
+    expect(trackNameOf(track(1, { origin: 'stream', streamNumber: 3 }))).toBe('Track 3');
+  });
+
+  it('says where a track came from when it came from inside the film', () => {
+    expect(trackNoteOf(track(1, { origin: 'stream' }))).toBe('Inside the film');
+    expect(trackNoteOf(track(1, { origin: 'stream', forced: true }))).toBe(
+      'Inside the film · Forced',
+    );
+  });
+
+  it('says why a track cannot be read, where it cannot', () => {
+    expect(trackProblemOf(track(1))).toBeNull();
+    expect(trackProblemOf(track(1, { form: 'pictures' }))).toBe('Pictures, not text');
+    expect(trackProblemOf(track(1, { form: 'unrecognised' }))).toBe(
+      'Not a subtitle format Subtext reads',
+    );
   });
 
   it('says what a track is for, where it is for anything in particular', () => {
