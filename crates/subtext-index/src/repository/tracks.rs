@@ -5,6 +5,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 
+use crate::clock::now_millis;
 use crate::database::Database;
 use crate::error::Result;
 use crate::model::{NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, TrackRecord};
@@ -85,11 +86,16 @@ impl<'a> Tracks<'a> {
     ///
     /// No cues. A probe reads a header and says what is in the file; reading
     /// the dialogue out of it is a separate piece of work.
+    ///
+    /// Recording what a film carries also records that it was looked inside,
+    /// in the same transaction, so a scan that stopped half way through does
+    /// not leave a film marked as read with nothing to show for it.
     pub fn write_streams(&self, films: &[(i64, Vec<NewTrack<'_>>)]) -> Result<usize> {
         if films.is_empty() {
             return Ok(0);
         }
 
+        let at = now_millis();
         self.database.with(|connection| {
             let transaction = connection.transaction()?;
             let mut written = 0;
@@ -99,6 +105,9 @@ impl<'a> Tracks<'a> {
                     written += 1;
                 }
                 remove_other_streams(&transaction, *film_id, tracks)?;
+                transaction
+                    .prepare_cached("UPDATE film SET probed_at = ?2 WHERE id = ?1")?
+                    .execute(params![film_id, at])?;
             }
             transaction.commit()?;
             Ok(written)

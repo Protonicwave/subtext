@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 notify = "8.2.0"
 rayon = "1.12.0"
+subtext-container.workspace = true
 subtext-core.workspace = true
 subtext-index.workspace = true
 walkdir = "2.5.0"

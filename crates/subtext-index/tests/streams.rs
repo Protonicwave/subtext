@@ -211,7 +211,13 @@ fn a_film_is_looked_inside_once_and_then_left_alone() {
     let unprobed = library.database.films().unprobed(folder).unwrap();
     assert_eq!(unprobed.len(), 2);
 
-    library.database.films().mark_probed(&[first]).unwrap();
+    // Recording what a film carries is what records that it was looked inside,
+    // even where the answer was nothing.
+    library
+        .database
+        .tracks()
+        .write_streams(&[(first, Vec::new())])
+        .unwrap();
     assert_eq!(
         library.database.films().unprobed(folder).unwrap(),
         vec![second]

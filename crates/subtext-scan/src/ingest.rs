@@ -14,8 +14,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use subtext_container::{StreamTrack, SubtitleCodec};
 use subtext_core::{Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, pair_with, parse_srt};
-use subtext_index::{Database, NewFilm, NewTrack, Stored, TrackMatch, TrackPairing, WatchedFolder};
+use subtext_index::{
+    Database, NewFilm, NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, WatchedFolder,
+};
 
 use crate::error::{Error, Result};
 use crate::progress::{ProgressSink, ScanProgress, ScanStage};
@@ -60,6 +63,10 @@ pub struct ScanOutcome {
     pub cues_indexed: usize,
     pub films_missing: usize,
     pub tracks_removed: usize,
+    /// Films opened to see what subtitle tracks they carry.
+    pub films_probed: usize,
+    /// Subtitle tracks found inside those films.
+    pub embedded_tracks: usize,
     /// Subtitle files that belong to no film, which the import sheet offers to
     /// attach by hand.
     pub unpaired_subtitles: Vec<PathBuf>,
@@ -132,6 +139,12 @@ pub fn scan_folder(
         .collect();
     let films_missing = database.films().mark_missing(&vanished)?;
 
+    let probes = probes_wanted(
+        &found.films,
+        &stored_films,
+        &database.films().unprobed(folder.id)?,
+    );
+
     let plan = Plan::draw_up(
         &found,
         &report,
@@ -151,7 +164,7 @@ pub fn scan_folder(
     progress.subtitles_to_read = plan.jobs.len();
     sink.report(&progress);
 
-    let written = read_and_write_all(database, &plan.jobs, sink, progress)?;
+    let written = read_and_write_all(database, &plan.jobs, &probes, sink, progress)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
@@ -171,6 +184,8 @@ pub fn scan_folder(
         cues_indexed: written.cues,
         films_missing,
         tracks_removed: plan.removed.len(),
+        films_probed: probes.len(),
+        embedded_tracks: written.streams,
         unpaired_subtitles: plan.unpaired,
         films_without_subtitles: films_without_subtitles(
             &found.films,
@@ -203,6 +218,39 @@ impl<'a> Names<'a> {
                 .collect(),
         }
     }
+}
+
+/// One film that needs opening to see what it carries.
+#[derive(Clone, Debug)]
+struct ProbeJob {
+    film_id: i64,
+    path: PathBuf,
+    /// The film's own fingerprint, recorded on the tracks found inside it so
+    /// that a row says which encode it was read out of.
+    size_bytes: u64,
+    modified_at: i64,
+}
+
+/// The films worth opening.
+///
+/// A film that has not changed since it was last looked inside is left shut.
+/// That is what keeps a rescan of a library of Matroska files as cheap as a
+/// rescan of a library of anything else, and it is why the row records when it
+/// was read rather than only what was found.
+fn probes_wanted(films: &[FoundFile], stored: &[Stored], unprobed: &[i64]) -> Vec<ProbeJob> {
+    let never: HashSet<i64> = unprobed.iter().copied().collect();
+
+    films
+        .iter()
+        .zip(stored)
+        .filter(|(_, stored)| stored.changed || never.contains(&stored.id))
+        .map(|(file, stored)| ProbeJob {
+            film_id: stored.id,
+            path: file.path.clone(),
+            size_bytes: file.size_bytes,
+            modified_at: file.modified_at,
+        })
+        .collect()
 }
 
 /// One subtitle file that needs reading.
@@ -354,13 +402,16 @@ fn films_without_subtitles(
 struct Written {
     tracks: usize,
     cues: usize,
+    /// Tracks found inside films rather than beside them.
+    streams: usize,
     unreadable: Vec<PathBuf>,
     warnings: Vec<TrackWarnings>,
 }
 
-/// One parsed file on its way to the writer, or one that could not be read.
+/// One file that has been read, or one that could not be.
 enum Message<'a> {
     Parsed(Box<Parsed<'a>>),
+    Probed(Probed<'a>),
     Unreadable(PathBuf),
 }
 
@@ -371,27 +422,50 @@ struct Parsed<'a> {
     warnings: Vec<ParseWarning>,
 }
 
+struct Probed<'a> {
+    job: &'a ProbeJob,
+    tracks: Vec<StreamTrack>,
+}
+
+/// One piece of reading, of either kind.
+///
+/// Both kinds go through the same parallel stage and the same writer. Probing a
+/// film costs a fraction of what parsing a subtitle file does, so giving them a
+/// stage of their own would leave every core but one idle for the length of it,
+/// and would mean a second set of batches to commit.
+enum Job<'a> {
+    Subtitle(&'a TrackJob),
+    Film(&'a ProbeJob),
+}
+
 fn read_and_write_all(
     database: &Database,
-    jobs: &[TrackJob],
+    tracks: &[TrackJob],
+    probes: &[ProbeJob],
     sink: &dyn ProgressSink,
     progress: ScanProgress,
 ) -> Result<Written> {
+    let jobs: Vec<Job<'_>> = tracks
+        .iter()
+        .map(Job::Subtitle)
+        .chain(probes.iter().map(Job::Film))
+        .collect();
+
     if jobs.is_empty() {
         return Ok(Written::default());
     }
-    if jobs.len() < BULK_THRESHOLD {
-        return read_and_write(database, jobs, sink, progress);
+    if tracks.len() < BULK_THRESHOLD {
+        return read_and_write(database, &jobs, sink, progress);
     }
 
     // The index is rebuilt whether this succeeded or not, so the outcome is
     // carried through rather than turned into a failure the rebuild would skip.
-    database.bulk_ingest(|| Ok(read_and_write(database, jobs, sink, progress)))?
+    database.bulk_ingest(|| Ok(read_and_write(database, &jobs, sink, progress)))?
 }
 
 fn read_and_write(
     database: &Database,
-    jobs: &[TrackJob],
+    jobs: &[Job<'_>],
     sink: &dyn ProgressSink,
     progress: ScanProgress,
 ) -> Result<Written> {
@@ -417,7 +491,14 @@ fn read_and_write(
     })
 }
 
-fn read_one(job: &TrackJob) -> Message<'_> {
+fn read_one<'a>(job: &Job<'a>) -> Message<'a> {
+    match job {
+        Job::Subtitle(job) => parse_one(job),
+        Job::Film(job) => probe_one(job),
+    }
+}
+
+fn parse_one(job: &TrackJob) -> Message<'_> {
     let Ok(bytes) = std::fs::read(&job.path) else {
         return Message::Unreadable(job.path.clone());
     };
@@ -431,6 +512,19 @@ fn read_one(job: &TrackJob) -> Message<'_> {
     }))
 }
 
+/// What one film carries inside it.
+///
+/// Only the header is read, so this costs a file open and a couple of seeks
+/// however long the film is. A film that is not Matroska, or whose header makes
+/// no sense, reports nothing, which is the same as a film with no subtitles in
+/// it and is treated the same way.
+fn probe_one(job: &ProbeJob) -> Message<'_> {
+    match subtext_container::probe(&job.path) {
+        Ok(tracks) => Message::Probed(Probed { job, tracks }),
+        Err(_) => Message::Unreadable(job.path.clone()),
+    }
+}
+
 fn write_batches(
     database: &Database,
     receiver: &Receiver<Message<'_>>,
@@ -439,11 +533,18 @@ fn write_batches(
 ) -> Result<Written> {
     let mut written = Written::default();
     let mut batch = Vec::with_capacity(BATCH_TRACKS);
+    let mut probed = Vec::with_capacity(BATCH_TRACKS);
     let mut queued_cues = 0;
 
     for message in receiver {
         match message {
             Message::Unreadable(path) => written.unreadable.push(path),
+            Message::Probed(film) => {
+                probed.push(film);
+                if probed.len() >= BATCH_TRACKS {
+                    flush_probed(database, &mut probed, &mut written)?;
+                }
+            }
             Message::Parsed(parsed) => {
                 queued_cues += parsed.cues.len();
                 batch.push(*parsed);
@@ -459,7 +560,65 @@ fn write_batches(
     }
 
     flush(database, &mut batch, &mut written)?;
+    flush_probed(database, &mut probed, &mut written)?;
     Ok(written)
+}
+
+/// Records what a batch of films turned out to carry.
+///
+/// A film with nothing in it is written too. Being looked inside and found to
+/// hold nothing is an answer, and it is the one that stops the film being
+/// opened again on every scan for the rest of its life.
+fn flush_probed(
+    database: &Database,
+    batch: &mut Vec<Probed<'_>>,
+    written: &mut Written,
+) -> Result<()> {
+    if batch.is_empty() {
+        return Ok(());
+    }
+
+    let films: Vec<(i64, Vec<NewTrack<'_>>)> = batch
+        .iter()
+        .map(|film| {
+            let tracks = film
+                .tracks
+                .iter()
+                .map(|track| stream_track(film.job, track))
+                .collect();
+            (film.job.film_id, tracks)
+        })
+        .collect();
+
+    written.streams += database.tracks().write_streams(&films)?;
+    batch.clear();
+    Ok(())
+}
+
+/// One track inside a film, as a row.
+fn stream_track<'a>(job: &'a ProbeJob, track: &StreamTrack) -> NewTrack<'a> {
+    NewTrack {
+        film_id: job.film_id,
+        path: &job.path,
+        origin: TrackOrigin::Stream,
+        stream_number: track.number,
+        codec: track.codec.as_str(),
+        label: SubtitleLabel {
+            language: track.language,
+            forced: track.forced,
+            hearing_impaired: track.hearing_impaired,
+        },
+        // A track inside a film belongs to it by construction, which is a
+        // stronger statement than any pairing of names could make.
+        match_kind: TrackMatch::Exact,
+        // Text inside a container is UTF-8 by specification, so there is
+        // nothing to detect and nothing to be wrong about.
+        encoding: "UTF-8",
+        // The film's own fingerprint rather than the track's, since the track
+        // has no existence apart from the file it was read out of.
+        size_bytes: job.size_bytes,
+        modified_at: job.modified_at,
+    }
 }
 
 fn flush(database: &Database, batch: &mut Vec<Parsed<'_>>, written: &mut Written) -> Result<()> {
@@ -475,6 +634,9 @@ fn flush(database: &Database, batch: &mut Vec<Parsed<'_>>, written: &mut Written
                     NewTrack {
                         film_id: parsed.job.film_id,
                         path: &parsed.job.path,
+                        origin: TrackOrigin::Sidecar,
+                        stream_number: 0,
+                        codec: SubtitleCodec::SubRip.as_str(),
                         label: parsed.job.label,
                         match_kind: parsed.job.match_kind,
                         encoding: parsed.encoding,

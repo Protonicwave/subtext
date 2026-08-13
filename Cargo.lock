@@ -3459,6 +3459,7 @@ dependencies = [
  "criterion",
  "notify",
  "rayon",
+ "subtext-container",
  "subtext-core",
  "subtext-index",
  "tempfile",

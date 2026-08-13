@@ -143,26 +143,6 @@ impl<'a> Films<'a> {
         })
     }
 
-    /// Records that these films have been looked inside.
-    pub fn mark_probed(&self, ids: &[i64]) -> Result<()> {
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let at = now_millis();
-        self.database.with(|connection| {
-            let transaction = connection.transaction()?;
-            {
-                let mut statement =
-                    transaction.prepare_cached("UPDATE film SET probed_at = ?2 WHERE id = ?1")?;
-                for id in ids {
-                    statement.execute(params![id, at])?;
-                }
-            }
-            transaction.commit()?;
-            Ok(())
-        })
-    }
-
     /// Marks films whose files are no longer there.
     ///
     /// They are kept rather than deleted, so that a drive being unplugged does

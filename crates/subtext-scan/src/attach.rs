@@ -7,8 +7,9 @@
 
 use std::path::Path;
 
+use subtext_container::SubtitleCodec;
 use subtext_core::{ParseWarning, ParsedName, parse_srt};
-use subtext_index::{Database, NewTrack, TrackMatch};
+use subtext_index::{Database, NewTrack, TrackMatch, TrackOrigin};
 
 use crate::error::{Error, Result};
 use crate::media::{self, FileKind};
@@ -56,6 +57,9 @@ pub fn attach_subtitle(database: &Database, film_id: i64, path: &Path) -> Result
     let stored = tracks.upsert(&NewTrack {
         film_id,
         path,
+        origin: TrackOrigin::Sidecar,
+        stream_number: 0,
+        codec: SubtitleCodec::SubRip.as_str(),
         label: ParsedName::from_file_name(name).label,
         match_kind: TrackMatch::ByHand,
         encoding,
