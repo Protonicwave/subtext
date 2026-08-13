@@ -209,12 +209,63 @@ impl From<MatchKind> for TrackMatch {
     }
 }
 
-/// A subtitle file as it was found on disk.
+/// Where a subtitle track was found.
+///
+/// Two kinds, and almost everything treats them the same way once they are in
+/// the table. What differs is how they are identified, how they are read, and
+/// what happens when the file they came from changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TrackOrigin {
+    /// A subtitle file sitting beside the film, paired to it by name.
+    #[default]
+    Sidecar,
+    /// A track inside the film's own container, muxed by whoever made the
+    /// encode and therefore timed against those exact frames.
+    Stream,
+}
+
+impl TrackOrigin {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sidecar => "sidecar",
+            Self::Stream => "stream",
+        }
+    }
+
+    /// Reads back what [`Self::as_str`] wrote.
+    ///
+    /// Anything else reads as a sidecar, which is what every row written before
+    /// there was such a column is.
+    #[must_use]
+    pub fn from_stored(text: &str) -> Self {
+        match text {
+            "stream" => Self::Stream,
+            _ => Self::Sidecar,
+        }
+    }
+
+    #[must_use]
+    pub fn is_stream(self) -> bool {
+        matches!(self, Self::Stream)
+    }
+}
+
+/// A subtitle track as it was found, whether beside the film or inside it.
 #[derive(Clone, Debug)]
 pub struct NewTrack<'a> {
     pub film_id: i64,
+    /// The subtitle file, or the film itself for a track carried inside it.
     pub path: &'a Path,
-    /// What the file name said the track was.
+    pub origin: TrackOrigin,
+    /// The number the container knows the track by, and zero for a file.
+    pub stream_number: u64,
+    /// What the track is written as, under the name the container reader gives
+    /// it. Text rather than a type of its own, because knowing what those names
+    /// mean belongs to whatever reads the tracks and not to the table they are
+    /// stored in.
+    pub codec: &'a str,
+    /// What the file name, or the container's own header, said the track was.
     pub label: SubtitleLabel,
     pub match_kind: TrackMatch,
     /// The encoding the file turned out to be in.
@@ -229,7 +280,14 @@ pub struct TrackRecord {
     pub id: i64,
     pub film_id: i64,
     pub path: PathBuf,
-    /// The two letter language code, where the file name gave one.
+    pub origin: TrackOrigin,
+    /// The number the container knows the track by, and zero for a file.
+    pub stream_number: u64,
+    /// What the track is written as, which decides whether its dialogue can be
+    /// read at all.
+    pub codec: String,
+    /// The two letter language code, where the file name or the container
+    /// header gave one.
     pub language: Option<String>,
     pub forced: bool,
     pub hearing_impaired: bool,

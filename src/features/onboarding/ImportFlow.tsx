@@ -5,10 +5,11 @@ import { ipc, reasonFor } from '@/shared/ipc/client';
 import { useIpcEvent } from '@/shared/ipc/useIpcEvent';
 import { Button } from '@/shared/ui/Button';
 import { classes } from '@/shared/ui/classes';
-import { AlertIcon, CheckIcon, PairedIcon } from '@/shared/ui/Icon';
+import { AlertIcon, CheckIcon, InsideIcon, PairedIcon } from '@/shared/ui/Icon';
 import { ProgressRing } from '@/shared/ui/ProgressRing';
 import { Sheet } from '@/shared/ui/Sheet';
 import { fileNameOf, filmsIn, useLibrary } from '@/features/library/useLibrary';
+import { trackNameOf, trackProblemOf } from '@/features/player/tracks';
 import { foldersIn, unpairedIn, useImport } from './useImport';
 import styles from './ImportFlow.module.css';
 
@@ -109,14 +110,17 @@ function headingFor(progress: ScanProgressed | null): string {
 function Summary({ summaries }: { summaries: ScanSummary[] }) {
   const films = useLibrary((library) => library.films);
   const found = filmsIn(films, foldersIn(summaries));
-  const paired = found.filter((film) => film.tracks.length > 0).length;
+  // Subtitles rather than pairings, because a film can carry its own and those
+  // were never paired with anything. A track of pictures does not count: it is
+  // there, and none of it can be read.
+  const withSubtitles = found.filter((film) => film.tracks.some(isText)).length;
   const unpaired = unpairedIn(summaries).length;
 
   return (
     <>
-      <b>{found.length}</b> {found.length === 1 ? 'film' : 'films'} · <b>{paired}</b> paired with
+      <b>{found.length}</b> {found.length === 1 ? 'film' : 'films'} · <b>{withSubtitles}</b> with
       subtitles
-      {paired < found.length && ` · ${String(found.length - paired)} without`}
+      {withSubtitles < found.length && ` · ${String(found.length - withSubtitles)} without`}
       {unpaired > 0 &&
         ` · ${String(unpaired)} subtitle ${unpaired === 1 ? 'file belongs' : 'files belong'} to no film`}
     </>
@@ -141,18 +145,24 @@ function Pairings({ summaries }: { summaries: ScanSummary[] }) {
 }
 
 /**
- * One film and the subtitle it was paired with.
+ * One film and the subtitles it turned out to have.
  *
  * The row is the point of the whole screen: it says which file was matched to
  * which, and how sure that was, so that a wrong pairing is visible rather than
- * discovered later in the middle of a film.
+ * discovered later in the middle of a film. Tracks carried inside the film are
+ * listed under it, since they were never paired with anything and there is
+ * nothing to check about them beyond what they are.
  */
 function Pairing({ film }: { film: FilmView }) {
   const [attaching, setAttaching] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const refresh = useLibrary((library) => library.refresh);
 
-  const track: TrackView | undefined = film.tracks[0];
+  const track: TrackView | undefined = film.tracks.find(
+    (candidate) => candidate.origin === 'sidecar',
+  );
+  const inside = film.tracks.filter((candidate) => candidate.origin === 'stream');
+  const anything = track !== undefined || inside.some(isText);
 
   const attach = async () => {
     setProblem(null);
@@ -171,9 +181,9 @@ function Pairing({ film }: { film: FilmView }) {
   };
 
   return (
-    <li className={classes(styles.pair, !track && styles.unpaired)}>
+    <li className={classes(styles.pair, !anything && styles.unpaired)}>
       <span className={styles.tick}>
-        {track ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
+        {anything ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
       </span>
 
       <span className={styles.about}>
@@ -184,6 +194,13 @@ function Pairing({ film }: { film: FilmView }) {
           <PairedIcon size={11} />
           {track ? fileNameOf(track.path) : 'No subtitle file found beside it'}
         </span>
+        {inside.map((carried) => (
+          <span key={carried.id} className={styles.inside}>
+            <InsideIcon size={11} />
+            {trackNameOf(carried)}
+            <span className={styles.form}>{formOf(carried)}</span>
+          </span>
+        ))}
         {problem !== null && (
           <span role="alert" className={styles.problem}>
             {problem}
@@ -205,6 +222,16 @@ function Pairing({ film }: { film: FilmView }) {
       )}
     </li>
   );
+}
+
+/** Whether a track holds dialogue this application can read. */
+function isText(track: TrackView): boolean {
+  return track.form === 'text';
+}
+
+/** What a track carried inside the film is, said in three words or fewer. */
+function formOf(track: TrackView): string {
+  return trackProblemOf(track) ?? 'Inside the film';
 }
 
 function badgeFor(track: TrackView): string {

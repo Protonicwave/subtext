@@ -126,6 +126,23 @@ impl<'a> Films<'a> {
         })
     }
 
+    /// The films in a folder that have never been looked inside.
+    ///
+    /// A film is opened for the tracks it carries when it is new or when its
+    /// file has changed, which between them cover everything a scan does. They
+    /// do not cover a library that was indexed before this build existed: those
+    /// rows are unchanged, so nothing would ever open them. This is what asks.
+    pub fn unprobed(&self, folder_id: i64) -> Result<Vec<i64>> {
+        self.database.with(|connection| {
+            let mut statement = connection
+                .prepare("SELECT id FROM film WHERE folder_id = ?1 AND probed_at IS NULL")?;
+            let ids = statement
+                .query_map([folder_id], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(ids)
+        })
+    }
+
     /// Marks films whose files are no longer there.
     ///
     /// They are kept rather than deleted, so that a drive being unplugged does

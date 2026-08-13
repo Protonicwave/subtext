@@ -6,7 +6,7 @@
 mod common;
 
 use subtext_core::{Cue, CuePosition, SubtitleLabel, Timestamp};
-use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch};
+use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch, TrackOrigin};
 
 use crate::common::{Library, cues};
 
@@ -20,7 +20,7 @@ fn a_new_file_is_migrated_and_reopening_it_changes_nothing() {
     // leave what is already there alone.
     let reopened = library.reopen();
     assert_eq!(reopened.films().list().unwrap().len(), 1);
-    assert_eq!(Database::schema_version(), 3);
+    assert_eq!(Database::schema_version(), 4);
 }
 
 #[test]
@@ -63,6 +63,9 @@ fn rescanning_an_unchanged_library_writes_nothing() {
         film_id: first.id,
         path: &library.root.join("Heat.srt"),
         label: SubtitleLabel::default(),
+        origin: TrackOrigin::Sidecar,
+        stream_number: 0,
+        codec: "subrip",
         match_kind: TrackMatch::Exact,
         encoding: "UTF-8",
         size_bytes: 60_000,
@@ -503,6 +506,9 @@ fn a_batch_writes_its_tracks_and_their_cues_together() {
             forced: false,
             hearing_impaired: false,
         },
+        origin: TrackOrigin::Sidecar,
+        stream_number: 0,
+        codec: "subrip",
         match_kind: TrackMatch::Exact,
         encoding: "UTF-8",
         size_bytes: 120,

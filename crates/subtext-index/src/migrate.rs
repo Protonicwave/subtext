@@ -34,6 +34,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "chosen track",
         sql: include_str!("migrations/0003_track_choice.sql"),
     },
+    Migration {
+        version: 4,
+        name: "track source",
+        sql: include_str!("migrations/0004_track_source.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -42,7 +47,37 @@ pub(crate) fn supported_version() -> u32 {
 }
 
 /// Applies whatever has not been applied yet.
+///
+/// Foreign keys are enforced on every connection and are turned off for the
+/// length of this. A step that changes a constraint has to build the table
+/// again and drop the old one, and dropping a table that other rows reference
+/// would cascade those rows away: the cues of every track in the library, in
+/// the one case there is. The pragma does nothing inside a transaction, so it
+/// has to sit around the whole run rather than inside a step.
+///
+/// What that gives up is checked back afterwards, so a step that left a row
+/// pointing at nothing is a failure to open the library rather than something
+/// noticed later.
 pub(crate) fn apply(connection: &mut Connection) -> Result<u32> {
+    connection.execute_batch("PRAGMA foreign_keys = OFF;")?;
+    let outcome = migrate(connection);
+    connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+
+    let version = outcome?;
+    if references_are_broken(connection)? {
+        return Err(Error::Inconsistent);
+    }
+    Ok(version)
+}
+
+/// Whether anything is left pointing at a row that is not there.
+fn references_are_broken(connection: &Connection) -> Result<bool> {
+    let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
+    let broken = statement.query([])?.next()?.is_some();
+    Ok(broken)
+}
+
+fn migrate(connection: &mut Connection) -> Result<u32> {
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migration (
              version    INTEGER PRIMARY KEY,
@@ -151,7 +186,9 @@ mod tests {
                      id, film_id, path, forced, hearing_impaired,
                      match_kind, encoding, cue_count, size_bytes, modified_at
                  )
-                 VALUES (1, 1, '/films/Heat.srt', 0, 0, 'exact', 'UTF-8', 0, 60, 0);",
+                 VALUES (1, 1, '/films/Heat.srt', 0, 0, 'exact', 'UTF-8', 1, 60, 0);
+                 INSERT INTO cue (id, track_id, ordinal, start_ms, end_ms, text)
+                 VALUES (1, 1, 1, 0, 1000, 'the action is the juice');",
             )
             .unwrap();
 
@@ -180,6 +217,32 @@ mod tests {
             .unwrap();
         assert_eq!(chosen, None);
         assert!(!off);
+
+        // A step that rebuilds a table has to drop the old one, and the cues
+        // point at it. Losing them would mean every subtitle in the library
+        // being read again, which is the one thing an upgrade must not do.
+        let (origin, stream, codec, cues): (String, i64, String, i64) = connection
+            .query_row(
+                "SELECT t.origin, t.stream_number, t.codec, count(c.id)
+                 FROM subtitle_track AS t LEFT JOIN cue AS c ON c.track_id = t.id
+                 WHERE t.id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(origin, "sidecar");
+        assert_eq!(stream, 0);
+        assert_eq!(codec, "subrip");
+        assert_eq!(cues, 1);
+
+        // And the film has not been looked inside, which is what makes the
+        // next scan look.
+        let probed: Option<i64> = connection
+            .query_row("SELECT probed_at FROM film WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(probed, None);
     }
 
     #[test]

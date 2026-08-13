@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use subtext_container::fixture::{Container, Entry};
 use subtext_index::{Database, WatchedFolder};
 use subtext_scan::{ScanOutcome, Scanner, Silent};
 use tempfile::TempDir;
@@ -62,6 +63,14 @@ impl Fixture {
     /// Writes a file standing in for a film. Nothing reads its contents.
     pub(crate) fn film(&self, relative: &str) -> PathBuf {
         self.write(relative, b"not really a film")
+    }
+
+    /// Writes a film that really is a Matroska file, carrying the tracks given.
+    ///
+    /// Header only. There is no picture in it, which is all a probe of one
+    /// looks at.
+    pub(crate) fn matroska(&self, relative: &str, entries: Vec<Entry>) -> PathBuf {
+        self.write(relative, &Container::new(entries).with_seek_head().bytes())
     }
 
     /// Writes a subtitle file with one line of dialogue every ten seconds.

@@ -3414,6 +3414,7 @@ dependencies = [
  "serde_json",
  "specta",
  "specta-typescript",
+ "subtext-container",
  "subtext-core",
  "subtext-index",
  "subtext-scan",
@@ -3421,6 +3422,15 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-specta",
+ "tempfile",
+]
+
+[[package]]
+name = "subtext-container"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "subtext-core",
  "tempfile",
 ]
 
@@ -3450,6 +3460,7 @@ dependencies = [
  "criterion",
  "notify",
  "rayon",
+ "subtext-container",
  "subtext-core",
  "subtext-index",
  "tempfile",

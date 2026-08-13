@@ -13,6 +13,7 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 tauri = { version = "2.11.5", features = ["protocol-asset"] }
+subtext-container.workspace = true
 subtext-core.workspace = true
 subtext-index.workspace = true
 subtext-scan.workspace = true

@@ -53,6 +53,9 @@ const track = {
   language: 'en',
   forced: false,
   hearingImpaired: false,
+  origin: 'sidecar',
+  streamNumber: 0,
+  form: 'text',
   matchKind: 'exact',
   correction: { offsetMs: 0, rate: 1 },
   cueCount: 1_402,
@@ -82,6 +85,19 @@ const unpaired = {
   year: 2015,
   tracks: [],
 } satisfies FilmView;
+
+/** A track the film carries itself, which was never paired with anything. */
+function inside(id: number, changes: Partial<TrackView> = {}): TrackView {
+  return {
+    ...track,
+    id,
+    path: '/films/Sicario.2015.mkv',
+    origin: 'stream',
+    streamNumber: id,
+    cueCount: 0,
+    ...changes,
+  };
+}
 
 const summary = {
   folderId: 1,
@@ -160,7 +176,58 @@ describe('importing a folder', () => {
     expect(screen.getByText('Heat.1995.1080p.BluRay.mkv')).toBeInTheDocument();
     expect(screen.getByText('Heat.1995.en.srt')).toBeInTheDocument();
     expect(screen.getByText('Matched')).toBeInTheDocument();
-    expect(sheet).toHaveTextContent('2 films · 1 paired with subtitles · 1 without');
+    expect(sheet).toHaveTextContent('2 films · 1 with subtitles · 1 without');
+  });
+
+  it('lists the tracks a film carries inside it', async () => {
+    useLibrary.setState({
+      films: [
+        {
+          ...unpaired,
+          tracks: [
+            inside(2),
+            inside(3, { language: 'fr' }),
+            inside(4, { form: 'pictures', language: null }),
+          ],
+        },
+      ],
+      folders: [],
+      refresh,
+    });
+
+    render(<ImportFlow />);
+    asked();
+    emit('finished', [summary]);
+
+    const sheet = await screen.findByRole('dialog', { name: 'What was found' });
+
+    // A film with no file beside it is not a film with no subtitles, and the
+    // row has to say which of the two it is.
+    expect(sheet).toHaveTextContent('1 film · 1 with subtitles');
+    expect(screen.getByText('English')).toBeInTheDocument();
+    expect(screen.getByText('French')).toBeInTheDocument();
+
+    // The one nothing can be done with is named rather than left off, so that
+    // a film whose subtitles never appear says why. It says nothing about what
+    // language it is in, so the number the film knows it by has to do.
+    expect(screen.getByText('Track 4')).toBeInTheDocument();
+    expect(screen.getByText('Pictures, not text')).toBeInTheDocument();
+    expect(screen.getAllByText('Inside the film')).toHaveLength(2);
+  });
+
+  it('counts a film carrying only pictures as having no subtitles', async () => {
+    useLibrary.setState({
+      films: [{ ...unpaired, tracks: [inside(2, { form: 'pictures' })] }],
+      folders: [],
+      refresh,
+    });
+
+    render(<ImportFlow />);
+    asked();
+    emit('finished', [summary]);
+
+    const sheet = await screen.findByRole('dialog', { name: 'What was found' });
+    expect(sheet).toHaveTextContent('1 film · 0 with subtitles · 1 without');
   });
 
   it('says when a match was only a close one', async () => {

@@ -98,6 +98,32 @@
   color: var(--colour-attention-dim);
 }
 
+/* A track the film carries itself, listed under the file it was paired with. */
+.inside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inside svg {
+  opacity: 0.5;
+}
+
+.form {
+  opacity: 0.7;
+}
+
+.form::before {
+  content: '· ';
+}
+
 .problem {
   display: block;
   margin-top: var(--space-2);

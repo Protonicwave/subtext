@@ -24,12 +24,26 @@ import { ANY_LANGUAGE, languageNamed } from '@/shared/media/languages';
 export function activeTrackOf(film: FilmView, preferred: string): TrackView | null {
   if (film.subtitlesOff) return null;
 
+  const readable = readableTracksOf(film.tracks);
   // A choice naming a track this film no longer has is not an error worth
   // saying anything about: a subtitle attached to a different film, or one
   // deleted between scans, both come to the same thing, which is a film that
   // needs choosing for again.
-  const chosen = film.tracks.find((track) => track.id === film.chosenTrackId);
-  return chosen ?? defaultTrackOf(film.tracks, preferred);
+  const chosen = readable.find((track) => track.id === film.chosenTrackId);
+  return chosen ?? defaultTrackOf(readable, preferred);
+}
+
+/**
+ * The tracks there is any point offering, which is not all of them.
+ *
+ * A film says what it carries whether or not any of it can be read. A track of
+ * pictures is dialogue in a form nothing here turns into words, and a text
+ * track whose lines have not been read out of the film yet has nothing to show.
+ * Both are worth knowing about, which the import sheet is where, and neither is
+ * worth putting in a menu whose every entry would draw an empty screen.
+ */
+export function readableTracksOf(tracks: readonly TrackView[]): TrackView[] {
+  return tracks.filter((track) => track.form === 'text' && track.cueCount > 0);
 }
 
 /**
@@ -70,17 +84,37 @@ function rankOf(track: TrackView, preferred: string): number {
   return language + (track.forced ? 0 : 2) + (track.hearingImpaired ? 0 : 1);
 }
 
-/** What a track is called: its language, or the file it came from. */
+/**
+ * What a track is called: its language, or where it came from.
+ *
+ * A track inside a film has no file name to fall back on, and several of them
+ * can say the same thing about themselves, so the number the container knows it
+ * by is what tells one from another.
+ */
 export function trackNameOf(track: TrackView): string {
-  if (track.language === null) return fileNameOf(track.path);
-  return languageNamed(track.language);
+  if (track.language !== null) return languageNamed(track.language);
+  if (track.origin === 'stream') return `Track ${String(track.streamNumber)}`;
+  return fileNameOf(track.path);
 }
 
 /** What else is worth saying about a track, where there is anything. */
 export function trackNoteOf(track: TrackView): string | null {
   const notes: string[] = [];
+  if (track.origin === 'stream') notes.push('Inside the film');
   if (track.forced) notes.push('Forced');
   if (track.hearingImpaired) notes.push('For the hard of hearing');
   if (notes.length === 0) return null;
   return notes.join(' · ');
+}
+
+/** Why a track cannot be read, where it cannot. */
+export function trackProblemOf(track: TrackView): string | null {
+  switch (track.form) {
+    case 'pictures':
+      return 'Pictures, not text';
+    case 'unrecognised':
+      return 'Not a subtitle format Subtext reads';
+    case 'text':
+      return null;
+  }
 }

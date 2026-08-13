@@ -3,7 +3,7 @@ import type { FilmView, TrackView } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { useLibrary } from '@/features/library/useLibrary';
 import { useSetting } from '@/shared/settings/useSettings';
-import { activeTrackOf } from './tracks';
+import { activeTrackOf, readableTracksOf } from './tracks';
 
 /**
  * Which subtitle a film is being watched with, and changing it.
@@ -20,7 +20,11 @@ import { activeTrackOf } from './tracks';
  */
 
 export interface TrackChoice {
-  /** Every subtitle paired with this film, in the order the library lists them. */
+  /**
+   * The subtitles of this film that can be read, in the order the library lists
+   * them. A track of pictures, and one whose lines have not been read out of
+   * the film, are both left out: see `readableTracksOf`.
+   */
   tracks: readonly TrackView[];
   /** The one being read, or nothing where there is none to read. */
   active: TrackView | null;
@@ -52,11 +56,12 @@ export function useTrack(film: FilmView): TrackChoice {
     [filmId, replace],
   );
 
+  const tracks = readableTracksOf(film.tracks);
   return {
-    tracks: film.tracks,
+    tracks,
     active: activeTrackOf(film, preferred),
     off: film.subtitlesOff,
-    available: film.tracks.length > 0,
+    available: tracks.length > 0,
     choose,
   };
 }

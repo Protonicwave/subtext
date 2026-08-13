@@ -5,14 +5,15 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 
+use crate::clock::now_millis;
 use crate::database::Database;
 use crate::error::Result;
-use crate::model::{NewTrack, Stored, TrackMatch, TrackPairing, TrackRecord};
+use crate::model::{NewTrack, Stored, TrackMatch, TrackOrigin, TrackPairing, TrackRecord};
 use crate::repository::{count_to_sql, from_sql_count, from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, film_id, path, language, forced, hearing_impaired, \
                        match_kind, encoding, cue_count, size_bytes, modified_at, \
-                       offset_ms, rate";
+                       offset_ms, rate, origin, stream_number, codec";
 
 #[derive(Debug)]
 pub struct Tracks<'a> {
@@ -72,6 +73,44 @@ impl<'a> Tracks<'a> {
             }
             transaction.commit()?;
             Ok(stored)
+        })
+    }
+
+    /// Records the tracks found inside a batch of films, in one transaction.
+    ///
+    /// Each film's list replaces whatever was recorded for it before: a track
+    /// the film no longer carries is taken away, and one it still carries keeps
+    /// its identifier along with the choice and the correction that point at
+    /// it. A film that was looked inside and found to carry nothing is passed
+    /// with an empty list, which is how a film that lost its tracks is cleared.
+    ///
+    /// No cues. A probe reads a header and says what is in the file; reading
+    /// the dialogue out of it is a separate piece of work.
+    ///
+    /// Recording what a film carries also records that it was looked inside,
+    /// in the same transaction, so a scan that stopped half way through does
+    /// not leave a film marked as read with nothing to show for it.
+    pub fn write_streams(&self, films: &[(i64, Vec<NewTrack<'_>>)]) -> Result<usize> {
+        if films.is_empty() {
+            return Ok(0);
+        }
+
+        let at = now_millis();
+        self.database.with(|connection| {
+            let transaction = connection.transaction()?;
+            let mut written = 0;
+            for (film_id, tracks) in films {
+                for track in tracks {
+                    upsert_one(&transaction, track)?;
+                    written += 1;
+                }
+                remove_other_streams(&transaction, *film_id, tracks)?;
+                transaction
+                    .prepare_cached("UPDATE film SET probed_at = ?2 WHERE id = ?1")?
+                    .execute(params![film_id, at])?;
+            }
+            transaction.commit()?;
+            Ok(written)
         })
     }
 
@@ -189,13 +228,17 @@ impl<'a> Tracks<'a> {
     /// because a rescan has two questions to ask of each file: whether it needs
     /// reading again, and whether it still belongs to the film it was paired
     /// with.
+    ///
+    /// Files only. A track inside a film is not paired with anything, is not
+    /// found by walking a folder, and would read as a subtitle file that had
+    /// been deleted if it came back here.
     pub fn pairings(&self, folder_id: i64) -> Result<Vec<TrackPairing>> {
         self.database.with(|connection| {
             let mut statement = connection.prepare(
                 "SELECT t.id, t.film_id, t.path, t.match_kind, t.size_bytes, t.modified_at
                  FROM subtitle_track AS t
                  JOIN film AS f ON f.id = t.film_id
-                 WHERE f.folder_id = ?1",
+                 WHERE f.folder_id = ?1 AND t.origin = 'sidecar'",
             )?;
             let pairings = statement
                 .query_map([folder_id], |row| {
@@ -251,10 +294,11 @@ const FORGET: &str = "offset_ms = CASE WHEN film_id = ?2 THEN offset_ms ELSE 0 E
 
 const UPSERT: &str = "INSERT INTO subtitle_track (
          film_id, path, language, forced, hearing_impaired,
-         match_kind, encoding, cue_count, size_bytes, modified_at
+         match_kind, encoding, cue_count, size_bytes, modified_at,
+         origin, stream_number, codec
      )
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9)
-     ON CONFLICT (path) DO UPDATE SET
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11, ?12)
+     ON CONFLICT (path, stream_number) DO UPDATE SET
          film_id = CASE WHEN subtitle_track.match_kind = 'by-hand'
                         THEN subtitle_track.film_id
                         ELSE excluded.film_id END,
@@ -266,9 +310,11 @@ const UPSERT: &str = "INSERT INTO subtitle_track (
                            ELSE excluded.match_kind END,
          encoding = excluded.encoding,
          size_bytes = excluded.size_bytes,
-         modified_at = excluded.modified_at
+         modified_at = excluded.modified_at,
+         codec = excluded.codec
      WHERE (subtitle_track.match_kind <> 'by-hand'
             AND subtitle_track.film_id IS NOT excluded.film_id)
+        OR subtitle_track.codec IS NOT excluded.codec
         OR subtitle_track.language IS NOT excluded.language
         OR subtitle_track.forced IS NOT excluded.forced
         OR subtitle_track.hearing_impaired IS NOT excluded.hearing_impaired
@@ -282,6 +328,7 @@ const UPSERT: &str = "INSERT INTO subtitle_track (
 /// One track, against a connection that may already be inside a transaction.
 fn upsert_one(connection: &Connection, track: &NewTrack<'_>) -> Result<Stored> {
     let path = path_text(track.path)?;
+    let stream_number = to_sql_int(track.stream_number);
     let updated: Option<i64> = connection
         .prepare_cached(UPSERT)?
         .query_row(
@@ -295,6 +342,9 @@ fn upsert_one(connection: &Connection, track: &NewTrack<'_>) -> Result<Stored> {
                 track.encoding,
                 to_sql_int(track.size_bytes),
                 track.modified_at,
+                track.origin.as_str(),
+                stream_number,
+                track.codec,
             ],
             |row| row.get(0),
         )
@@ -307,9 +357,43 @@ fn upsert_one(connection: &Connection, track: &NewTrack<'_>) -> Result<Stored> {
     // The file has not moved and has not been written to since it was last
     // read, so its cues are still the cues it has.
     let id = connection
-        .prepare_cached("SELECT id FROM subtitle_track WHERE path = ?1")?
-        .query_row([path], |row| row.get(0))?;
+        .prepare_cached("SELECT id FROM subtitle_track WHERE path = ?1 AND stream_number = ?2")?
+        .query_row(params![path, stream_number], |row| row.get(0))?;
     Ok(Stored { id, changed: false })
+}
+
+/// Takes away the tracks a film used to carry inside it and no longer does.
+///
+/// A film re-encoded with fewer subtitles is the case this exists for. The
+/// numbers that are still there are named rather than the ones that have gone,
+/// since the probe knows the first and would have to work out the second.
+fn remove_other_streams(
+    connection: &Connection,
+    film_id: i64,
+    keeping: &[NewTrack<'_>],
+) -> Result<()> {
+    // A number no container gives a track, so a film that turned out to carry
+    // none still leaves a list that parses and takes all of them away.
+    let kept = std::iter::once("0".to_owned())
+        .chain(
+            keeping
+                .iter()
+                .map(|track| to_sql_int(track.stream_number).to_string()),
+        )
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // The numbers are integers this crate wrote and read back, so they go into
+    // the statement rather than through a binding: SQLite has no way to bind a
+    // list, and the alternative is a statement recompiled per track.
+    connection.execute(
+        &format!(
+            "DELETE FROM subtitle_track
+             WHERE film_id = ?1 AND origin = 'stream' AND stream_number NOT IN ({kept})"
+        ),
+        [film_id],
+    )?;
+    Ok(())
 }
 
 /// How a track's timings are to be read, or the identity if it has no row.
@@ -358,6 +442,9 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<TrackRecord> {
         id: row.get(0)?,
         film_id: row.get(1)?,
         path: row.get::<_, String>(2)?.into(),
+        origin: TrackOrigin::from_stored(&row.get::<_, String>(13)?),
+        stream_number: from_sql_int(row.get(14)?),
+        codec: row.get(15)?,
         language: row.get(3)?,
         forced: row.get(4)?,
         hearing_impaired: row.get(5)?,
