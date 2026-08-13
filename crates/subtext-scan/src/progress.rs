@@ -30,10 +30,15 @@ pub struct ScanProgress {
     pub subtitles_found: usize,
     /// Films with at least one subtitle file to their name.
     pub films_paired: usize,
-    /// Subtitle files that need reading, which is the total the indexing stage
-    /// is working towards.
+    /// Subtitle files that need reading.
     pub subtitles_to_read: usize,
     pub subtitles_read: usize,
+    /// Films that need opening and reading, which is the other half of what the
+    /// indexing stage is working towards. A film is opened only when it is new
+    /// or has been replaced, so this is nought for a rescan of a library nobody
+    /// has touched.
+    pub films_to_read: usize,
+    pub films_read: usize,
     pub cues_indexed: usize,
 }
 
@@ -49,11 +54,17 @@ impl ScanProgress {
             films_paired: 0,
             subtitles_to_read: 0,
             subtitles_read: 0,
+            films_to_read: 0,
+            films_read: 0,
             cues_indexed: 0,
         }
     }
 
     /// How much of the indexing is done, from zero to one.
+    ///
+    /// Both kinds of reading count. A library of films carrying their subtitles
+    /// inside them has no subtitle files at all, and a ring that sat at the end
+    /// throughout would be saying the scan was over while it was still going.
     ///
     /// A scan with nothing to read is finished rather than nowhere, which is
     /// what a rescan of an unchanged library is.
@@ -62,10 +73,12 @@ impl ScanProgress {
     // whole number, and the result is a fraction.
     #[allow(clippy::cast_precision_loss)]
     pub fn fraction_read(&self) -> f32 {
-        if self.subtitles_to_read == 0 {
+        let wanted = self.subtitles_to_read + self.films_to_read;
+        if wanted == 0 {
             return 1.0;
         }
-        (self.subtitles_read as f32 / self.subtitles_to_read as f32).clamp(0.0, 1.0)
+        let done = self.subtitles_read + self.films_read;
+        (done as f32 / wanted as f32).clamp(0.0, 1.0)
     }
 }
 
@@ -109,6 +122,23 @@ mod tests {
         assert!((progress.fraction_read() - 0.25).abs() < f32::EPSILON);
         progress.subtitles_read = 9;
         assert!((progress.fraction_read() - 1.0).abs() < f32::EPSILON);
+    }
+
+    /// A library of films carrying their subtitles inside them, which has no
+    /// subtitle files to count at all.
+    #[test]
+    fn films_opened_and_read_count_towards_it_too() {
+        let mut progress = ScanProgress::new(1);
+        progress.films_to_read = 4;
+        assert!((progress.fraction_read() - 0.0).abs() < f32::EPSILON);
+
+        progress.films_read = 2;
+        assert!((progress.fraction_read() - 0.5).abs() < f32::EPSILON);
+
+        // And a folder of both, where the two halves add up.
+        progress.subtitles_to_read = 4;
+        progress.subtitles_read = 2;
+        assert!((progress.fraction_read() - 0.5).abs() < f32::EPSILON);
     }
 
     #[test]

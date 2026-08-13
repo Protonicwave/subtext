@@ -448,6 +448,10 @@ fn progress_moves_forwards_and_ends_where_it_says_it_will() {
     assert_eq!(last.films_found, 5);
     assert_eq!(last.subtitles_to_read, 5);
     assert_eq!(last.subtitles_read, 5);
+    // The films were opened and read as well, and both halves count towards
+    // the ring the import screen draws.
+    assert_eq!(last.films_to_read, 5);
+    assert_eq!(last.films_read, 5);
     assert_eq!(last.cues_indexed, 10);
     assert!((last.fraction_read() - 1.0).abs() < f32::EPSILON);
 

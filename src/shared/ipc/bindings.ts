@@ -218,6 +218,8 @@ export const commands = {
 	filmsPaired: number,
 	subtitlesToRead: number,
 	subtitlesRead: number,
+	filmsToRead: number,
+	filmsRead: number,
 	cuesIndexed: number,
 	/**  How much of the reading is done, from zero to one. */
 	fractionRead: number,
@@ -453,6 +455,8 @@ export type ScanProgressed = {
 	filmsPaired: number,
 	subtitlesToRead: number,
 	subtitlesRead: number,
+	filmsToRead: number,
+	filmsRead: number,
 	cuesIndexed: number,
 	/**  How much of the reading is done, from zero to one. */
 	fractionRead: number,

@@ -163,12 +163,14 @@ pub fn scan_folder(
     progress.stage = ScanStage::Indexing;
     progress.films_paired = plan.films_with_subtitles.len();
     progress.subtitles_to_read = plan.jobs.len();
+    progress.films_to_read = films_to_open.len();
     sink.report(&progress);
 
     let written = read_and_write_all(database, &plan.jobs, &films_to_open, sink, progress)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
+    progress.films_read = written.films;
     progress.cues_indexed = written.cues;
     sink.report(&progress);
 
@@ -403,7 +405,9 @@ fn films_without_subtitles(
 struct Written {
     tracks: usize,
     cues: usize,
-    /// Tracks found inside films rather than beside them.
+    /// Films opened and read to the end.
+    films: usize,
+    /// Tracks found inside those films rather than beside them.
     streams: usize,
     unreadable: Vec<PathBuf>,
     warnings: Vec<TrackWarnings>,
@@ -455,7 +459,11 @@ fn read_and_write_all(
     if jobs.is_empty() {
         return Ok(Written::default());
     }
-    if tracks.len() < BULK_THRESHOLD {
+    // Both kinds of reading count towards it. A folder of films carrying their
+    // subtitles inside them has no subtitle files at all, and feeding a million
+    // cues from them through the search index a row at a time is the thing the
+    // threshold is there to avoid.
+    if jobs.len() < BULK_THRESHOLD {
         return read_and_write(database, &jobs, sink, progress);
     }
 
@@ -548,6 +556,9 @@ fn write_batches(
                 probed.push(film);
                 if probed.len() >= BATCH_TRACKS {
                     flush_probed(database, &mut probed, &mut written)?;
+                    progress.films_read = written.films;
+                    progress.cues_indexed = written.cues;
+                    sink.report(&progress);
                 }
             }
             Message::Parsed(parsed) => {
@@ -596,6 +607,7 @@ fn flush_probed(
         .collect();
 
     written.streams += database.tracks().write_streams(&films)?;
+    written.films += batch.len();
     for film in batch.drain(..) {
         written.cues += film
             .tracks

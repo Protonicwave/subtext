@@ -29,6 +29,8 @@ const progress: ScanProgressed = {
   filmsPaired: 20,
   subtitlesToRead: 20,
   subtitlesRead: 12,
+  filmsToRead: 20,
+  filmsRead: 12,
   cuesIndexed: 9_000,
   fractionRead: 0.6,
 };
