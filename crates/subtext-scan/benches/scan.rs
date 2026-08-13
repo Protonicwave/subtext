@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use criterion::Criterion;
-use subtext_container::fixture::{Container, Entry};
+use subtext_container::fixture::{Container, Entry, Line};
 use subtext_index::Database;
 use subtext_scan::{Scanner, Silent, discover};
 use tempfile::TempDir;
@@ -30,6 +30,18 @@ const FILMS: usize = 1_000;
 /// Roughly what a feature film comes to, which puts the folder at a million
 /// lines of dialogue.
 const CUES_PER_FILM: usize = 1_000;
+
+/// How many lines each film carries inside it as well, and how much picture
+/// there is between them.
+///
+/// Fewer than the file beside it, and with frames between them, because what
+/// this is here to price is the stepping over: a film with dialogue and nothing
+/// else in it would let a reader that read every block wholesale look as quick
+/// as one that did not. A corpus of full length films with real bitrates would
+/// be several hundred gigabytes, so the count is small and the shape is right.
+const EMBEDDED_CUES: usize = 100;
+const FRAMES_PER_CLUSTER: usize = 6;
+const FRAME: usize = 1_500;
 
 /// How many of the films sit in a subfolder of their own rather than loose in
 /// the root, since most collections are some of each.
@@ -164,7 +176,8 @@ impl Folder {
             };
 
             let name = format!("Film {at:04}.2001.1080p.BluRay.x264-GROUP");
-            std::fs::write(folder.join(format!("{name}.mkv")), film()).expect("a film");
+            std::fs::write(folder.join(format!("{name}.mkv")), film(at as u64 + 1))
+                .expect("a film");
             std::fs::write(
                 folder.join(format!("Film {at:04}.2001.en.srt")),
                 srt(at as u64 + 1),
@@ -189,12 +202,20 @@ impl Folder {
     }
 }
 
-/// A film's header, which is what a scan opens each one to read.
+/// A film, with dialogue inside it and frames of picture between the lines.
 ///
 /// Real Matroska rather than a few bytes standing in for it, so that the cost
-/// of looking inside a thousand films is part of what the scan is measured at
-/// rather than something the corpus quietly avoids.
-fn film() -> Vec<u8> {
+/// of opening a thousand films and reading what is in them is part of what the
+/// scan is measured at rather than something the corpus quietly avoids.
+fn film(seed: u64) -> Vec<u8> {
+    let mut rolling = Rolling(seed);
+    let dialogue = (0..EMBEDDED_CUES)
+        .map(|at| {
+            let start = at as u64 * 3_000;
+            Line::new(3, start, start + 2_000, &rolling.line())
+        })
+        .collect();
+
     Container::new(vec![
         Entry::video(1),
         Entry::audio(2),
@@ -202,6 +223,8 @@ fn film() -> Vec<u8> {
         Entry::subtitle(4, "S_HDMV/PGS").in_language("eng"),
     ])
     .with_seek_head()
+    .with_picture(1, FRAMES_PER_CLUSTER, FRAME)
+    .with_dialogue(dialogue)
     .bytes()
 }
 
@@ -233,7 +256,7 @@ fn against_the_targets(folder: &Folder) {
     );
 
     println!(
-        "probe: {} films opened, {} tracks found inside them (target 3s for 1,000)",
+        "inside the films: {} opened, {} tracks found in them (target 3s for 1,000)",
         outcome.films_probed, outcome.embedded_tracks
     );
 
