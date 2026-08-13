@@ -3425,6 +3425,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "subtext-container"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "subtext-core",
+ "tempfile",
+]
+
+[[package]]
 name = "subtext-core"
 version = "0.1.0"
 dependencies = [

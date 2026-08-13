@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/subtext-core", "crates/subtext-index", "crates/subtext-scan", "src-tauri"]
+members = [
+    "crates/subtext-container",
+    "crates/subtext-core",
+    "crates/subtext-index",
+    "crates/subtext-scan",
+    "src-tauri",
+]
 resolver = "3"
 
 [workspace.package]
@@ -11,6 +17,7 @@ repository = "https://github.com/Protonicwave/subtext"
 authors = ["Shlok Bhusal"]
 
 [workspace.dependencies]
+subtext-container = { path = "crates/subtext-container" }
 subtext-core = { path = "crates/subtext-core" }
 subtext-index = { path = "crates/subtext-index" }
 subtext-scan = { path = "crates/subtext-scan" }

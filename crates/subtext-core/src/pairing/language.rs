@@ -67,7 +67,14 @@ const LANGUAGES: &[(&str, &[&str])] = &[
 ];
 
 /// The two letter code a name for a language stands for.
-pub(crate) fn language_code(token: &str) -> Option<&'static str> {
+///
+/// Public because a language arrives from two directions and has to come out
+/// the same way in both. A file name says "eng" or "English"; a container says
+/// "eng" or "en-GB" in its own header. One vocabulary means the preferred
+/// language in the settings can be compared to either without a second table
+/// somewhere else translating between them.
+#[must_use]
+pub fn language_code(token: &str) -> Option<&'static str> {
     LANGUAGES.iter().find_map(|(code, aliases)| {
         let matches = code.eq_ignore_ascii_case(token)
             || aliases

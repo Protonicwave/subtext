@@ -17,7 +17,8 @@ pub use crate::correction::Correction;
 pub use crate::cue::{Cue, CuePosition};
 pub use crate::film::Film;
 pub use crate::pairing::{
-    MatchKind, Matching, PairingReport, ParsedName, SubtitleLabel, SubtitleMatch, pair, pair_with,
+    MatchKind, Matching, PairingReport, ParsedName, SubtitleLabel, SubtitleMatch, language_code,
+    pair, pair_with,
 };
 pub use crate::parse::{ParseOutcome, ParseWarning, ParseWarningKind, parse_srt, parse_srt_text};
 pub use crate::time::Timestamp;

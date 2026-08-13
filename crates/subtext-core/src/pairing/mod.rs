@@ -15,7 +15,7 @@
 mod language;
 mod name;
 
-pub use self::language::SubtitleLabel;
+pub use self::language::{SubtitleLabel, language_code};
 pub use self::name::ParsedName;
 
 /// How sure the pairing is.
