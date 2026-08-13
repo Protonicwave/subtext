@@ -34,7 +34,9 @@
 mod codec;
 mod ebml;
 pub mod fixture;
+mod ids;
 mod probe;
+mod segment;
 
 pub use crate::codec::SubtitleCodec;
 pub use crate::probe::{StreamTrack, probe, subtitle_tracks};

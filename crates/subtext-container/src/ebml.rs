@@ -11,7 +11,7 @@
 //! each of them stops the read and hands back what was found so far. There is
 //! no recursion anywhere, so a file cannot nest its way into the stack either.
 
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 /// The largest payload this will read into memory rather than seek over.
 ///
@@ -199,13 +199,71 @@ fn data_mask(width: u32) -> u8 {
     u8::try_from(0x00FF_u16 >> width).unwrap_or_default()
 }
 
+/// The children of a payload already in memory, as identifiers and bytes.
+///
+/// Elements inside a header are small and few, and reading them from a slice
+/// rather than from the file means one read for the whole thing instead of one
+/// for each. The framing is read by the same code either way, since a slice is
+/// something that can be read and seeked like anything else.
+pub(crate) fn children(payload: &[u8], limit: usize) -> Vec<(u32, Vec<u8>)> {
+    let Some(mut reader) = Reader::open(Cursor::new(payload)) else {
+        return Vec::new();
+    };
+    let end = reader.length();
+
+    let mut found = Vec::new();
+    let mut at = 0;
+    while found.len() < limit {
+        if reader.seek_to(at).is_none() {
+            break;
+        }
+        let Some(element) = reader.element(end) else {
+            break;
+        };
+        at = element.end;
+        // An element too large to hold is stepped over rather than ending the
+        // walk, since the one after it may be the one being looked for.
+        if let Some(body) = reader.payload(element) {
+            found.push((element.id, body));
+        }
+    }
+
+    found
+}
+
+/// An unsigned integer as EBML writes one: big endian, and as narrow as it can
+/// be written or as wide as eight bytes, since leading zeros are allowed.
+pub(crate) fn as_uint(bytes: &[u8]) -> Option<u64> {
+    (bytes.len() <= 8).then(|| {
+        bytes
+            .iter()
+            .fold(0u64, |value, byte| (value << 8) | u64::from(*byte))
+    })
+}
+
+/// A flag, which is an integer that means yes when it is not zero.
+pub(crate) fn as_flag(bytes: &[u8]) -> bool {
+    as_uint(bytes).is_some_and(|value| value != 0)
+}
+
+/// A string as EBML writes one, which may be padded with zero bytes.
+pub(crate) fn as_text(bytes: &[u8]) -> Option<String> {
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    std::str::from_utf8(bytes.get(..end)?)
+        .ok()
+        .map(str::to_owned)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::io::Cursor;
 
-    use super::{Element, Reader, Size, data_mask, width_of};
+    use super::{Element, Reader, Size, as_flag, as_text, as_uint, data_mask, width_of};
 
     fn reader(bytes: &[u8]) -> Reader<Cursor<Vec<u8>>> {
         Reader::open(Cursor::new(bytes.to_vec())).unwrap()
@@ -307,5 +365,28 @@ mod tests {
             end: super::MAX_PAYLOAD + 1,
         };
         assert_eq!(reader.payload(huge), None);
+    }
+
+    #[test]
+    fn reads_an_integer_however_wide_it_was_written() {
+        assert_eq!(as_uint(&[0x11]), Some(17));
+        assert_eq!(as_uint(&[0x00, 0x00, 0x11]), Some(17));
+        assert_eq!(as_uint(&[]), Some(0));
+        assert_eq!(as_uint(&[0; 9]), None);
+    }
+
+    #[test]
+    fn a_flag_is_anything_that_is_not_zero() {
+        assert!(as_flag(&[1]));
+        assert!(!as_flag(&[0]));
+        // Nothing at all, which is how a file can write a flag it does not set.
+        assert!(!as_flag(&[]));
+    }
+
+    #[test]
+    fn a_string_stops_at_its_padding() {
+        assert_eq!(as_text(b"S_TEXT/UTF8"), Some("S_TEXT/UTF8".to_owned()));
+        assert_eq!(as_text(b"eng\0\0"), Some("eng".to_owned()));
+        assert_eq!(as_text(&[0xFF, 0xFE]), None);
     }
 }
