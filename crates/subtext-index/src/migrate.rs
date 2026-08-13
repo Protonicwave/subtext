@@ -39,6 +39,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "track source",
         sql: include_str!("migrations/0004_track_source.sql"),
     },
+    Migration {
+        version: 5,
+        name: "reread films",
+        sql: include_str!("migrations/0005_reread_films.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -243,6 +248,66 @@ mod tests {
             })
             .unwrap();
         assert_eq!(probed, None);
+    }
+
+    /// The upgrade the reading of embedded dialogue depends on.
+    ///
+    /// The release before this one opened each film, wrote down which tracks
+    /// were inside it, and stopped there. Those films match what is on disk, so
+    /// nothing would ever open them again, and their tracks would keep an empty
+    /// transcript for ever.
+    #[test]
+    fn a_film_already_looked_inside_is_looked_inside_again() {
+        let mut connection = Connection::open_in_memory().unwrap();
+
+        // Everything up to the release that found tracks without reading them.
+        connection
+            .execute_batch("PRAGMA foreign_keys = OFF;")
+            .unwrap();
+        for migration in MIGRATIONS.iter().take_while(|it| it.version <= 4) {
+            connection.execute_batch(migration.sql).unwrap();
+        }
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migration (
+                     version    INTEGER PRIMARY KEY,
+                     name       TEXT    NOT NULL,
+                     applied_at INTEGER NOT NULL
+                 ) STRICT;
+                 INSERT INTO schema_migration (version, name, applied_at)
+                 VALUES (1, 'a', 0), (2, 'b', 0), (3, 'c', 0), (4, 'd', 0);
+
+                 INSERT INTO watched_folder (id, path, added_at) VALUES (1, '/films', 0);
+                 INSERT INTO film (
+                     id, folder_id, path, title, size_bytes, modified_at, added_at, probed_at
+                 )
+                 VALUES (1, 1, '/films/Heat.mkv', 'Heat', 4000, 0, 0, 1700000000000);
+                 INSERT INTO subtitle_track (
+                     id, film_id, path, origin, stream_number, codec, forced,
+                     hearing_impaired, match_kind, encoding, cue_count, size_bytes, modified_at
+                 )
+                 VALUES (1, 1, '/films/Heat.mkv', 'stream', 3, 'subrip', 0, 0,
+                         'exact', 'UTF-8', 0, 4000, 0);",
+            )
+            .unwrap();
+
+        assert_eq!(apply(&mut connection).unwrap(), supported_version());
+
+        let (probed, tracks): (Option<i64>, i64) = connection
+            .query_row(
+                "SELECT f.probed_at, count(t.id) FROM film AS f
+                 LEFT JOIN subtitle_track AS t ON t.film_id = f.id
+                 WHERE f.id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(probed, None);
+        // The track keeps its row, so a chosen track and a correction still
+        // point at what they pointed at. Only the cues under it are missing,
+        // and the scan this puts the film back in the way of writes them.
+        assert_eq!(tracks, 1);
     }
 
     #[test]
