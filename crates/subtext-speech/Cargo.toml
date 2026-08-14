@@ -9,6 +9,20 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+rayon = "1.12.0"
+subtext-align.workspace = true
+
+# Named rather than taken as they come. The defaults carry readers and codecs
+# films are never distributed in, and every one of them is bytes in the
+# installer that nothing will ever call. What is here is the two containers a
+# film arrives in and the codecs their audio is actually in.
+[dependencies.symphonia]
+version = "0.6.1"
+default-features = false
+features = ["isomp4", "mkv", "aac", "mp3", "flac", "vorbis", "pcm", "alac"]
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [lints]
 workspace = true
