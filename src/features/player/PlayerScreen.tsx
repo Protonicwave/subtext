@@ -18,6 +18,7 @@ import { shapeFor } from './density';
 import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
+import { useAlignment } from './useAlignment';
 import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
@@ -100,6 +101,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const choice = useTrack(film);
   const dialogue = useCues(choice.active);
   const sync = useSync(choice.active);
+  const alignment = useAlignment(choice.active, sync);
   // Built once per film, with the reading comfort preferences folded in as it
   // is built. Nothing downstream of here knows they were applied, and nothing
   // in the frame loop does any of this work again.
@@ -226,6 +228,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             density={density}
             preview={preview}
             sync={sync}
+            alignment={alignment}
             syncing={syncing}
             choice={choice}
             choosing={choosing}

@@ -27,6 +27,7 @@ import { useSetting } from '@/shared/settings/useSettings';
 import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
 import { TrackMenu } from './TrackMenu';
+import type { Alignment } from './useAlignment';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
 import type { TrackChoice } from './useTrack';
@@ -63,6 +64,8 @@ interface ControlsProps {
   preview: Preview;
   /** Putting the subtitles back in step with the film. */
   sync: Sync;
+  /** Working that out by listening to the film instead. */
+  alignment: Alignment;
   /** The timing controls are showing. */
   syncing: boolean;
   /** Which subtitle the film is read with. */
@@ -88,6 +91,7 @@ export function Controls({
   density,
   preview,
   sync,
+  alignment,
   syncing,
   choice,
   choosing,
@@ -141,7 +145,9 @@ export function Controls({
        * is still using.
        */}
       {choosing && <TrackMenu choice={choice} onClose={onToggleTracks} />}
-      {syncing && !choosing && <SyncPanel sync={sync} onClose={onToggleSync} />}
+      {syncing && !choosing && (
+        <SyncPanel sync={sync} alignment={alignment} onClose={onToggleSync} />
+      )}
 
       <div
         className={styles.track}

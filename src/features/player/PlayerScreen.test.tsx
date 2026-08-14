@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as BindingsModule from '@/shared/ipc/bindings';
 import type * as ClientModule from '@/shared/ipc/client';
 import type { CueView, FilmView, TrackView } from '@/shared/ipc/bindings';
 import { opens, positionOf, pretendMediaWorks, reaches, refuses } from '@/test/media';
@@ -25,6 +26,19 @@ const { ipc } = vi.hoisted(() => ({
 vi.mock('@/shared/ipc/client', async () => {
   const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
   return { ...actual, ipc };
+});
+// Nothing here asks for an alignment, and the real emitter would go looking for
+// a window to subscribe through. Only the one the player listens to is stood
+// in for, so the rest of the bindings stay as they are.
+vi.mock('@/shared/ipc/bindings', async () => {
+  const actual = await vi.importActual<typeof BindingsModule>('@/shared/ipc/bindings');
+  return {
+    ...actual,
+    events: {
+      ...actual.events,
+      alignProgressed: { listen: () => Promise.resolve(() => undefined) },
+    },
+  };
 });
 // The URL a file is served from is the shell's business, and there is no shell
 // under test. The screen only cares that it has one.
