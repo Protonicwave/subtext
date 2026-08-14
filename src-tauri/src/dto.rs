@@ -227,6 +227,81 @@ impl CorrectionView {
     }
 }
 
+/// How an attempt to line a subtitle track up with its film ended.
+///
+/// One shape covering every ending, so that the front end matches on this and
+/// has no case of its own to invent. Only the first of them writes anything.
+/// The rest leave the track exactly as it was, with the nudge keys still where
+/// they were, which is the point: an answer nobody can check is worse than no
+/// answer, and each of these says plainly which it is.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(tag = "outcome", rename_all = "kebab-case")]
+pub(crate) enum AlignmentView {
+    /// The track has been moved to where the speech in the film actually is.
+    Aligned {
+        correction: CorrectionView,
+        /// What was in force beforehand, so that it can be put back.
+        previous: CorrectionView,
+        /// How sure the measurement was, from nothing to certain.
+        #[specta(type = Number)]
+        confidence: f32,
+    },
+    /// The track carries too few lines to be correlated with anything.
+    ///
+    /// What a forced or signs-only track looks like. Settled from the count on
+    /// the track's own row, before any audio is read.
+    TooFewCues {
+        cues: u32,
+        /// How many it would have taken.
+        wanted: u32,
+    },
+    /// The film has no soundtrack, so there is nothing to measure against.
+    NoAudio,
+    /// The soundtrack is in a codec this build has no decoder for.
+    ///
+    /// The same boundary the README states about video, in the same terms:
+    /// nothing is broken and trying again will not help.
+    Unsupported {
+        /// What the codec is called, where it is one anybody has a name for.
+        codec: Option<String>,
+    },
+    /// A measurement was made and is not worth acting on.
+    ///
+    /// What a subtitle belonging to a different film produces. The correction
+    /// it would have written comes back with it, since somebody who wants it
+    /// can still type it in, but nothing has been written.
+    Uncertain {
+        correction: CorrectionView,
+        #[specta(type = Number)]
+        confidence: f32,
+        /// How sure it would have had to be.
+        #[specta(type = Number)]
+        wanted: f32,
+    },
+    /// The film could not be opened, or nothing in it could be made sense of.
+    Unreadable { message: String },
+    /// Somebody asked for it to stop, and it stopped.
+    Stopped,
+}
+
+impl AlignmentView {
+    pub(crate) fn aligned(correction: Correction, previous: Correction, confidence: f32) -> Self {
+        Self::Aligned {
+            correction: CorrectionView::of(correction),
+            previous: CorrectionView::of(previous),
+            confidence,
+        }
+    }
+
+    pub(crate) fn uncertain(correction: Correction, confidence: f32, wanted: f32) -> Self {
+        Self::Uncertain {
+            correction: CorrectionView::of(correction),
+            confidence,
+            wanted,
+        }
+    }
+}
+
 /// Whether a track is a file beside the film or a stream inside it.
 #[derive(Clone, Copy, Debug, Serialize, Type)]
 #[serde(rename_all = "kebab-case")]
@@ -673,6 +748,31 @@ impl ScanProgressed {
             fraction_read: progress.fraction_read(),
         }
     }
+}
+
+/// How far along an alignment is.
+///
+/// Reading the film is nearly all of the time an alignment takes, and it is the
+/// part that can be stopped, so it is the part that reports itself. The
+/// correlation is under a second and says only that it has started.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AlignProgressed {
+    pub(crate) track_id: Id,
+    pub(crate) stage: AlignStageView,
+    /// How much of the film has been read, from zero to one.
+    #[specta(type = Number)]
+    pub(crate) fraction: f32,
+}
+
+/// Which step of an alignment is running.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AlignStageView {
+    /// Decoding the film's audio to find where the talking is.
+    Reading,
+    /// Matching that against where the subtitle says the talking is.
+    Correlating,
 }
 
 /// Which step of a scan is running.

@@ -73,6 +73,40 @@ fn a_correction_moves_every_line_as_the_cues_are_read() {
     assert_eq!(read[0].end, Timestamp::from_millis(6_500));
 }
 
+/// Working out a correction means seeing the timings the file claims, since a
+/// track measured through its own last answer would only ever yield what was
+/// left over from it.
+#[test]
+fn the_authored_read_is_untouched_by_whatever_correction_is_in_force() {
+    let (library, _, track) = mistimed();
+    let before = library.database.tracks().authored_cues(track).unwrap();
+
+    for correction in [
+        Correction::of_offset(2_500),
+        Correction::of_offset(-1_000),
+        Correction::new(4_000, 25.0 / 24.0),
+    ] {
+        library
+            .database
+            .tracks()
+            .set_correction(track, correction)
+            .unwrap();
+
+        let authored = library.database.tracks().authored_cues(track).unwrap();
+        let starts: Vec<u32> = authored.iter().map(|cue| cue.start.millis()).collect();
+        assert_eq!(starts, [0, 10_000, 20_000]);
+        assert_eq!(authored[0].end, Timestamp::from_millis(4_000));
+
+        // The same lines in the same order, so that the only difference between
+        // the two reads is the arithmetic.
+        assert_eq!(authored.len(), before.len());
+        for (line, was) in authored.iter().zip(&before) {
+            assert_eq!(line.index, was.index);
+            assert_eq!(line.text, was.text);
+        }
+    }
+}
+
 #[test]
 fn a_correction_outlives_a_restart() {
     let (library, film, track) = mistimed();

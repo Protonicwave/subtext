@@ -13,8 +13,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, Answer, CorrectionView, CueView, Failure, FilmView, FolderView, Id, PosterWanted,
-    PreferenceView, ScanProgressed, SearchView, TrackView,
+    AccentView, AlignProgressed, AlignmentView, Answer, CorrectionView, CueView, Failure, FilmView,
+    FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, SearchView, TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters, recent};
@@ -509,6 +509,49 @@ pub(crate) async fn set_track_correction(
         .map_err(Failure::of)?;
 
     read_back(database, track.film_id)
+}
+
+/// Works out how a subtitle track's timings line up with its film, by listening
+/// to the film.
+///
+/// The number somebody would otherwise arrive at by ear, measured instead. It
+/// is asked for rather than done on its own, because decoding the audio of
+/// every film in a library would cost minutes of a machine that is doing
+/// something else and would mostly correct files that are already right.
+///
+/// Real work on a thread of its own, since reading a two hour film takes
+/// several seconds and the film is expected to keep playing throughout. What
+/// comes back covers every ending, including the ones where nothing was
+/// written.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn align_track(app: AppHandle, track_id: Id) -> Answer<AlignmentView> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().aligning(&app, track_id.get())
+    })
+    .await
+    .map_err(|_| Failure::saying("lining the subtitle up did not finish"))?
+}
+
+/// Stops the alignment that is running.
+///
+/// Leaves the track as it was. Nothing is written until a measurement has been
+/// made and believed, and a reading that stops makes no measurement.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn cancel_alignment(state: State<'_, AppState>) -> Answer<()> {
+    state.stop_aligning();
+    Ok(())
+}
+
+/// Where the alignment that is running has got to, for a screen that has not
+/// seen any events yet.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn alignment_progress(
+    state: State<'_, AppState>,
+) -> Answer<Option<AlignProgressed>> {
+    Ok(state.latest_alignment())
 }
 
 /// Records which subtitle track a film is watched with.

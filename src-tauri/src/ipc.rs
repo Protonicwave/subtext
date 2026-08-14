@@ -8,7 +8,7 @@ use specta_typescript::Typescript;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
 use crate::commands;
-use crate::dto::{ScanFailed, ScanFinished, ScanProgressed};
+use crate::dto::{AlignProgressed, ScanFailed, ScanFinished, ScanProgressed};
 
 /// Where the generated TypeScript is written.
 ///
@@ -38,6 +38,9 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::continue_watching,
             commands::track_cues,
             commands::set_track_correction,
+            commands::align_track,
+            commands::cancel_alignment,
+            commands::alignment_progress,
             commands::set_film_track,
             commands::search_dialogue,
             commands::recent_searches,
@@ -53,7 +56,12 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::scan_progress,
             commands::is_scanning,
         ])
-        .events(collect_events![ScanProgressed, ScanFinished, ScanFailed])
+        .events(collect_events![
+            ScanProgressed,
+            ScanFinished,
+            ScanFailed,
+            AlignProgressed
+        ])
 }
 
 pub(crate) fn typescript() -> Typescript {

@@ -157,27 +157,24 @@ impl<'a> Tracks<'a> {
     pub fn cues(&self, track_id: i64) -> Result<Vec<Cue>> {
         self.database.with(|connection| {
             let correction = correction_of(connection, track_id)?;
-            let mut statement = connection.prepare(
-                "SELECT ordinal, start_ms, end_ms, position, text
-                 FROM cue WHERE track_id = ?1 ORDER BY start_ms, ordinal",
-            )?;
-            // A correction never reverses time, so the order the rows came back
-            // in is still the order the lines are spoken in.
-            let cues = statement
-                .query_map([track_id], |row| {
-                    Ok(Cue {
-                        index: row.get(0)?,
-                        start: correction.apply(Timestamp::from_millis(row.get(1)?)),
-                        end: correction.apply(Timestamp::from_millis(row.get(2)?)),
-                        position: row
-                            .get::<_, Option<u8>>(3)?
-                            .and_then(CuePosition::from_alignment),
-                        text: row.get(4)?,
-                    })
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            Ok(cues)
+            read_cues(connection, track_id, correction)
         })
+    }
+
+    /// The cues of a track as the file wrote them, with no correction applied.
+    ///
+    /// For working out a correction, and for nothing else. Measuring a track
+    /// against its film means seeing the timings the file claims, since cues
+    /// that have already been put through a correction would yield the residual
+    /// of that correction rather than the track's own error, and asking twice
+    /// would converge on nothing.
+    ///
+    /// Every other caller wants [`cues`](Self::cues). A line drawn over the
+    /// picture from this would be drawn at the wrong moment for any track
+    /// somebody has corrected.
+    pub fn authored_cues(&self, track_id: i64) -> Result<Vec<Cue>> {
+        self.database
+            .with(|connection| read_cues(connection, track_id, Correction::IDENTITY))
     }
 
     /// The tracks of one film, the language a name was found for first.
@@ -414,6 +411,33 @@ fn correction_of(connection: &Connection, track_id: i64) -> Result<Correction> {
         })
         .optional()?;
     Ok(found.unwrap_or(Correction::IDENTITY))
+}
+
+/// The lines of one track in playback order, put through `correction`.
+///
+/// The one query behind both reads, so that the corrected and the authored
+/// timings can only ever differ by the arithmetic and not by the rows.
+fn read_cues(connection: &Connection, track_id: i64, correction: Correction) -> Result<Vec<Cue>> {
+    let mut statement = connection.prepare(
+        "SELECT ordinal, start_ms, end_ms, position, text
+         FROM cue WHERE track_id = ?1 ORDER BY start_ms, ordinal",
+    )?;
+    // A correction never reverses time, so the order the rows came back in is
+    // still the order the lines are spoken in.
+    let cues = statement
+        .query_map([track_id], |row| {
+            Ok(Cue {
+                index: row.get(0)?,
+                start: correction.apply(Timestamp::from_millis(row.get(1)?)),
+                end: correction.apply(Timestamp::from_millis(row.get(2)?)),
+                position: row
+                    .get::<_, Option<u8>>(3)?
+                    .and_then(CuePosition::from_alignment),
+                text: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(cues)
 }
 
 /// The cues of one track, against a connection already inside a transaction.
