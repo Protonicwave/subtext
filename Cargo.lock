@@ -3533,6 +3533,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "subtext-speech"
+version = "0.3.0"
+
+[[package]]
 name = "swift-rs"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
