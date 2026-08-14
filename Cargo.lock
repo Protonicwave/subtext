@@ -3558,6 +3558,7 @@ dependencies = [
 name = "subtext-speech"
 version = "0.3.0"
 dependencies = [
+ "criterion",
  "memory-stats",
  "rayon",
  "subtext-align",
