@@ -50,11 +50,23 @@ The correction is saved against that track and applied everywhere afterwards, in
 
 Two settings apply to every subtitle whatever it came from. A lead-in puts a line on screen slightly before it is spoken, and a minimum time on screen keeps a short line up long enough to be read. Both are what broadcast subtitling does and what a file timed to the first syllable does not, and both can be set to zero if you would rather have the file exactly as written.
 
+### Working the offset out for you
+
+Press A, or use the align action in the timing panel, and Subtext listens to the film. It reads the soundtrack, works out where the talking actually falls, and compares that with where the subtitle claims it does. Where the two agree plainly, the offset and any framerate conversion are set for you, and one press puts back whatever was in force before. A feature length film takes a few seconds. It carries on playing throughout, and the reading can be stopped at any point.
+
+It is something you ask for rather than something done to you. Nothing is measured when films are added to the library, no film is read until you press the key, and a correction you arrived at yourself is never replaced without asking first.
+
+Subtext decodes the audio itself for this, so the formats it can read are its own rather than the webview's. It reads AAC, MP3, FLAC, Vorbis, PCM and ALAC, which covers most of what a film is distributed in. It does not read AC-3, E-AC-3, DTS or TrueHD, which is what a disc rip usually carries. Those films say so by name and leave the bracket keys where they are. None of the audio is played, kept or written anywhere; it is read a packet at a time to be measured and thrown away.
+
+Where the measurement is not good enough to act on, nothing is changed and it says so. A subtitle belonging to a different film, or a forced track of a few dozen lines with too little in it to line up, both end that way. Being told that nothing happened leaves you exactly where you were, with the keys above; a wrong answer applied quietly would leave you watching a film that is out from beginning to end, with no reason to suspect the file.
+
 ## Codec support
 
 Playback uses the webview your system already has, so Subtext plays what the webview plays. H.264 video in an MP4 container works everywhere. HEVC video and DTS audio frequently do not, and support varies by platform.
 
-Where a file cannot be decoded, Subtext says which part of it was refused rather than showing a black rectangle. Transcoding is out of scope: Subtext does not ship a decoder and does not convert your files.
+Where a file cannot be decoded, Subtext says which part of it was refused rather than showing a black rectangle. Transcoding is out of scope: Subtext does not convert your files.
+
+Lining a subtitle up by listening to the film is the one place Subtext decodes anything itself, and the boundary there is a different one, described [above](#working-the-offset-out-for-you). A film can play perfectly and still have a soundtrack that cannot be read for measurement, and the other way round.
 
 ## Building
 
@@ -76,7 +88,7 @@ npm test              # front end tests
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --workspace
-cargo bench --workspace   # parser, index and scan benchmarks
+cargo bench --workspace   # parser, index, scan and alignment benchmarks
 ```
 
 CI runs all of these on Windows, macOS and Linux.
@@ -89,6 +101,8 @@ CI runs all of these on Windows, macOS and Linux.
 | `crates/subtext-container` | Reading the subtitle tracks inside a film file.           |
 | `crates/subtext-index`     | SQLite persistence, full text search, migrations.         |
 | `crates/subtext-scan`      | Filesystem walking, watching, the ingest pipeline.        |
+| `crates/subtext-align`     | Lining two activity signals up. No files, no audio.       |
+| `crates/subtext-speech`    | Decoding a film's audio to say where the talking is.      |
 | `src-tauri`                | The application shell: commands, protocol, configuration. |
 | `src`                      | React front end.                                          |
 
