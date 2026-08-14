@@ -24,6 +24,8 @@ export interface Actions {
   stepping: Stepping;
   /** Moving the subtitles against the film, which is done by ear. */
   sync: Sync;
+  /** Working out where they should have been by listening to the film. */
+  align: () => void;
   /** Which subtitle is being read, and whether there is a choice to make. */
   choice: TrackChoice;
   toggleFullscreen: () => void;
@@ -54,6 +56,7 @@ export function useShortcuts(actions: Actions) {
         transport,
         stepping,
         sync,
+        align,
         choice,
         toggleFullscreen,
         toggleSync,
@@ -107,6 +110,15 @@ export function useShortcuts(actions: Actions) {
         case 's':
           if (!sync.available) return;
           toggleSync();
+          break;
+        /*
+         * A for align, beside the keys that do the same thing by hand. A film
+         * with no subtitle has nothing to measure, so the key does nothing
+         * rather than starting a reading that would be turned away.
+         */
+        case 'a':
+          if (!sync.available) return;
+          align();
           break;
         /*
          * C for captions, which is what every other player calls this key. A

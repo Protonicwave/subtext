@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
 import { shapeOf } from './density';
 import { DEFAULTS } from '@/shared/settings/schema';
+import type { Alignment } from './useAlignment';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
 import type { TrackChoice } from './useTrack';
@@ -38,6 +39,16 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
     nudge: vi.fn(),
     setRate: vi.fn(),
     reset: vi.fn(),
+    apply: vi.fn(() => Promise.resolve()),
+  };
+  const alignment: Alignment = {
+    available,
+    state: { phase: 'idle' },
+    start: vi.fn(),
+    confirm: vi.fn(),
+    cancel: vi.fn(),
+    undo: vi.fn(),
+    dismiss: vi.fn(),
   };
   const choice: TrackChoice = {
     tracks: [],
@@ -57,6 +68,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       density={shapeOf([0.2, 1, 0])}
       preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
       sync={sync}
+      alignment={alignment}
       syncing={false}
       choice={choice}
       choosing={false}

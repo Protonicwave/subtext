@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import type { AlignmentView } from '@/shared/ipc/bindings';
 import { SyncPanel } from './SyncPanel';
+import type { Alignment, AlignState } from './useAlignment';
 import { RATES, STEP_MS, type Sync } from './useSync';
 
-function show(state: Partial<Sync> = {}) {
+function show(state: Partial<Sync> = {}, phase: AlignState = { phase: 'idle' }) {
   const sync: Sync = {
     available: true,
     offsetMs: 0,
@@ -13,12 +15,27 @@ function show(state: Partial<Sync> = {}) {
     nudge: vi.fn(),
     setRate: vi.fn(),
     reset: vi.fn(),
+    apply: vi.fn(() => Promise.resolve()),
     ...state,
+  };
+  const alignment: Alignment = {
+    available: true,
+    state: phase,
+    start: vi.fn(),
+    confirm: vi.fn(),
+    cancel: vi.fn(),
+    undo: vi.fn(),
+    dismiss: vi.fn(),
   };
   const onClose = vi.fn();
 
-  render(<SyncPanel sync={sync} onClose={onClose} />);
-  return { sync, onClose };
+  render(<SyncPanel sync={sync} alignment={alignment} onClose={onClose} />);
+  return { sync, alignment, onClose };
+}
+
+/** The panel showing how an alignment ended. */
+function ended(outcome: AlignmentView, sync: Partial<Sync> = {}) {
+  return show(sync, { phase: 'outcome', outcome, undone: false });
 }
 
 describe('the subtitle timing controls', () => {
@@ -93,5 +110,183 @@ describe('the subtitle timing controls', () => {
     await userEvent.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('lining a subtitle up by listening to the film', () => {
+  it('offers to measure a film nobody has adjusted', async () => {
+    const { alignment } = show();
+
+    await userEvent.click(screen.getByRole('button', { name: /listen and line up/i }));
+    expect(alignment.start).toHaveBeenCalled();
+  });
+
+  it('says how far it has got, and can be stopped', async () => {
+    const { alignment } = show({}, { phase: 'running', stage: 'reading', fraction: 0.42 });
+
+    expect(screen.getByText('Listening to the film')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(alignment.cancel).toHaveBeenCalled();
+  });
+
+  it('names the second half of the work as something other than the first', () => {
+    show({}, { phase: 'running', stage: 'correlating', fraction: 1 });
+    expect(screen.getByText('Matching the dialogue')).toBeInTheDocument();
+  });
+
+  /*
+   * A value somebody arrived at themselves is evidence about the file, so it is
+   * not thrown away without being asked about. Nothing records where a
+   * correction came from, so anything other than the file as written counts.
+   */
+  it('asks before replacing a correction that is already in force', async () => {
+    const { alignment } = show({ offsetMs: -1_250 }, { phase: 'confirming' });
+
+    expect(screen.getByText(/moved by −1.25s already/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep mine' }));
+    expect(alignment.dismiss).toHaveBeenCalled();
+    expect(alignment.confirm).not.toHaveBeenCalled();
+  });
+
+  it('goes ahead once that is answered', async () => {
+    const { alignment } = show({ offsetMs: -1_250 }, { phase: 'confirming' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Measure anyway' }));
+    expect(alignment.confirm).toHaveBeenCalled();
+  });
+
+  it('says what it found in the terms the readout uses', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 3_500, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.6,
+    });
+
+    expect(screen.getByText('Lined up')).toBeInTheDocument();
+    expect(screen.getByText(/now run \+3.50s/)).toBeInTheDocument();
+  });
+
+  it('names a stretch as the list of framerates names it', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 0, rate: RATES[1]?.value ?? 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.6,
+    });
+
+    expect(screen.getByText(/stretched 23.976 to 25 fps/)).toBeInTheDocument();
+  });
+
+  it('offers to put back what it replaced, in one press', async () => {
+    const { alignment } = ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 3_500, rate: 1 },
+      previous: { offsetMs: -800, rate: 1 },
+      confidence: 0.6,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /put it back to −0.80s/i }));
+    expect(alignment.undo).toHaveBeenCalled();
+  });
+
+  it('has nothing to put back once it has been put back', () => {
+    show(
+      {},
+      {
+        phase: 'outcome',
+        undone: true,
+        outcome: {
+          outcome: 'aligned',
+          correction: { offsetMs: 3_500, rate: 1 },
+          previous: { offsetMs: -800, rate: 1 },
+          confidence: 0.6,
+        },
+      },
+    );
+
+    expect(screen.queryByRole('button', { name: /put it back/i })).not.toBeInTheDocument();
+  });
+
+  it('says a film nobody had touched goes back to the file as written', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 3_500, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.6,
+    });
+
+    expect(screen.getByRole('button', { name: 'Put it back as written' })).toBeInTheDocument();
+  });
+
+  /*
+   * Every ending the back end can report has a wording, and the ones that
+   * changed nothing say what to do instead rather than only what went wrong.
+   */
+  it('says a track with too few lines is too short to go on', () => {
+    ended({ outcome: 'too-few-cues', cues: 42, wanted: 100 });
+
+    expect(screen.getByText('Not enough to go on')).toBeInTheDocument();
+    expect(screen.getByText(/42 lines/)).toBeInTheDocument();
+    expect(screen.getByText(/bracket keys still work/)).toBeInTheDocument();
+  });
+
+  it('says a film with no soundtrack has nothing to listen to', () => {
+    ended({ outcome: 'no-audio' });
+    expect(screen.getByText('Nothing to listen to')).toBeInTheDocument();
+  });
+
+  it('names the audio it cannot read, in the register the codec note uses', () => {
+    ended({ outcome: 'unsupported', codec: 'AC-3' });
+
+    expect(screen.getByText(/This soundtrack is AC-3/)).toBeInTheDocument();
+    expect(screen.getByText(/no decoder for/)).toBeInTheDocument();
+  });
+
+  it('still says something about audio it cannot even name', () => {
+    ended({ outcome: 'unsupported', codec: null });
+    expect(screen.getByText(/This soundtrack is in a format/)).toBeInTheDocument();
+  });
+
+  it('says a measurement it does not believe changed nothing', () => {
+    ended({
+      outcome: 'uncertain',
+      correction: { offsetMs: 12_000, rate: 1 },
+      confidence: 0.01,
+      wanted: 0.25,
+    });
+
+    expect(screen.getByText('Not sure enough to say')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing has been changed/)).toBeInTheDocument();
+    // The value it would have written is not offered as a number to try, since
+    // a measurement nobody believes is not a suggestion.
+    expect(screen.queryByRole('button', { name: /put it back/i })).not.toBeInTheDocument();
+  });
+
+  it('passes on what could not be read', () => {
+    ended({ outcome: 'unreadable', message: 'the file ends part way through a cluster' });
+    expect(screen.getByText(/ends part way through a cluster/)).toBeInTheDocument();
+  });
+
+  it('says that stopping left the subtitles alone', () => {
+    ended({ outcome: 'stopped' });
+    expect(screen.getByText(/left as they were/)).toBeInTheDocument();
+  });
+
+  it('puts an outcome away when it is dismissed', async () => {
+    const { alignment } = ended({ outcome: 'no-audio' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(alignment.dismiss).toHaveBeenCalled();
+  });
+
+  it('leaves the nudge buttons working throughout', async () => {
+    const { sync } = show({}, { phase: 'running', stage: 'reading', fraction: 0.1 });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(sync.nudge).toHaveBeenCalledWith(STEP_MS);
   });
 });

@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as BindingsModule from '@/shared/ipc/bindings';
 import type * as ClientModule from '@/shared/ipc/client';
 import type { CueView, FilmView, TrackView } from '@/shared/ipc/bindings';
 import { opens, positionOf, pretendMediaWorks, reaches, refuses } from '@/test/media';
@@ -15,6 +16,15 @@ const { ipc } = vi.hoisted(() => ({
     // Refused unless a test says otherwise, so that choosing a track is only
     // answered where the answer is what the test is about.
     setFilmTrack: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
+    // Reading a film takes a while and this one never finishes, which is what
+    // lets a test look at the panel while the work is going on.
+    alignTrack: vi.fn(
+      () =>
+        new Promise<never>(() => {
+          /* still reading */
+        }),
+    ),
+    cancelAlignment: vi.fn(() => Promise.resolve(null)),
     savePosition: vi.fn(() => Promise.resolve(null)),
     listFolders: vi.fn(() => Promise.resolve([])),
     listLibrary: vi.fn(() => Promise.resolve([])),
@@ -25,6 +35,19 @@ const { ipc } = vi.hoisted(() => ({
 vi.mock('@/shared/ipc/client', async () => {
   const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
   return { ...actual, ipc };
+});
+// Nothing here asks for an alignment, and the real emitter would go looking for
+// a window to subscribe through. Only the one the player listens to is stood
+// in for, so the rest of the bindings stay as they are.
+vi.mock('@/shared/ipc/bindings', async () => {
+  const actual = await vi.importActual<typeof BindingsModule>('@/shared/ipc/bindings');
+  return {
+    ...actual,
+    events: {
+      ...actual.events,
+      alignProgressed: { listen: () => Promise.resolve(() => undefined) },
+    },
+  };
 });
 // The URL a file is served from is the shell's business, and there is no shell
 // under test. The screen only cares that it has one.
@@ -459,6 +482,45 @@ describe('playing a film', () => {
     // cues and nothing else.
     expect(video().paused).toBe(false);
     expect(positionOf(video())).toBe(0);
+  });
+
+  /*
+   * The whole point of doing it from here: somebody notices the subtitles are
+   * out while they are watching, and one key puts it right without stopping
+   * what they are watching.
+   */
+  it('measures the subtitle against the film without interrupting it', async () => {
+    const { video } = open();
+    opens(video(), RUNS);
+    reaches(video(), 60_000);
+
+    await userEvent.keyboard('a');
+
+    expect(ipc.alignTrack).toHaveBeenCalledWith(3);
+    // The panel comes up with it, because everything it has to say afterwards
+    // is said there.
+    expect(await screen.findByText('Listening to the film')).toBeInTheDocument();
+    expect(video().paused).toBe(false);
+    expect(positionOf(video())).toBe(60_000);
+  });
+
+  it('stops the reading when it is asked to, from the panel', async () => {
+    const { video } = open();
+    opens(video(), RUNS);
+
+    await userEvent.keyboard('a');
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+    expect(ipc.cancelAlignment).toHaveBeenCalled();
+  });
+
+  it('leaves the align key alone for a film with no subtitle to measure', async () => {
+    const { video } = open({ tracks: [] });
+    opens(video(), RUNS);
+
+    await userEvent.keyboard('a');
+
+    expect(ipc.alignTrack).not.toHaveBeenCalled();
   });
 
   it('leaves the nudge keys alone for a film with no subtitle to move', async () => {

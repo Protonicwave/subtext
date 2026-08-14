@@ -21,7 +21,12 @@ const emitter = () => ({ listen: () => Promise.resolve(() => undefined) });
 
 vi.mock('@/shared/ipc/bindings', () => ({
   commands: {},
-  events: { scanProgressed: emitter(), scanFinished: emitter(), scanFailed: emitter() },
+  events: {
+    scanProgressed: emitter(),
+    scanFinished: emitter(),
+    scanFailed: emitter(),
+    alignProgressed: emitter(),
+  },
 }));
 vi.mock('@/shared/ipc/client', async () => {
   const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');

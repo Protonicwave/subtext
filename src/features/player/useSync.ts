@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { TrackView } from '@/shared/ipc/bindings';
+import type { CorrectionView, TrackView } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { useLibrary } from '@/features/library/useLibrary';
 
@@ -66,6 +66,15 @@ export interface Sync {
   setRate: (rate: number) => void;
   /** Back to the file exactly as it was written. */
   reset: () => void;
+  /**
+   * Puts a whole correction in force and keeps it.
+   *
+   * What a measurement writes rather than what an ear arrives at, so there is
+   * no settling: the value is known the moment it is handed over. Resolves once
+   * the track has been read back, so a caller can wait for the lines to have
+   * moved before it says they have.
+   */
+  apply: (correction: CorrectionView) => Promise<void>;
 }
 
 export function useSync(track: TrackView | null): Sync {
@@ -81,10 +90,10 @@ export function useSync(track: TrackView | null): Sync {
   const offsetMs = draft ?? kept;
 
   const commit = useCallback(
-    (offset: number, stretch: number) => {
-      if (trackId === null) return;
+    (offset: number, stretch: number): Promise<void> => {
+      if (trackId === null) return Promise.resolve();
       setPending(false);
-      void ipc
+      return ipc
         .setTrackCorrection(trackId, { offsetMs: offset, rate: stretch })
         .then((updated) => {
           replace(updated);
@@ -114,7 +123,7 @@ export function useSync(track: TrackView | null): Sync {
     if (!pending) return;
 
     const settling = setTimeout(() => {
-      commit(offsetMs, rate);
+      void commit(offsetMs, rate);
     }, SETTLE_MS);
     return () => {
       clearTimeout(settling);
@@ -130,15 +139,31 @@ export function useSync(track: TrackView | null): Sync {
     // A rate is chosen rather than felt for, so there is nothing to wait for.
     setRate: useCallback(
       (chosen: number) => {
-        commit(offsetMs, chosen);
+        void commit(offsetMs, chosen);
       },
       [commit, offsetMs],
     ),
     reset: useCallback(() => {
       setDraft(0);
-      commit(0, 1);
+      void commit(0, 1);
     }, [commit]),
+    apply: useCallback(
+      (correction: CorrectionView) => {
+        // Shown before it is written, so the lines move with the press rather
+        // than a round trip later. The read back then clears it.
+        setDraft(correction.offsetMs);
+        return commit(correction.offsetMs, correction.rate);
+      },
+      [commit],
+    ),
   };
+}
+
+/** Whether the file is being honoured exactly as it was written. */
+export function asWritten(correction: CorrectionView): boolean {
+  // The rate is a ratio between two framerates, so it arrives divided and a
+  // rate of one is one only to within the last bit of that division.
+  return correction.offsetMs === 0 && Math.abs(correction.rate - 1) < 1e-9;
 }
 
 /** The offset as the readout says it, always signed so nought reads as nought. */
