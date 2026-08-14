@@ -29,9 +29,9 @@
   --colour-text-faint: #5f6672;
 
   /*
-   * The accent pair. Taken from each film's own poster from Phase 5 onwards
-   * and written onto the root element, which is why everything downstream
-   * reads it from here instead of hard coding the amber.
+   * The accent pair. Taken from each film's own poster and written onto the
+   * root element, which is why everything downstream reads it from here
+   * instead of hard coding the amber.
    */
   --colour-accent: #e8a33d;
   --colour-accent-pair: #2b6c7a;

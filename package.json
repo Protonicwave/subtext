@@ -1,7 +1,7 @@
 {
   "name": "subtext",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A film player that treats subtitles as data",
   "license": "MIT",
   "type": "module",

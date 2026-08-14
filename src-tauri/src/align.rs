@@ -26,19 +26,34 @@ use crate::dto::{AlignmentView, Answer, Failure};
 /// reason to suspect the tool rather than the file. So the number is set where
 /// a wrong answer is refused rather than where the most files are helped.
 ///
-/// A quarter, and the two cases either side of it have been measured. A
-/// subtitle belonging to a different film scores under a hundredth, because
-/// dialogue is spread through every film in much the same way and a wrong
-/// pairing correlates a little at every lag rather than plainly at one. A track
-/// that is genuinely this film's, read from real audio with music and effects
-/// over it, scores around a half.
+/// Four measurements set it. Against a real film, a hundred and five minute
+/// AAC rip whose own subtitle runs two seconds early, that subtitle scores
+/// 0.027 and a transcript of the same density belonging to another film scores
+/// 0.0035. Against the fixture films below, whose speech is bursts against
+/// digital silence, the same two cases score 0.456 and 0.0074.
 ///
-/// Set nearer the upper of the two than halfway, because the two mistakes are
-/// not equally bad. Refusing a file that could have been helped leaves somebody
-/// exactly where they were, with the keys they already had and a sentence
-/// saying why. Accepting one that could not leaves them watching a film that is
-/// wrong from beginning to end.
-const THRESHOLD: f32 = 0.25;
+/// So the number has to sit above 0.0074 and below 0.027, and 0.015 is the
+/// middle of that in the sense that matters. Confidence is a ratio and moves by
+/// multiples, so the middle of a range is the geometric one: this is a factor of
+/// about two from either side, where a value placed halfway by subtraction would
+/// sit almost on top of the correct answer.
+///
+/// The two regimes are four hundredths apart at the top and a hundredth apart at
+/// the bottom, which is the useful thing to know about this number. Real audio
+/// carries music and effects through the gaps and the reading marks some of it,
+/// so a correct answer on a real film is a quarter of a perfect match rather
+/// than most of one, and everything shifts down with it. What separates a right
+/// answer from a wrong one in both regimes is the height of the peak rather than
+/// the score as a whole: 0.247 against 0.027 on the real film, where the margins
+/// were 0.110 and 0.130 and told the two apart not at all. Somebody revisiting
+/// this should look there first, and should measure a second real film before
+/// moving the number on the strength of one.
+///
+/// Erring low would be worse than erring high. Refusing a file that could have
+/// been helped leaves somebody exactly where they were, with the keys they
+/// already had and a sentence saying why. Accepting one that could not leaves
+/// them watching a film that is wrong from beginning to end.
+const THRESHOLD: f32 = 0.015;
 
 /// How many lines a track needs before it is worth measuring at all.
 ///
