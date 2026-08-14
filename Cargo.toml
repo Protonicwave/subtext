@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/subtext-align",
     "crates/subtext-container",
     "crates/subtext-core",
     "crates/subtext-index",
@@ -17,6 +18,7 @@ repository = "https://github.com/Protonicwave/subtext"
 authors = ["Shlok Bhusal"]
 
 [workspace.dependencies]
+subtext-align = { path = "crates/subtext-align" }
 subtext-container = { path = "crates/subtext-container" }
 subtext-core = { path = "crates/subtext-core" }
 subtext-index = { path = "crates/subtext-index" }
