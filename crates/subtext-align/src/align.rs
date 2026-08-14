@@ -173,11 +173,18 @@ mod tests {
     use crate::signal::{BIN_MS, Signal};
     use subtext_core::{Correction, Cue, Timestamp};
 
-    /// How sure a caller in Phase 19's position would insist on being.
+    /// A level the cases below have to fall either side of.
     ///
     /// Stated here so that the tests which have to be above it and the tests
-    /// which have to be below it are talking about the same number. The value
-    /// itself belongs to whoever is deciding to write to somebody's library.
+    /// which have to be below it are talking about the same number, and no more
+    /// than that. What these tests demonstrate is the ordering: a track that
+    /// belongs to its film scores well clear of one that does not.
+    ///
+    /// It is not the number an application would compare against. Every signal
+    /// here is built from cues, on both sides, and a pair like that scores far
+    /// higher than a real subtitle measured against real audio does. Whoever is
+    /// deciding to write to somebody's library sets their own value from films
+    /// rather than from this.
     const DEFENSIBLE: f32 = 0.25;
 
     /// A film's worth of dialogue: a line every few seconds, in bursts with
