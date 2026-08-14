@@ -22,6 +22,7 @@ default-features = false
 features = ["isomp4", "mkv", "aac", "mp3", "flac", "vorbis", "pcm", "alac"]
 
 [dev-dependencies]
+memory-stats = "1.2.0"
 tempfile = "3.27.0"
 
 [lints]
