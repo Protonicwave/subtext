@@ -94,6 +94,21 @@ export const commands = {
 	 */
 	setTrackCorrection: (trackId: Id, correction: CorrectionView) => typedError<FilmView, Failure>(__TAURI_INVOKE("set_track_correction", { trackId, correction })),
 	/**
+	 *  Works out how a subtitle track's timings line up with its film, by listening
+	 *  to the film.
+	 * 
+	 *  The number somebody would otherwise arrive at by ear, measured instead. It
+	 *  is asked for rather than done on its own, because decoding the audio of
+	 *  every film in a library would cost minutes of a machine that is doing
+	 *  something else and would mostly correct files that are already right.
+	 * 
+	 *  Real work on a thread of its own, since reading a two hour film takes
+	 *  several seconds and the film is expected to keep playing throughout. What
+	 *  comes back covers every ending, including the ones where nothing was
+	 *  written.
+	 */
+	alignTrack: (trackId: Id) => typedError<AlignmentView, Failure>(__TAURI_INVOKE("align_track", { trackId })),
+	/**
 	 *  Records which subtitle track a film is watched with.
 	 * 
 	 *  A track to read it with, or nothing at all, which is a decision in its own
@@ -249,6 +264,57 @@ export type AccentView = {
 	/**  The second colour of the pair, which the ambient wash uses. */
 	pair: string,
 };
+
+/**
+ *  How an attempt to line a subtitle track up with its film ended.
+ * 
+ *  One shape covering every ending, so that the front end matches on this and
+ *  has no case of its own to invent. Only the first of them writes anything.
+ *  The rest leave the track exactly as it was, with the nudge keys still where
+ *  they were, which is the point: an answer nobody can check is worse than no
+ *  answer, and each of these says plainly which it is.
+ */
+export type AlignmentView = 
+/**  The track has been moved to where the speech in the film actually is. */
+{ outcome: "aligned"; correction: CorrectionView; 
+/**  What was in force beforehand, so that it can be put back. */
+previous: CorrectionView; 
+/**  How sure the measurement was, from nothing to certain. */
+confidence: number } | 
+/**
+ *  The track carries too few lines to be correlated with anything.
+ * 
+ *  What a forced or signs-only track looks like. Settled from the count on
+ *  the track's own row, before any audio is read.
+ */
+{ outcome: "too-few-cues"; cues: number; 
+/**  How many it would have taken. */
+wanted: number } | 
+/**  The film has no soundtrack, so there is nothing to measure against. */
+{ outcome: "no-audio" } | 
+/**
+ *  The soundtrack is in a codec this build has no decoder for.
+ * 
+ *  The same boundary the README states about video, in the same terms:
+ *  nothing is broken and trying again will not help.
+ */
+{ outcome: "unsupported"; 
+/**  What the codec is called, where it is one anybody has a name for. */
+codec: string | null } | 
+/**
+ *  A measurement was made and is not worth acting on.
+ * 
+ *  What a subtitle belonging to a different film produces. The correction
+ *  it would have written comes back with it, since somebody who wants it
+ *  can still type it in, but nothing has been written.
+ */
+{ outcome: "uncertain"; correction: CorrectionView; confidence: number; 
+/**  How sure it would have had to be. */
+wanted: number } | 
+/**  The film could not be opened, or nothing in it could be made sense of. */
+{ outcome: "unreadable"; message: string } | 
+/**  Somebody asked for it to stop, and it stopped. */
+{ outcome: "stopped" };
 
 /**  What the front end needs to know about the window it is drawing into. */
 export type Chrome = {

@@ -13,10 +13,12 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 tauri = { version = "2.11.5", features = ["protocol-asset"] }
+subtext-align.workspace = true
 subtext-container.workspace = true
 subtext-core.workspace = true
 subtext-index.workspace = true
 subtext-scan.workspace = true
+subtext-speech.workspace = true
 percent-encoding = "2.3.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.145"

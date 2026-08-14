@@ -38,6 +38,7 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::continue_watching,
             commands::track_cues,
             commands::set_track_correction,
+            commands::align_track,
             commands::set_film_track,
             commands::search_dialogue,
             commands::recent_searches,

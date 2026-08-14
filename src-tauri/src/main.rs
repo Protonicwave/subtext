@@ -2,6 +2,7 @@
 // application. Debug builds keep it, because that is where log output goes.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod align;
 mod allowed;
 mod chrome;
 mod commands;
