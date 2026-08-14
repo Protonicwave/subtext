@@ -5,6 +5,7 @@ members = [
     "crates/subtext-core",
     "crates/subtext-index",
     "crates/subtext-scan",
+    "crates/subtext-speech",
     "src-tauri",
 ]
 resolver = "3"
@@ -23,6 +24,7 @@ subtext-container = { path = "crates/subtext-container" }
 subtext-core = { path = "crates/subtext-core" }
 subtext-index = { path = "crates/subtext-index" }
 subtext-scan = { path = "crates/subtext-scan" }
+subtext-speech = { path = "crates/subtext-speech" }
 
 [workspace.lints.rust]
 # The application decodes nothing itself and touches no raw pointers, so there is

@@ -73,6 +73,16 @@ impl Signal {
         self.active
     }
 
+    /// Whether there is activity in a bin.
+    ///
+    /// A bin past the end of the signal is quiet rather than missing, so
+    /// anything walking two signals of different lengths, which is every caller
+    /// that has one of each, does not have to ask how long they are first.
+    #[must_use]
+    pub fn is_active(&self, bin: usize) -> bool {
+        self.bins.get(bin).copied().unwrap_or(false)
+    }
+
     pub(crate) fn bins(&self) -> &[bool] {
         &self.bins
     }
