@@ -38,6 +38,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
     nudge: vi.fn(),
     setRate: vi.fn(),
     reset: vi.fn(),
+    apply: vi.fn(() => Promise.resolve()),
   };
   const choice: TrackChoice = {
     tracks: [],

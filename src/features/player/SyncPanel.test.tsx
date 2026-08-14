@@ -13,6 +13,7 @@ function show(state: Partial<Sync> = {}) {
     nudge: vi.fn(),
     setRate: vi.fn(),
     reset: vi.fn(),
+    apply: vi.fn(() => Promise.resolve()),
     ...state,
   };
   const onClose = vi.fn();

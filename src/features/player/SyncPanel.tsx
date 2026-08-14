@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useState } from 'react';
 import { classes } from '@/shared/ui/classes';
-import { RATES, STEP_MS, type Sync, offsetLabel } from './useSync';
+import { RATES, STEP_MS, type Sync, asWritten, offsetLabel } from './useSync';
 import styles from './SyncPanel.module.css';
 
 /**
@@ -67,7 +67,7 @@ export function SyncPanel({ sync, onClose }: SyncPanelProps) {
           type="button"
           className={classes(styles.nudge, styles.quiet)}
           onClick={sync.reset}
-          disabled={sync.offsetMs === 0 && same(sync.rate, 1)}
+          disabled={asWritten(sync)}
         >
           As written
         </button>
