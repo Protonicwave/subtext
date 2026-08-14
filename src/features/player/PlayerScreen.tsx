@@ -127,6 +127,15 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const toggleSync = useCallback(() => {
     setSyncing((showing) => !showing);
   }, []);
+  // Asking for an alignment shows the panel, because everything it has to say
+  // afterwards is said there. The nudge keys report themselves over the picture
+  // and need nothing open; this reports a measurement, a way to stop it and a
+  // sentence about how it went, which is more than belongs over a film.
+  const { start: measure } = alignment;
+  const align = useCallback(() => {
+    setSyncing(true);
+    measure();
+  }, [measure]);
   const [choosing, setChoosing] = useState(false);
   const toggleTracks = useCallback(() => {
     setChoosing((showing) => !showing);
@@ -138,6 +147,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     transport,
     stepping,
     sync,
+    align,
     choice,
     toggleFullscreen,
     toggleSync,
