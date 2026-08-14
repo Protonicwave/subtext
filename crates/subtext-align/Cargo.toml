@@ -1,0 +1,23 @@
+[package]
+name = "subtext-align"
+description = "Working out how far a subtitle track is out of step with its film"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+realfft = "3.5.0"
+subtext-core.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "align"
+harness = false
+
+[lints]
+workspace = true
