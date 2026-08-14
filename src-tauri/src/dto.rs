@@ -750,6 +750,31 @@ impl ScanProgressed {
     }
 }
 
+/// How far along an alignment is.
+///
+/// Reading the film is nearly all of the time an alignment takes, and it is the
+/// part that can be stopped, so it is the part that reports itself. The
+/// correlation is under a second and says only that it has started.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AlignProgressed {
+    pub(crate) track_id: Id,
+    pub(crate) stage: AlignStageView,
+    /// How much of the film has been read, from zero to one.
+    #[specta(type = Number)]
+    pub(crate) fraction: f32,
+}
+
+/// Which step of an alignment is running.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AlignStageView {
+    /// Decoding the film's audio to find where the talking is.
+    Reading,
+    /// Matching that against where the subtitle says the talking is.
+    Correlating,
+}
+
 /// Which step of a scan is running.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "kebab-case")]

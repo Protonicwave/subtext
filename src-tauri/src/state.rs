@@ -6,11 +6,15 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use subtext_index::Database;
 use subtext_scan::{FolderWatcher, ProgressSink, ScanOutcome, ScanProgress, Scanner};
+use subtext_speech::Reading;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_specta::Event;
 
-use crate::dto::{Failure, ScanFailed, ScanFinished, ScanProgressed, ScanSummary};
-use crate::settings;
+use crate::dto::{
+    AlignProgressed, AlignStageView, AlignmentView, Answer, Failure, Id, ScanFailed, ScanFinished,
+    ScanProgressed, ScanSummary,
+};
+use crate::{align, settings};
 
 /// The library, the scanner, and the watches on the folders it came from.
 pub(crate) struct AppState {
@@ -22,6 +26,14 @@ pub(crate) struct AppState {
     /// one and so has not seen any events yet.
     latest: Mutex<Option<ScanProgressed>>,
     scanning: AtomicBool,
+    /// The last thing an alignment said, for the same reason as `latest`.
+    latest_alignment: Mutex<Option<AlignProgressed>>,
+    aligning: AtomicBool,
+    /// Set when somebody has asked the alignment that is running to stop.
+    /// Cleared as the next one starts rather than as this one ends, so that a
+    /// request arriving while the work is winding up is not left behind to stop
+    /// something nobody asked to stop.
+    stopping: AtomicBool,
 }
 
 impl AppState {
@@ -32,6 +44,9 @@ impl AppState {
             watcher: Mutex::new(None),
             latest: Mutex::new(None),
             scanning: AtomicBool::new(false),
+            latest_alignment: Mutex::new(None),
+            aligning: AtomicBool::new(false),
+            stopping: AtomicBool::new(false),
         }
     }
 
@@ -123,6 +138,80 @@ impl AppState {
             Ok(outcomes) => ScanFinished(outcomes.iter().map(ScanSummary::of).collect()).emit(app),
             Err(error) => ScanFailed(Failure::of(error)).emit(app),
         };
+    }
+}
+
+impl AppState {
+    /// Where the alignment that is running has got to, and nothing where none
+    /// is: the last word is cleared as the work ends rather than left behind,
+    /// so this answers both questions at once.
+    pub(crate) fn latest_alignment(&self) -> Option<AlignProgressed> {
+        *lock(&self.latest_alignment)
+    }
+
+    /// Asks the alignment that is running to stop.
+    ///
+    /// The track is left exactly as it was: nothing is written until a
+    /// measurement has been made and believed, and a reading that stops makes
+    /// no measurement.
+    pub(crate) fn stop_aligning(&self) {
+        self.stopping.store(true, Ordering::Relaxed);
+    }
+
+    /// Lines a track up with its film, reporting it as it goes.
+    ///
+    /// Unlike a scan this is waited for, because it is one track, it was asked
+    /// for by somebody looking at that track, and what it produces is an answer
+    /// rather than a change to the library at large.
+    ///
+    /// # Errors
+    ///
+    /// Where the library cannot be read, and where an alignment is already
+    /// running: two at once would share the one request to stop, and stopping
+    /// the wrong one is worse than being asked to wait.
+    pub(crate) fn aligning<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        track_id: i64,
+    ) -> Answer<AlignmentView> {
+        if self
+            .aligning
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            return Err(Failure::saying("a subtitle is already being lined up"));
+        }
+        self.stopping.store(false, Ordering::Relaxed);
+
+        let report = |stage: AlignStageView, fraction: f32| {
+            let event = AlignProgressed {
+                track_id: Id::of(track_id),
+                stage,
+                fraction,
+            };
+            *lock(&self.latest_alignment) = Some(event);
+            let _ = event.emit(app);
+        };
+
+        report(AlignStageView::Reading, 0.0);
+        let outcome = align::run(self.scanner().database(), track_id, &|fraction: f32| {
+            if self.stopping.load(Ordering::Relaxed) {
+                return Reading::Stop;
+            }
+            // The last word from the reading is the moment the correlation
+            // starts, there being nothing in between the two.
+            let stage = if fraction < 1.0 {
+                AlignStageView::Reading
+            } else {
+                AlignStageView::Correlating
+            };
+            report(stage, fraction);
+            Reading::Continue
+        });
+
+        *lock(&self.latest_alignment) = None;
+        self.aligning.store(false, Ordering::Release);
+        outcome
     }
 }
 

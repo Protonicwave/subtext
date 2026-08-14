@@ -8,17 +8,16 @@ use std::path::{Path, PathBuf};
 
 use subtext_core::Timestamp;
 use subtext_index::{Database, SearchOptions, TrackChoice};
-use subtext_speech::Unwatched;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, AlignmentView, Answer, CorrectionView, CueView, Failure, FilmView, FolderView, Id,
-    PosterWanted, PreferenceView, ScanProgressed, SearchView, TrackView,
+    AccentView, AlignProgressed, AlignmentView, Answer, CorrectionView, CueView, Failure, FilmView,
+    FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, SearchView, TrackView,
 };
 use crate::state::AppState;
-use crate::{align, allowed, dropped, posters, recent};
+use crate::{allowed, dropped, posters, recent};
 
 /// What the window the front end is drawing into turned out to be.
 ///
@@ -528,11 +527,31 @@ pub(crate) async fn set_track_correction(
 #[specta::specta]
 pub(crate) async fn align_track(app: AppHandle, track_id: Id) -> Answer<AlignmentView> {
     tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        align::run(state.scanner().database(), track_id.get(), &Unwatched)
+        app.state::<AppState>().aligning(&app, track_id.get())
     })
     .await
     .map_err(|_| Failure::saying("lining the subtitle up did not finish"))?
+}
+
+/// Stops the alignment that is running.
+///
+/// Leaves the track as it was. Nothing is written until a measurement has been
+/// made and believed, and a reading that stops makes no measurement.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn cancel_alignment(state: State<'_, AppState>) -> Answer<()> {
+    state.stop_aligning();
+    Ok(())
+}
+
+/// Where the alignment that is running has got to, for a screen that has not
+/// seen any events yet.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn alignment_progress(
+    state: State<'_, AppState>,
+) -> Answer<Option<AlignProgressed>> {
+    Ok(state.latest_alignment())
 }
 
 /// Records which subtitle track a film is watched with.

@@ -109,6 +109,23 @@ export const commands = {
 	 */
 	alignTrack: (trackId: Id) => typedError<AlignmentView, Failure>(__TAURI_INVOKE("align_track", { trackId })),
 	/**
+	 *  Stops the alignment that is running.
+	 * 
+	 *  Leaves the track as it was. Nothing is written until a measurement has been
+	 *  made and believed, and a reading that stops makes no measurement.
+	 */
+	cancelAlignment: () => typedError<null, Failure>(__TAURI_INVOKE("cancel_alignment")),
+	/**
+	 *  Where the alignment that is running has got to, for a screen that has not
+	 *  seen any events yet.
+	 */
+	alignmentProgress: () => typedError<{
+	trackId: Id,
+	stage: AlignStageView,
+	/**  How much of the film has been read, from zero to one. */
+	fraction: number,
+} | null, Failure>(__TAURI_INVOKE("alignment_progress")),
+	/**
 	 *  Records which subtitle track a film is watched with.
 	 * 
 	 *  A track to read it with, or nothing at all, which is a decision in its own
@@ -245,6 +262,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	alignProgressed: makeEvent<AlignProgressed>("align-progressed"),
 	scanFailed: makeEvent<ScanFailed>("scan-failed"),
 	scanFinished: makeEvent<ScanFinished>("scan-finished"),
 	scanProgressed: makeEvent<ScanProgressed>("scan-progressed"),
@@ -264,6 +282,27 @@ export type AccentView = {
 	/**  The second colour of the pair, which the ambient wash uses. */
 	pair: string,
 };
+
+/**
+ *  How far along an alignment is.
+ * 
+ *  Reading the film is nearly all of the time an alignment takes, and it is the
+ *  part that can be stopped, so it is the part that reports itself. The
+ *  correlation is under a second and says only that it has started.
+ */
+export type AlignProgressed = {
+	trackId: Id,
+	stage: AlignStageView,
+	/**  How much of the film has been read, from zero to one. */
+	fraction: number,
+};
+
+/**  Which step of an alignment is running. */
+export type AlignStageView = 
+/**  Decoding the film's audio to find where the talking is. */
+"reading" | 
+/**  Matching that against where the subtitle says the talking is. */
+"correlating";
 
 /**
  *  How an attempt to line a subtitle track up with its film ended.
