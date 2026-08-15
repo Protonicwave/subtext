@@ -12,7 +12,6 @@ import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
-import { shapeFor } from './density';
 import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
@@ -149,14 +148,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     wake,
   });
 
-  // Worked out once per film and remembered, which is what makes it free to
-  // ask for on every redraw of the control bar.
-  const density = shapeFor(
-    `${String(film.id)}:${String(playback.durationMs)}`,
-    timeline.cues,
-    playback.durationMs,
-  );
-
   const preview = useMemo(
     () => ({
       source: streamOf(film.path),
@@ -227,7 +218,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             playback={playback}
             transport={transport}
             stepping={stepping}
-            density={density}
             preview={preview}
             sync={sync}
             alignment={alignment}
