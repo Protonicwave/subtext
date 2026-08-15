@@ -4,6 +4,10 @@
  * that only holds the library.
  */
 .screen {
+  /* How tall the toolbar below is, so that anything else sticking in this
+     scroller sits under it rather than behind it. */
+  --tools-height: 92px;
+
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -29,8 +33,52 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  /* Its own height written down rather than left to what is in it, since the
+     list's header sticks directly below it. */
+  height: var(--tools-height);
   padding: var(--space-6) 0 var(--space-8);
   background: linear-gradient(to bottom, var(--colour-bg) 62%, transparent);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* One control of two halves, so that the pair reads as a choice between them
+   rather than as two buttons that happen to be next to each other. */
+.views {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--colour-text-faint);
+  transition:
+    background var(--duration-quick),
+    color var(--duration-quick);
+}
+
+.option:hover {
+  color: var(--colour-text-dim);
+}
+
+.chosen {
+  background: var(--colour-surface-raised);
+  color: var(--colour-text);
 }
 
 .count {

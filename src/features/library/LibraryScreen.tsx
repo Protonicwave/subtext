@@ -1,12 +1,15 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import type { FilmView } from '@/shared/ipc/bindings';
-import { FolderIcon } from '@/shared/ui/Icon';
+import { CoversIcon, FolderIcon, ListIcon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
-import { useSetting } from '@/shared/settings/useSettings';
+import { classes } from '@/shared/ui/classes';
+import { useSetting, useSettings } from '@/shared/settings/useSettings';
+import type { Settings } from '@/shared/settings/schema';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
 import { Billboard } from './Billboard';
 import { ContinueWatching } from './ContinueWatching';
+import { FilmList } from './FilmList';
 import { Shelf } from './Shelf';
 import { Wall } from './Wall';
 import { billboardOf, shelvesOf } from './shelves';
@@ -47,7 +50,12 @@ export function LibraryScreen() {
     [stopped, showMissing],
   );
 
-  const shelved = useSetting('libraryLayout') === 'shelves';
+  // The list serves a library the wall has stopped serving, so it stands beside
+  // the covers rather than replacing them, and which one somebody is looking at
+  // decides whether the folders are worth arranging into rows at all.
+  const listed = useSetting('libraryView') === 'list';
+  const layout = useSetting('libraryLayout');
+  const shelved = !listed && layout === 'shelves';
   const shelves = useMemo(
     () => (shelved ? shelvesOf(films, resumable) : []),
     [shelved, films, resumable],
@@ -77,10 +85,13 @@ export function LibraryScreen() {
           <p className={styles.count} role="status">
             {summaryOf(loaded, films, shelves.length)}
           </p>
-          <Button onClick={() => void chooseFolder()}>
-            <FolderIcon size={14} />
-            Choose folder
-          </Button>
+          <div className={styles.right}>
+            <ViewToggle />
+            <Button onClick={() => void chooseFolder()}>
+              <FolderIcon size={14} />
+              Choose folder
+            </Button>
+          </div>
         </div>
 
         {/*
@@ -92,6 +103,8 @@ export function LibraryScreen() {
         {loaded &&
           (films.length === 0 ? (
             <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
+          ) : listed ? (
+            <FilmList films={films} scroller={scroller} onOpen={open} />
           ) : shelved ? (
             shelves.map((shelf) => <Shelf key={shelf.key} shelf={shelf} onOpen={open} />)
           ) : (
@@ -101,6 +114,39 @@ export function LibraryScreen() {
             </>
           ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Covers or the list, which is the one choice the toolbar carries.
+ *
+ * Two buttons rather than a menu: there are two of them, they are both worth
+ * one press, and each says which it is by showing what it would give you.
+ */
+function ViewToggle() {
+  const view = useSetting('libraryView');
+  const change = useSettings((state) => state.change);
+
+  const option = (wanted: Settings['libraryView'], name: string, icon: ReactNode) => (
+    <button
+      type="button"
+      className={classes(styles.option, view === wanted && styles.chosen)}
+      aria-pressed={view === wanted}
+      aria-label={name}
+      title={name}
+      onClick={() => {
+        change('libraryView', wanted);
+      }}
+    >
+      {icon}
+    </button>
+  );
+
+  return (
+    <div className={styles.views}>
+      {option('covers', 'Covers', <CoversIcon size={14} />)}
+      {option('list', 'List', <ListIcon size={14} />)}
     </div>
   );
 }
