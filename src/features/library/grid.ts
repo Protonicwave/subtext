@@ -29,6 +29,15 @@ export const RAIL_GAP = 16;
 export const CAPTION = 44;
 
 /**
+ * The same, for a tile on a rail.
+ *
+ * More than the wall reserves. A rail hides what runs past it, to keep a
+ * vertical scrollbar out of a row that scrolls sideways, so a caption with too
+ * little room is cut in half rather than merely sitting close to the row below.
+ */
+export const RAIL_CAPTION = 58;
+
+/**
  * Two by three, the shape a film poster has been for a century.
  *
  * The frames captured from a film are sixteen by nine, so they are cropped to

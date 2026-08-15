@@ -2,7 +2,7 @@ import { useRef, type CSSProperties } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { PosterTile } from './PosterTile';
-import { CAPTION, RAIL_GAP, RAIL_TILE, TILE_RATIO } from './grid';
+import { RAIL_CAPTION, RAIL_GAP, RAIL_TILE, TILE_RATIO } from './grid';
 import { CARRYING_ON, type Shelf as ShelfRow } from './shelves';
 import { useNearby } from './useNearby';
 import styles from './Shelf.module.css';
@@ -54,7 +54,7 @@ export function Shelf({ shelf, onOpen }: ShelfProps) {
           '--rail-tile': `${String(RAIL_TILE)}px`,
           '--rail-gap': `${String(RAIL_GAP)}px`,
           '--rail-ratio': String(TILE_RATIO),
-          '--caption-height': `${String(CAPTION)}px`,
+          '--caption-height': `${String(RAIL_CAPTION)}px`,
         } as CSSProperties
       }
     >
