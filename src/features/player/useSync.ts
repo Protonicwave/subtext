@@ -159,6 +159,11 @@ export function useSync(track: TrackView | null): Sync {
   };
 }
 
+/** Whether two rates are the same, allowing for the last bit of a division. */
+export function sameRate(one: number, other: number): boolean {
+  return Math.abs(one - other) < 1e-9;
+}
+
 /** Whether the file is being honoured exactly as it was written. */
 export function asWritten(correction: CorrectionView): boolean {
   // The rate is a ratio between two framerates, so it arrives divided and a

@@ -25,10 +25,13 @@ import styles from './Billboard.module.css';
 
 interface BillboardProps {
   film: FilmView;
+  /** Watch it, from where it was left. */
+  onPlay: (film: FilmView) => void;
+  /** Read what it is first, which is the film's own page. */
   onOpen: (film: FilmView) => void;
 }
 
-export function Billboard({ film, onOpen }: BillboardProps) {
+export function Billboard({ film, onPlay, onOpen }: BillboardProps) {
   const palette = useFilmPalette(film);
   useFilmAccent(film.accent);
 
@@ -76,11 +79,18 @@ export function Billboard({ film, onOpen }: BillboardProps) {
           <Button
             tone="primary"
             onClick={() => {
-              onOpen(film);
+              onPlay(film);
             }}
           >
             <PlayIcon size={13} />
             {carryingOn ? 'Carry on' : 'Play'}
+          </Button>
+          <Button
+            onClick={() => {
+              onOpen(film);
+            }}
+          >
+            Details
           </Button>
         </div>
       </div>

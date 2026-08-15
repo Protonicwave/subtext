@@ -149,6 +149,16 @@ export const commands = {
 	 */
 	savePosition: (filmId: Id, positionMs: number, durationMs: number | null, finished: boolean) => typedError<null, Failure>(__TAURI_INVOKE("save_position", { filmId, positionMs, durationMs, finished })),
 	/**
+	 *  Shows a film where it sits, in the platform's own file manager.
+	 * 
+	 *  A film is named by its identifier rather than by its path, so the only files
+	 *  this can be asked about are files the library already holds. The path is
+	 *  then put through the same rule the protocols answer to, which is what makes
+	 *  a row pointing somewhere it should not a refusal rather than a window onto
+	 *  somebody's documents.
+	 */
+	showInFolder: (filmId: Id) => typedError<null, Failure>(__TAURI_INVOKE("show_in_folder", { filmId })),
+	/**
 	 *  The films with no poster drawn for them yet.
 	 * 
 	 *  A poster is wanted when the film has none, when the file it names is not

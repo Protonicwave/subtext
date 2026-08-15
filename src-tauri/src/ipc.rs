@@ -43,6 +43,7 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::alignment_progress,
             commands::set_film_track,
             commands::save_position,
+            commands::show_in_folder,
             commands::posters_wanted,
             commands::cover_image,
             commands::save_poster,

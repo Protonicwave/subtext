@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
@@ -114,18 +114,22 @@ describe('the application', () => {
     expect(await screen.findByRole('heading', { name: 'Heat' })).toBeInTheDocument();
   });
 
-  it('opens a film in the player', async () => {
+  it('opens a film’s page, and the film from it', async () => {
     ipc.listFolders.mockResolvedValue([folder]);
     ipc.listLibrary.mockResolvedValue([film]);
     render(<App />);
 
     await userEvent.click(await screen.findByRole('button', { name: /Heat/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Heat' });
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Play' }));
 
     // Nothing decodes under test, so the film sits on its first frame with the
     // controls showing, which is the right answer to a file that has not
     // started: something to press.
     expect(await screen.findByRole('button', { name: 'Play' })).toBeInTheDocument();
     expect(document.querySelector('video')).not.toBeNull();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('marks the window when the desktop shows through behind it', async () => {

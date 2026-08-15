@@ -16,6 +16,7 @@ import { billboardOf, shelvesOf } from './shelves';
 import { libraryTotalOf, sizeOf } from './size';
 import { useCapture } from './useCapture';
 import { useLibrary } from './useLibrary';
+import { useSheet } from './useSheet';
 import styles from './LibraryScreen.module.css';
 
 /**
@@ -34,6 +35,7 @@ export function LibraryScreen() {
   const loaded = useLibrary((library) => library.loaded);
   const chooseFolder = useImport((state) => state.chooseFolder);
   const openFilm = useNavigation((navigation) => navigation.openFilm);
+  const openSheet = useSheet((sheet) => sheet.open);
 
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -66,14 +68,25 @@ export function LibraryScreen() {
   // does not open a decoder before there is anything to point it at.
   useCapture(films.length > 0);
 
-  // No moment named, so the film opens where it was left.
+  /*
+   * A tile and a row both open the film's page rather than the film. What a
+   * file is turns out to be the question somebody has when they are looking at
+   * a wall of covers, and the page answers it with the film one press away. The
+   * billboard is the exception: it is already showing one film large, so it
+   * offers to play it and puts the page beside that.
+   */
   const open = (film: FilmView) => {
+    openSheet(film.id);
+  };
+
+  // No moment named, so the film opens where it was left.
+  const play = (film: FilmView) => {
     openFilm(film.id);
   };
 
   return (
     <div className={styles.screen} ref={scroller}>
-      {billboard && <Billboard film={billboard} onOpen={open} />}
+      {billboard && <Billboard film={billboard} onPlay={play} onOpen={open} />}
 
       <div className={styles.inner}>
         <div className={styles.tools}>
