@@ -22,6 +22,7 @@ vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://$
 
 const { LibraryScreen } = await import('./LibraryScreen');
 const { useLibrary } = await import('./useLibrary');
+const { useSheet } = await import('./useSheet');
 const { useNavigation } = await import('@/app/routes');
 const { useSettings } = await import('@/shared/settings/useSettings');
 const { DEFAULTS } = await import('@/shared/settings/schema');
@@ -100,6 +101,7 @@ function shelfNames(): string[] {
 describe('the library screen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSheet.setState({ filmId: null });
     useNavigation.setState({ route: { screen: 'library' }, previous: null });
     useSettings.setState({ settings: DEFAULTS });
   });
@@ -111,12 +113,41 @@ describe('the library screen', () => {
     expect(screen.getByText('1 film · 1 shelf')).toBeInTheDocument();
   });
 
-  it('opens a film when its tile is chosen', async () => {
+  /*
+   * A tile opens the film's page rather than the film. What a file is turns out
+   * to be the question somebody has while looking at a wall of covers, and the
+   * page answers it with the film one press away.
+   */
+  it('opens a film’s page when its tile is chosen', async () => {
     show({ films: [film] });
 
     await userEvent.click(screen.getByRole('button', { name: /Heat/ }));
 
-    expect(useNavigation.getState().route).toMatchObject({ screen: 'player', filmId: 7 });
+    expect(useSheet.getState().filmId).toBe(7);
+    expect(useNavigation.getState().route).toMatchObject({ screen: 'library' });
+  });
+
+  it('opens the same page from a row of the list', async () => {
+    useSettings.setState({ settings: { ...DEFAULTS, libraryView: 'list' } });
+    show({ films: [film] });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Heat' }));
+
+    expect(useSheet.getState().filmId).toBe(7);
+  });
+
+  /*
+   * The billboard is the exception. It is already showing one film large, so it
+   * offers to play it and puts the page beside that rather than in front of it.
+   */
+  it('plays the film on the billboard, and offers its page beside it', async () => {
+    show({ films: [film, watching], resumable: [watching] });
+
+    await userEvent.click(screen.getByRole('button', { name: /carry on$/i }));
+    expect(useNavigation.getState().route).toMatchObject({ screen: 'player', filmId: 8 });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(useSheet.getState().filmId).toBe(8);
   });
 
   it('offers what there is to carry on with, and how much of it is left', () => {
