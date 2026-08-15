@@ -49,6 +49,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "drop cue search",
         sql: include_str!("migrations/0006_drop_cue_search.sql"),
     },
+    Migration {
+        version: 7,
+        name: "film cover",
+        sql: include_str!("migrations/0007_film_cover.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -381,6 +386,15 @@ mod tests {
         assert_eq!(offset, -1_200);
         assert_eq!(chosen, Some(1));
         assert_eq!(position, 600_000);
+
+        // The film says nothing about where its cover comes from, which is what
+        // puts it in the way of the next scan deciding.
+        let cover: Option<String> = connection
+            .query_row("SELECT cover_path FROM film WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(cover, None);
 
         // The mirror and the flag that said whether it was being kept in step.
         let left: i64 = connection

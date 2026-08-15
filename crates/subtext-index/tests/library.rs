@@ -20,7 +20,7 @@ fn a_new_file_is_migrated_and_reopening_it_changes_nothing() {
     // leave what is already there alone.
     let reopened = library.reopen();
     assert_eq!(reopened.films().list().unwrap().len(), 1);
-    assert_eq!(Database::schema_version(), 6);
+    assert_eq!(Database::schema_version(), 7);
 }
 
 #[test]
@@ -494,4 +494,40 @@ fn a_path_that_is_not_text_is_refused_rather_than_mangled() {
         let path = Path::new(OsStr::from_bytes(b"/films/\xff\xfe.mkv"));
         assert!(library.database.folders().add(path).is_err());
     }
+}
+
+#[test]
+fn where_a_cover_came_from_is_kept_and_only_written_when_it_changes() {
+    let library = Library::new();
+    let folder = library.watch();
+    let film_id = library.add_film(folder, "Heat");
+    let films = library.database.films();
+
+    // Nothing yet, which is what puts a film in the way of a frame capture.
+    assert_eq!(films.covers(folder).unwrap(), [(film_id, None)]);
+
+    let beside = library.root.join("Heat.jpg");
+    assert_eq!(
+        films
+            .set_covers(&[(film_id, Some(beside.as_path()))])
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        films.by_id(film_id).unwrap().unwrap().cover_path,
+        Some(beside.clone())
+    );
+
+    // Saying the same thing again writes nothing, so a rescan of a library
+    // nobody has touched still touches no rows.
+    assert_eq!(
+        films
+            .set_covers(&[(film_id, Some(beside.as_path()))])
+            .unwrap(),
+        0
+    );
+
+    // And an image that has been taken away leaves the film with none.
+    assert_eq!(films.set_covers(&[(film_id, None)]).unwrap(), 1);
+    assert_eq!(films.covers(folder).unwrap(), [(film_id, None)]);
 }

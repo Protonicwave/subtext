@@ -25,6 +25,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 mod attach;
+mod covers;
 mod debounce;
 mod error;
 mod ingest;
