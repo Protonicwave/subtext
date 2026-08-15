@@ -1,0 +1,173 @@
+/*
+ * The list.
+ *
+ * Hairlines rather than banded fills, figures set in the mono face and aligned
+ * right, and a header that stays put under the toolbar. That is the whole
+ * difference between a table and a stack of rows.
+ *
+ * The columns are one template, shared by the header and every row, so the two
+ * cannot drift apart. Everything but the title, the folder and the picture is
+ * as wide as the widest figure it will hold and no wider.
+ */
+.list {
+  --columns: minmax(0, 2.4fr) minmax(0, 1.2fr) 62px 104px minmax(0, 1fr) 92px 104px 116px;
+
+  font-size: var(--text-sm);
+}
+
+.head,
+.row {
+  display: grid;
+  grid-template-columns: var(--columns);
+  align-items: center;
+}
+
+/*
+ * Under the toolbar rather than at the top of the window, since both stick in
+ * the same scroller and the toolbar is drawn first.
+ */
+.head {
+  position: sticky;
+  top: var(--tools-height);
+  z-index: 10;
+  background: var(--colour-bg);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.heading {
+  min-width: 0;
+}
+
+.sorter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  color: var(--colour-text-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color var(--duration-quick);
+}
+
+.sorter:hover {
+  color: var(--colour-text-dim);
+}
+
+.sorted {
+  color: var(--colour-text);
+}
+
+/* The caret is drawn pointing down, which is the column running the other way. */
+.up {
+  transform: rotate(180deg);
+}
+
+.figures .sorter {
+  justify-content: flex-end;
+}
+
+.rows {
+  position: relative;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-bottom: 1px solid color-mix(in oklab, var(--colour-line) 55%, transparent);
+  color: var(--colour-text-dim);
+  cursor: pointer;
+  /* Placed by transform rather than by top, so scrolling moves the rows on the
+     compositor instead of laying the page out again. */
+  will-change: transform;
+}
+
+.row:hover {
+  background: var(--colour-surface);
+}
+
+.gone {
+  color: var(--colour-text-faint);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+}
+
+/*
+ * Tabular figures, so that every row's numbers line up down the column. That
+ * alignment is most of what makes a table of ten thousand films scannable.
+ */
+.figures {
+  justify-content: flex-end;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+}
+
+/* The film's own colours, so a row is recognisable before its title is read. */
+.chip {
+  flex: none;
+  width: 26px;
+  height: 39px;
+  border-radius: 4px;
+  background: linear-gradient(160deg, var(--film-pair), var(--film-accent));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, #fff 8%, transparent);
+}
+
+.title {
+  min-width: 0;
+  color: var(--colour-text);
+  font-size: var(--text-sm);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gone .title {
+  color: var(--colour-text-dim);
+}
+
+.folder {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  text-overflow: ellipsis;
+}
+
+.missing {
+  color: var(--colour-attention);
+}
+
+.faint {
+  color: var(--colour-text-faint);
+}
+
+.progress {
+  display: block;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--colour-line-strong);
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--film-accent);
+}
