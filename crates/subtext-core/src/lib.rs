@@ -10,6 +10,7 @@ mod cue;
 mod film;
 pub mod pairing;
 pub mod parse;
+mod shelf;
 mod time;
 mod track;
 
@@ -21,5 +22,6 @@ pub use crate::pairing::{
     pair, pair_with,
 };
 pub use crate::parse::{ParseOutcome, ParseWarning, ParseWarningKind, parse_srt, parse_srt_text};
+pub use crate::shelf::{Shelf, shelf_of};
 pub use crate::time::Timestamp;
 pub use crate::track::SubtitleTrack;

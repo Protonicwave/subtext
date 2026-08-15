@@ -423,6 +423,14 @@ export type FilmView = {
 	id: Id,
 	folderId: Id,
 	path: string,
+	/**
+	 *  The row this film sits on, read from where it is filed on disk.
+	 * 
+	 *  Worked out here rather than on the other side, so that the front end
+	 *  groups by a value it was given instead of taking paths apart with a
+	 *  separator it would have to guess at.
+	 */
+	shelf: ShelfView,
 	title: string,
 	year: number | null,
 	durationMs: number | null,
@@ -591,6 +599,18 @@ export type ScanSummary = {
 	unreadable: string[],
 	/**  Files the parser had to work around, and what was wrong with each. */
 	warnings: FileWarnings[],
+};
+
+/**
+ *  The row a film sits on, which is the folder somebody filed it in.
+ * 
+ *  The name is the heading and the path is what sits beside it, since two
+ *  watched folders can each hold a directory called the same thing and the name
+ *  alone would not say which row is which.
+ */
+export type ShelfView = {
+	name: string,
+	path: string,
 };
 
 /**  Which step of a scan is running. */

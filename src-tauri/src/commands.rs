@@ -4,6 +4,7 @@
 //! front end cannot call something that is not here, or call it with the wrong
 //! shape, without the compiler saying so.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use subtext_core::Timestamp;
@@ -151,6 +152,7 @@ pub(crate) async fn list_folders(state: State<'_, AppState>) -> Answer<Vec<Folde
 pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmView>> {
     let database = state.scanner().database();
     let films = database.films().list().map_err(Failure::of)?;
+    let folders = folder_paths(database)?;
     // One query for the sound of the whole library rather than one a film. Most
     // films carry a track or two, so asking film by film would be several
     // thousand statements to answer what one statement answers.
@@ -162,7 +164,8 @@ pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmV
             let tracks = database.tracks().for_film(film.id).map_err(Failure::of)?;
             let position = database.positions().get(film.id).map_err(Failure::of)?;
             let sound = audio.remove(&film.id).unwrap_or_default();
-            Ok(FilmView::of(film, tracks, sound, position))
+            let folder = folders.get(&film.folder_id).map(PathBuf::as_path);
+            Ok(FilmView::of(film, folder, tracks, sound, position))
         })
         .collect()
 }
@@ -182,6 +185,7 @@ pub(crate) async fn continue_watching(
 ) -> Answer<Vec<FilmView>> {
     let database = state.scanner().database();
     let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let folders = folder_paths(database)?;
 
     database
         .positions()
@@ -197,8 +201,10 @@ pub(crate) async fn continue_watching(
                 .details()
                 .audio(resumable.film.id)
                 .map_err(Failure::of)?;
+            let folder = folders.get(&resumable.film.folder_id).map(PathBuf::as_path);
             Ok(FilmView::of(
                 resumable.film,
+                folder,
                 tracks,
                 audio,
                 Some(resumable.position),
@@ -417,8 +423,25 @@ fn read_back(database: &Database, id: i64) -> Answer<FilmView> {
     let tracks = database.tracks().for_film(id).map_err(Failure::of)?;
     let audio = database.details().audio(id).map_err(Failure::of)?;
     let position = database.positions().get(id).map_err(Failure::of)?;
+    let folders = folder_paths(database)?;
+    let folder = folders.get(&film.folder_id).map(PathBuf::as_path);
 
-    Ok(FilmView::of(film, tracks, audio, position))
+    Ok(FilmView::of(film, folder, tracks, audio, position))
+}
+
+/// Where each watched folder is, by its identifier.
+///
+/// Read once for a whole list of films rather than once a film. A library has a
+/// handful of watched folders and thousands of films, and every one of those
+/// films needs its folder to know which shelf it belongs on.
+fn folder_paths(database: &Database) -> Answer<HashMap<i64, PathBuf>> {
+    Ok(database
+        .folders()
+        .list()
+        .map_err(Failure::of)?
+        .into_iter()
+        .map(|folder| (folder.id, folder.path))
+        .collect())
 }
 
 /// Gives a subtitle file to a film because somebody said so.
