@@ -126,6 +126,18 @@ describe('the film sheet', () => {
     expect(screen.getByText('1995 · 2 hr 50 min · 1080p H.264')).toBeInTheDocument();
   });
 
+  /*
+   * Everything on the page was written when the film was scanned. Opening it
+   * asks the back end for nothing at all, which is what the figure it has to
+   * open in rests on.
+   */
+  it('asks the back end for nothing when it opens', () => {
+    open();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    for (const command of Object.values(ipc)) expect(command).not.toHaveBeenCalled();
+  });
+
   it('describes the file rather than the folder it is in', () => {
     open();
 

@@ -59,8 +59,8 @@
   }
 }
 
-/* The film's own frame, behind its own page. Two scrims: one seating the type
-   at the bottom, one keeping the right of the picture open. */
+/* The film's own frame, behind its own page, with a scrim up from the surface
+   below so the type has something to sit on. */
 .top {
   position: relative;
   display: flex;
@@ -71,6 +71,7 @@
 }
 
 .art {
+  display: block;
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -98,6 +99,7 @@
 .cover {
   position: relative;
   z-index: 1;
+  display: block;
   flex: none;
   width: 132px;
   aspect-ratio: 2 / 3;
