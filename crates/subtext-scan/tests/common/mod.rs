@@ -71,6 +71,23 @@ impl Fixture {
         self.write(relative, &Container::new(entries).with_seek_head().bytes())
     }
 
+    /// The same, saying how long it runs, which is where the sheet gets a
+    /// running time for a film nobody has watched yet.
+    pub(crate) fn matroska_running_for(
+        &self,
+        relative: &str,
+        entries: Vec<Entry>,
+        millis: u64,
+    ) -> PathBuf {
+        self.write(
+            relative,
+            &Container::new(entries)
+                .with_seek_head()
+                .running_for(millis)
+                .bytes(),
+        )
+    }
+
     /// The same, with dialogue written into it as real blocks in real clusters.
     pub(crate) fn matroska_saying(
         &self,
