@@ -279,6 +279,20 @@ pub(crate) fn as_flag(bytes: &[u8]) -> bool {
     as_uint(bytes).is_some_and(|value| value != 0)
 }
 
+/// A floating point number, which EBML writes at one of two widths.
+///
+/// Anything else is not a float, and reading it as one would put a running time
+/// or a frame rate on the screen that the file never claimed. A zero length
+/// element is legal and means nothing rather than zero, since the two callers
+/// here both treat a measurement of nothing as no measurement.
+pub(crate) fn as_float(bytes: &[u8]) -> Option<f64> {
+    match bytes.len() {
+        4 => Some(f64::from(f32::from_be_bytes(bytes.try_into().ok()?))),
+        8 => Some(f64::from_be_bytes(bytes.try_into().ok()?)),
+        _ => None,
+    }
+}
+
 /// A string as EBML writes one, which may be padded with zero bytes.
 pub(crate) fn as_text(bytes: &[u8]) -> Option<String> {
     let end = bytes
@@ -296,7 +310,9 @@ mod tests {
 
     use std::io::Cursor;
 
-    use super::{Element, Reader, Size, as_flag, as_text, as_uint, data_mask, vint, width_of};
+    use super::{
+        Element, Reader, Size, as_flag, as_float, as_text, as_uint, data_mask, vint, width_of,
+    };
 
     fn reader(bytes: &[u8]) -> Reader<Cursor<Vec<u8>>> {
         Reader::open(Cursor::new(bytes.to_vec())).unwrap()
@@ -440,6 +456,17 @@ mod tests {
         assert!(!as_flag(&[0]));
         // Nothing at all, which is how a file can write a flag it does not set.
         assert!(!as_flag(&[]));
+    }
+
+    #[test]
+    fn a_float_is_read_at_either_width_it_is_written_at() {
+        assert_eq!(as_float(&2.5f32.to_be_bytes()), Some(2.5));
+        assert_eq!(as_float(&1_234.5f64.to_be_bytes()), Some(1_234.5));
+
+        // Any other width is not a float, whatever the element claims to be.
+        assert_eq!(as_float(&[]), None);
+        assert_eq!(as_float(&[0; 2]), None);
+        assert_eq!(as_float(&[0; 10]), None);
     }
 
     #[test]

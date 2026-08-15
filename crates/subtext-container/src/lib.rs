@@ -22,6 +22,11 @@
 //! as well, which means stepping over every frame between one line and the
 //! next.
 //!
+//! A film also says what it is: what its picture and sound are encoded in, how
+//! large the picture is and how long the film runs. [`media`] reads that, out
+//! of the same header the probe reads, and it is the difference between a film
+//! sheet that describes the file and one that describes the file name.
+//!
 //! A film may also carry its own artwork, which [`cover`] finds and
 //! [`cover_image`] reads. Neither of them touches the picture either.
 //!
@@ -49,10 +54,12 @@ mod ebml;
 mod extract;
 pub mod fixture;
 mod ids;
+mod media;
 mod probe;
 mod segment;
 
-pub use crate::codec::SubtitleCodec;
+pub use crate::codec::{SubtitleCodec, audio_codec_name, video_codec_name};
 pub use crate::cover::{AttachedCover, cover, cover_image, cover_image_in, cover_in};
 pub use crate::extract::{EmbeddedTrack, extract, subtitles_of};
+pub use crate::media::{AudioStream, MediaStreams, VideoStream, media, media_in};
 pub use crate::probe::{StreamTrack, probe, subtitle_tracks};

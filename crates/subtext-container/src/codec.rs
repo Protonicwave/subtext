@@ -1,4 +1,9 @@
-//! What a subtitle track inside a container is written as.
+//! What a track inside a container is written as.
+//!
+//! Subtitles get a type of their own, because what they are written as decides
+//! whether this application can read them at all. Picture and sound get a name
+//! and nothing more: nothing here decodes either of them, so the only question
+//! ever asked is what to call the codec on a screen.
 
 /// The subtitle codecs a Matroska file declares, and what each of them is.
 ///
@@ -107,9 +112,68 @@ impl SubtitleCodec {
     }
 }
 
+/// What the codecs films are encoded in are called, by the identifier a
+/// Matroska header writes them under.
+///
+/// Matched by prefix, since a family writes its variants as further path
+/// segments and every one of them is the same codec as far as a person reading
+/// a screen is concerned. Longest first, so that the more specific of an
+/// overlapping pair wins.
+const VIDEO_NAMES: &[(&str, &str)] = &[
+    ("V_MPEGH/ISO/HEVC", "HEVC"),
+    ("V_MPEG4/ISO/AVC", "H.264"),
+    ("V_MPEG4/ISO/ASP", "MPEG-4"),
+    ("V_MPEG2", "MPEG-2"),
+    ("V_MPEG1", "MPEG-1"),
+    ("V_AV1", "AV1"),
+    ("V_VP9", "VP9"),
+    ("V_VP8", "VP8"),
+    ("V_THEORA", "Theora"),
+    ("V_PRORES", "ProRes"),
+];
+
+const AUDIO_NAMES: &[(&str, &str)] = &[
+    ("A_MPEG/L3", "MP3"),
+    ("A_MPEG/L2", "MP2"),
+    ("A_TRUEHD", "TrueHD"),
+    ("A_VORBIS", "Vorbis"),
+    ("A_EAC3", "E-AC-3"),
+    ("A_OPUS", "Opus"),
+    ("A_FLAC", "FLAC"),
+    ("A_ALAC", "ALAC"),
+    ("A_AC3", "AC-3"),
+    ("A_DTS", "DTS"),
+    ("A_AAC", "AAC"),
+    ("A_PCM", "PCM"),
+];
+
+/// What to call the codec a film's picture is in, where it is one with a name.
+///
+/// Nothing else in the application acts on this, so an identifier that is not
+/// in the list is not a problem to solve: what the file said is shown instead,
+/// which is more use to somebody than the word unknown.
+#[must_use]
+pub fn video_codec_name(codec_id: &str) -> Option<&'static str> {
+    name_of(VIDEO_NAMES, codec_id)
+}
+
+/// The same, for the codec a film's sound is in.
+#[must_use]
+pub fn audio_codec_name(codec_id: &str) -> Option<&'static str> {
+    name_of(AUDIO_NAMES, codec_id)
+}
+
+fn name_of(names: &[(&str, &'static str)], codec_id: &str) -> Option<&'static str> {
+    let id = codec_id.trim();
+    names.iter().find_map(|(prefix, name)| {
+        let head = id.get(..prefix.len())?;
+        head.eq_ignore_ascii_case(prefix).then_some(*name)
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::SubtitleCodec;
+    use super::{SubtitleCodec, audio_codec_name, video_codec_name};
 
     #[test]
     fn recognises_the_text_codecs() {
@@ -184,5 +248,40 @@ mod tests {
             SubtitleCodec::from_stored("something later"),
             SubtitleCodec::Unknown
         );
+    }
+
+    #[test]
+    fn a_picture_codec_is_named_by_the_family_it_belongs_to() {
+        assert_eq!(video_codec_name("V_MPEG4/ISO/AVC"), Some("H.264"));
+        assert_eq!(video_codec_name("V_MPEGH/ISO/HEVC"), Some("HEVC"));
+        assert_eq!(video_codec_name("V_AV1"), Some("AV1"));
+        assert_eq!(video_codec_name("v_vp9"), Some("VP9"));
+
+        // The two that begin the same way, where the longer must not be read as
+        // the shorter.
+        assert_ne!(
+            video_codec_name("V_MPEG4/ISO/AVC"),
+            video_codec_name("V_MPEG4/ISO/ASP")
+        );
+
+        // A codec nobody here has a name for, which is shown as the file wrote
+        // it rather than as nothing.
+        assert_eq!(video_codec_name("V_MS/VFW/FOURCC"), None);
+        assert_eq!(video_codec_name(""), None);
+    }
+
+    #[test]
+    fn a_sound_codec_is_named_the_way_a_person_would_say_it() {
+        assert_eq!(audio_codec_name("A_AAC"), Some("AAC"));
+        // The variants a muxer writes, which are all the same codec to a reader.
+        assert_eq!(audio_codec_name("A_AAC/MPEG4/LC/SBR"), Some("AAC"));
+        assert_eq!(audio_codec_name("A_DTS/MA"), Some("DTS"));
+        assert_eq!(audio_codec_name("A_PCM/INT/LIT"), Some("PCM"));
+
+        assert_eq!(audio_codec_name("A_AC3"), Some("AC-3"));
+        assert_eq!(audio_codec_name("A_EAC3"), Some("E-AC-3"));
+        assert_eq!(audio_codec_name("A_MPEG/L3"), Some("MP3"));
+
+        assert_eq!(audio_codec_name("A_REAL/14_4"), None);
     }
 }

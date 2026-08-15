@@ -17,7 +17,7 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
 use criterion::Criterion;
-use subtext_container::{fixture, probe};
+use subtext_container::{fixture, media, probe};
 use tempfile::TempDir;
 
 /// How many files the batch measurement covers, which is the size the library
@@ -73,6 +73,21 @@ fn main() {
         });
     });
 
+    // What the file is, which is the same header read and is asked for once per
+    // film in the same place. Twenty-five milliseconds is the target, and the
+    // same claim about not reading the picture applies.
+    criterion.bench_function("read what a film is", |bencher| {
+        bencher.iter(|| black_box(media(black_box(&with_index)).expect("the file to be readable")));
+    });
+
+    criterion.bench_function("read what a thousand films are", |bencher| {
+        bencher.iter(|| {
+            for film in &films {
+                black_box(media(black_box(film)).expect("the file to be readable"));
+            }
+        });
+    });
+
     criterion.final_summary();
 }
 
@@ -80,8 +95,11 @@ fn main() {
 /// in three languages with one of them forced.
 fn tracks() -> fixture::Container {
     fixture::Container::new(vec![
-        fixture::Entry::video(1),
-        fixture::Entry::audio(2),
+        fixture::Entry::video(1)
+            .sized(1920, 1080)
+            .at_bit_depth(8)
+            .at_frame_rate(23.976),
+        fixture::Entry::audio(2).in_language("eng").with_channels(6),
         fixture::Entry::subtitle(3, "S_TEXT/UTF8").in_language("eng"),
         fixture::Entry::subtitle(4, "S_TEXT/ASS").in_language("jpn"),
         fixture::Entry::subtitle(5, "S_TEXT/UTF8")
@@ -89,6 +107,7 @@ fn tracks() -> fixture::Container {
             .forced(),
         fixture::Entry::subtitle(6, "S_HDMV/PGS").in_language("eng"),
     ])
+    .running_for(10_260_000)
 }
 
 fn write(folder: &Path, name: &str, header: &[u8], picture: usize) -> PathBuf {
