@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useState } from 'react';
 import { classes } from '@/shared/ui/classes';
-import { backTo, said, working } from './outcomes';
+import { backTo, replacing, said, working } from './outcomes';
 import type { Alignment } from './useAlignment';
 import { RATES, STEP_MS, type Sync, asWritten, offsetLabel, sameRate } from './useSync';
 import styles from './SyncPanel.module.css';
@@ -140,10 +140,7 @@ function AlignAction({ alignment, offsetMs }: { alignment: Alignment; offsetMs: 
   if (state.phase === 'confirming') {
     return (
       <div className={styles.aligning}>
-        <p className={styles.note}>
-          The subtitles are moved by {offsetLabel(offsetMs)} already. Listening to the film will
-          replace that with what it measures.
-        </p>
+        <p className={styles.note}>{replacing(offsetMs)}</p>
         <div className={styles.row}>
           <button type="button" className={styles.nudge} onClick={alignment.confirm}>
             Measure anyway

@@ -31,6 +31,14 @@ export function backTo(offsetMs: number): string {
 }
 
 /**
+ * What going ahead would throw away, where somebody has already moved the
+ * subtitles themselves.
+ */
+export function replacing(offsetMs: number): string {
+  return `The subtitles are moved by ${offsetLabel(offsetMs)} already. Listening to the film will replace that with what it measures.`;
+}
+
+/**
  * What to say about how it ended.
  *
  * Each ending that changed nothing says that the bracket keys are still there.

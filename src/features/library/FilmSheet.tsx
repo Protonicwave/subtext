@@ -15,7 +15,7 @@ import { Button } from '@/shared/ui/Button';
 import { CloseIcon, PlayIcon, SyncIcon } from '@/shared/ui/Icon';
 import { classes } from '@/shared/ui/classes';
 import { useNavigation } from '@/app/routes';
-import { backTo, said, working } from '@/features/player/outcomes';
+import { backTo, replacing, said, working } from '@/features/player/outcomes';
 import { activeTrackOf, readableTracksOf, trackProblemOf } from '@/features/player/tracks';
 import { useAlignment } from '@/features/player/useAlignment';
 import { useSync } from '@/features/player/useSync';
@@ -253,10 +253,7 @@ function AlignOffer({ film }: { film: FilmView }) {
   if (state.phase === 'confirming') {
     return (
       <div className={styles.align}>
-        <p className={styles.offer}>
-          The subtitles have been moved already. Listening to the film will replace that with what
-          it measures.
-        </p>
+        <p className={styles.offer}>{replacing(sync.offsetMs)}</p>
         <div className={styles.row}>
           <Button onClick={alignment.confirm}>Measure anyway</Button>
           <Button tone="ghost" onClick={alignment.dismiss}>
