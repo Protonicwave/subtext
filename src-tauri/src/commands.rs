@@ -18,7 +18,7 @@ use crate::dto::{
     FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, TrackView,
 };
 use crate::state::AppState;
-use crate::{allowed, dropped, posters};
+use crate::{allowed, dropped, posters, reveal};
 
 /// What the window the front end is drawing into turned out to be.
 ///
@@ -231,6 +231,41 @@ pub(crate) async fn track_cues(state: State<'_, AppState>, track_id: Id) -> Answ
         .map_err(Failure::of)?;
 
     Ok(cues.into_iter().map(CueView::of).collect())
+}
+
+/// Shows a film where it sits, in the platform's own file manager.
+///
+/// A film is named by its identifier rather than by its path, so the only files
+/// this can be asked about are files the library already holds. The path is
+/// then put through the same rule the protocols answer to, which is what makes
+/// a row pointing somewhere it should not a refusal rather than a window onto
+/// somebody's documents.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn show_in_folder(app: AppHandle, film_id: Id) -> Answer<()> {
+    // Starting a process is short work, and it is still a process, which does
+    // not belong on the thread answering commands.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let film = state
+            .scanner()
+            .database()
+            .films()
+            .by_id(film_id.get())
+            .map_err(Failure::of)?
+            .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+
+        // What the library recorded is what is shown, and where that resolves
+        // to is what is judged. A file that has gone fails here, which is the
+        // same answer as a file that was never allowed.
+        app.state::<allowed::Roots>()
+            .resolve(&film.path)
+            .ok_or_else(|| Failure::saying("that film is not where the library left it"))?;
+
+        reveal::in_file_manager(&film.path)
+    })
+    .await
+    .map_err(|_| Failure::saying("the folder could not be opened"))?
 }
 
 /// Records how far through a film somebody is.
