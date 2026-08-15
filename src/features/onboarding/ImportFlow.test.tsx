@@ -71,6 +71,7 @@ const film = {
   posterPath: null,
   accent: null,
   missing: false,
+  details: null,
   tracks: [track],
   chosenTrackId: null,
   subtitlesOff: false,

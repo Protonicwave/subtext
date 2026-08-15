@@ -44,6 +44,7 @@ function filmWith(offsetMs: number, rate = 1): FilmView {
     posterPath: null,
     accent: null,
     missing: false,
+    details: null,
     tracks: [trackWith(offsetMs, rate)],
     chosenTrackId: null,
     subtitlesOff: false,

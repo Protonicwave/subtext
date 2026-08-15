@@ -9,10 +9,11 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
-use subtext_container::SubtitleCodec;
+use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp};
 use subtext_index::{
-    FilmRecord, PlaybackPosition, TrackMatch, TrackOrigin, TrackRecord, WatchedFolder,
+    AudioDetails, FilmRecord, PlaybackPosition, TrackMatch, TrackOrigin, TrackRecord, VideoDetails,
+    WatchedFolder,
 };
 use subtext_scan::{ScanOutcome, ScanProgress, ScanStage};
 use tauri_specta::Event;
@@ -116,6 +117,12 @@ pub(crate) struct FilmView {
     pub(crate) accent: Option<AccentView>,
     /// The file is not where it was. The film is kept anyway.
     pub(crate) missing: bool,
+    /// What the file turned out to be, once a scan has looked at it.
+    ///
+    /// One group rather than a dozen loose fields, because none of it means
+    /// anything on its own and all of it arrives together. Absent for a film
+    /// recorded before this build described such things, until the next scan.
+    pub(crate) details: Option<MediaView>,
     pub(crate) tracks: Vec<TrackView>,
     /// The track this film is watched with, where somebody has said which.
     ///
@@ -131,8 +138,11 @@ impl FilmView {
     pub(crate) fn of(
         film: FilmRecord,
         tracks: Vec<TrackRecord>,
+        audio: Vec<AudioDetails>,
         position: Option<PlaybackPosition>,
     ) -> Self {
+        let details = MediaView::of(&film, audio);
+
         Self {
             id: Id::of(film.id),
             folder_id: Id::of(film.folder_id),
@@ -143,12 +153,133 @@ impl FilmView {
             poster_path: film.poster_path.map(|path| path.display().to_string()),
             accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
+            details,
             tracks: tracks.into_iter().map(TrackView::of).collect(),
             chosen_track_id: film.choice.track_id().map(Id::of),
             subtitles_off: film.choice.is_off(),
             position: position.map(PositionView::of),
         }
     }
+}
+
+/// What a film's file is, as the sheet describes it.
+///
+/// Everything inside was read once, when the film was scanned, and is held on
+/// the row from then on. A fact the file did not state is absent rather than
+/// nought, so a screen can leave out what it does not know instead of printing
+/// a number nobody wrote.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MediaView {
+    /// What the file is, which is known for every film since it comes from the
+    /// name rather than from anything inside.
+    pub(crate) container: String,
+    #[specta(type = Number)]
+    pub(crate) size_bytes: u64,
+    /// Bits a second across the whole film, from its size and its running time.
+    ///
+    /// An average, and labelled as one wherever it is shown: no encode of
+    /// anything worth watching holds one rate from beginning to end.
+    pub(crate) average_bitrate: Option<u32>,
+    pub(crate) video: Option<VideoView>,
+    pub(crate) audio: Vec<AudioView>,
+}
+
+impl MediaView {
+    /// What a film's row says about its file, or nothing where it has not been
+    /// looked at.
+    fn of(film: &FilmRecord, audio: Vec<AudioDetails>) -> Option<Self> {
+        Some(Self {
+            container: film.container.clone()?,
+            size_bytes: film.size_bytes,
+            average_bitrate: bitrate_of(film.size_bytes, film.duration),
+            video: film.video.as_ref().map(VideoView::of),
+            audio: audio.into_iter().map(AudioView::of).collect(),
+        })
+    }
+}
+
+/// A film's picture.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VideoView {
+    /// What the codec is called, and what the file wrote where nothing here has
+    /// a name for it. Showing the identifier is more use than the word unknown.
+    pub(crate) codec: String,
+    pub(crate) width: Option<u32>,
+    pub(crate) height: Option<u32>,
+    pub(crate) bit_depth: Option<u8>,
+    #[specta(type = Option<Number>)]
+    pub(crate) frame_rate: Option<f64>,
+}
+
+impl VideoView {
+    fn of(video: &VideoDetails) -> Self {
+        Self {
+            codec: named(video_codec_name(&video.codec), &video.codec),
+            width: video.width,
+            height: video.height,
+            bit_depth: video.bit_depth,
+            frame_rate: video.frame_rate,
+        }
+    }
+}
+
+/// One of a film's sound tracks.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AudioView {
+    pub(crate) codec: String,
+    /// What the channel count amounts to, said the way somebody would say it.
+    pub(crate) layout: Option<String>,
+    pub(crate) language: Option<String>,
+    /// The track the film suggests, which is the one that will be heard.
+    pub(crate) default: bool,
+}
+
+impl AudioView {
+    fn of(audio: AudioDetails) -> Self {
+        Self {
+            codec: named(audio_codec_name(&audio.codec), &audio.codec),
+            layout: audio.channels.map(layout_of),
+            language: audio.language,
+            default: audio.default,
+        }
+    }
+}
+
+/// A codec's name, or the identifier the file wrote where there is no name.
+fn named(name: Option<&'static str>, codec_id: &str) -> String {
+    name.map_or_else(|| codec_id.to_owned(), ToOwned::to_owned)
+}
+
+/// What a number of channels is called.
+///
+/// Only the counts that mean one arrangement are named. Six is written as five
+/// point one because that is what six channels are in every film anybody owns,
+/// and anything this does not name is given as a count rather than as a guess
+/// at where the speakers are.
+fn layout_of(channels: u8) -> String {
+    match channels {
+        1 => "Mono".to_owned(),
+        2 => "Stereo".to_owned(),
+        6 => "5.1".to_owned(),
+        8 => "7.1".to_owned(),
+        other => format!("{other} channels"),
+    }
+}
+
+/// Bits a second, from how large a film is and how long it runs.
+///
+/// Both halves are needed, and a film nobody has watched whose container never
+/// stated a running time has only one of them. That is a fact the sheet leaves
+/// out rather than a nought to print.
+fn bitrate_of(size_bytes: u64, duration: Option<Timestamp>) -> Option<u32> {
+    let millis = u64::from(duration?.millis());
+    if millis == 0 {
+        return None;
+    }
+    u32::try_from(size_bytes.saturating_mul(8_000) / millis).ok()
 }
 
 /// A subtitle track of a film, whether beside it or inside it.

@@ -29,6 +29,7 @@ const heat = {
   posterPath: null,
   accent: null,
   missing: false,
+  details: null,
   tracks: [],
   chosenTrackId: null,
   subtitlesOff: false,
