@@ -5,7 +5,6 @@
 mod common;
 
 use subtext_core::{Correction, Timestamp};
-use subtext_index::SearchOptions;
 
 use crate::common::{Library, cues};
 
@@ -126,39 +125,6 @@ fn a_correction_outlives_a_restart() {
     assert_eq!(
         reopened.tracks().cues(track).unwrap()[1].start,
         Timestamp::from_millis(9_227)
-    );
-}
-
-#[test]
-fn a_search_result_opens_at_the_corrected_moment() {
-    let (library, _, track) = mistimed();
-    let uncorrected = library
-        .database
-        .search()
-        .find("juice", &SearchOptions::default())
-        .unwrap();
-    assert_eq!(uncorrected.films[0].hits[0].start, Timestamp::ZERO);
-
-    library
-        .database
-        .tracks()
-        .set_correction(track, Correction::of_offset(2_500))
-        .unwrap();
-
-    // The point of the whole arrangement: the palette and the player agree
-    // about where a line is, because both went through the same operation.
-    let corrected = library
-        .database
-        .search()
-        .find("attached", &SearchOptions::default())
-        .unwrap();
-    assert_eq!(
-        corrected.films[0].hits[0].start,
-        Timestamp::from_millis(12_500)
-    );
-    assert_eq!(
-        corrected.films[0].hits[0].start,
-        library.database.tracks().cues(track).unwrap()[1].start
     );
 }
 

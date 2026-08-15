@@ -1,14 +1,8 @@
-//! How long the library takes to index and to search.
+//! How long the library takes to write and to read back.
 //!
-//! Two numbers matter. Indexing a thousand films means writing something like a
-//! million cues, and the target for that is ten seconds. Searching that million
-//! has to come back in under fifty milliseconds, because the palette runs the
-//! query on every keystroke.
-//!
-//! The million cue corpus is built once at the start of the run, and building
-//! it is itself the ingest measurement. Each search prints how many lines it
-//! matched, since a query matching a fifth of the library is a different
-//! question from one matching a few thousand lines.
+//! Indexing a thousand films means writing something like a million cues, and
+//! the target for that is ten seconds. The million cue corpus is built once at
+//! the start of the run, and building it is itself that measurement.
 
 // A benchmark that cannot open its own database has nothing to measure, so it
 // stops where it stands rather than reporting a number for something else.
@@ -20,7 +14,7 @@ use std::time::Instant;
 
 use criterion::{Criterion, Throughput};
 use subtext_core::{Correction, Cue, SubtitleLabel, Timestamp};
-use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch, TrackOrigin};
+use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
 use tempfile::TempDir;
 
 /// Roughly what a feature film comes to.
@@ -170,35 +164,39 @@ impl Corpus {
         let mut last_track = 0;
 
         let started = Instant::now();
-        database
-            .bulk_ingest(|| {
-                for (at, cues) in corpus.iter().enumerate() {
-                    let film = database.films().upsert(&NewFilm {
-                        folder_id: folder.id,
-                        path: Path::new(&format!("/films/film-{at}.mkv")),
-                        title: "A film",
-                        year: Some(1_999),
-                        size_bytes: 4_000_000_000,
-                        modified_at: 1_700_000_000_000,
-                    })?;
-                    let track = database.tracks().upsert(&NewTrack {
-                        film_id: film.id,
-                        path: Path::new(&format!("/films/film-{at}.srt")),
-                        label: SubtitleLabel::default(),
-                        origin: TrackOrigin::Sidecar,
-                        stream_number: 0,
-                        codec: "subrip",
-                        match_kind: TrackMatch::Exact,
-                        encoding: "UTF-8",
-                        size_bytes: 60_000,
-                        modified_at: 1_700_000_000_000,
-                    })?;
-                    database.tracks().replace_cues(track.id, cues)?;
-                    last_track = track.id;
-                }
-                Ok(())
-            })
-            .expect("the corpus");
+        for (at, cues) in corpus.iter().enumerate() {
+            let film = database
+                .films()
+                .upsert(&NewFilm {
+                    folder_id: folder.id,
+                    path: Path::new(&format!("/films/film-{at}.mkv")),
+                    title: "A film",
+                    year: Some(1_999),
+                    size_bytes: 4_000_000_000,
+                    modified_at: 1_700_000_000_000,
+                })
+                .expect("a film");
+            let track = database
+                .tracks()
+                .upsert(&NewTrack {
+                    film_id: film.id,
+                    path: Path::new(&format!("/films/film-{at}.srt")),
+                    label: SubtitleLabel::default(),
+                    origin: TrackOrigin::Sidecar,
+                    stream_number: 0,
+                    codec: "subrip",
+                    match_kind: TrackMatch::Exact,
+                    encoding: "UTF-8",
+                    size_bytes: 60_000,
+                    modified_at: 1_700_000_000_000,
+                })
+                .expect("a track");
+            database
+                .tracks()
+                .replace_cues(track.id, cues)
+                .expect("the cues");
+            last_track = track.id;
+        }
         let elapsed = started.elapsed();
 
         let total = FILMS * CUES_PER_FILM;
@@ -214,89 +212,6 @@ impl Corpus {
             _directory: directory,
         }
     }
-
-    /// How many lines a search matched before any limit was applied.
-    fn matches(&self, term: &str) -> usize {
-        self.database
-            .search()
-            .find(
-                term,
-                &SearchOptions {
-                    limit: usize::MAX,
-                    per_film: usize::MAX,
-                    ..SearchOptions::default()
-                },
-            )
-            .expect("results")
-            .shown()
-    }
-}
-
-fn searching(criterion: &mut Criterion, corpus: &Corpus) {
-    // A word in a fifth of all dialogue, a word in a few thousand lines, and a
-    // word in a handful of scenes.
-    let terms = ["the", "window", "phosphorus"];
-    for term in terms {
-        println!(
-            "search term {term:?} matches {} lines",
-            corpus.matches(term)
-        );
-    }
-
-    let options = SearchOptions::default();
-    let mut group = criterion.benchmark_group("search");
-    group.throughput(Throughput::Elements(
-        u64::try_from(FILMS * CUES_PER_FILM).unwrap_or(u64::MAX),
-    ));
-
-    for term in terms {
-        group.bench_function(term, |bencher| {
-            bencher.iter(|| {
-                corpus
-                    .database
-                    .search()
-                    .find(black_box(term), &options)
-                    .expect("results")
-            });
-        });
-    }
-
-    group.bench_function("phrase", |bencher| {
-        bencher.iter(|| {
-            corpus
-                .database
-                .search()
-                .find(black_box("\"the money\""), &options)
-                .expect("results")
-        });
-    });
-
-    // What the palette runs while someone is still typing.
-    group.bench_function("prefix", |bencher| {
-        bencher.iter(|| {
-            corpus
-                .database
-                .search()
-                .find(black_box("pho"), &options)
-                .expect("results")
-        });
-    });
-
-    group.bench_function("within one film", |bencher| {
-        let scoped = SearchOptions {
-            film: Some(1),
-            ..SearchOptions::default()
-        };
-        bencher.iter(|| {
-            corpus
-                .database
-                .search()
-                .find(black_box("window"), &scoped)
-                .expect("results")
-        });
-    });
-
-    group.finish();
 }
 
 fn writing(criterion: &mut Criterion, corpus: &Corpus) {
@@ -305,10 +220,10 @@ fn writing(criterion: &mut Criterion, corpus: &Corpus) {
         u64::try_from(CUES_PER_FILM).unwrap_or(u64::MAX),
     ));
 
-    // One film arriving in a library that is already indexed, which is what the
-    // folder watcher causes and where the triggers keep the index in step.
+    // One film arriving in a library that is already there, which is what the
+    // folder watcher causes.
     let cues = cues(9_999);
-    group.bench_function("indexed on the way in", |bencher| {
+    group.bench_function("written", |bencher| {
         bencher.iter(|| {
             corpus
                 .database
@@ -318,7 +233,7 @@ fn writing(criterion: &mut Criterion, corpus: &Corpus) {
         });
     });
 
-    // The transcript panel asks for a whole film's cues when it opens.
+    // The player asks for a whole film's cues when it opens.
     group.bench_function("read back", |bencher| {
         bencher.iter(|| {
             corpus
@@ -359,7 +274,6 @@ fn writing(criterion: &mut Criterion, corpus: &Corpus) {
 fn main() {
     let corpus = Corpus::build();
     let mut criterion = Criterion::default().configure_from_args();
-    searching(&mut criterion, &corpus);
     writing(&mut criterion, &corpus);
     criterion.final_summary();
 }

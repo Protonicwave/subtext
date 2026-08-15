@@ -20,7 +20,7 @@ export function LibrarySection() {
   const folders = useLibrary((library) => library.folders);
   const removeFolder = useLibrary((library) => library.removeFolder);
   const chooseFolder = useImport((state) => state.chooseFolder);
-  const rebuild = useImport((state) => state.rebuild);
+  const reread = useImport((state) => state.reread);
   const scanning = useImport((state) => state.progress !== null);
 
   useRereadWhenPairingChanges();
@@ -97,11 +97,11 @@ export function LibrarySection() {
       />
 
       <Action
-        label="Rebuild the search index"
-        hint="Builds the index again from the dialogue already read. For a library where search has stopped finding lines that are plainly there."
+        label="Read your folders again"
+        hint="Subtext notices what changes while it is running and reads every folder when it starts. This is for a library that has been rearranged behind its back."
       >
-        <Button onClick={() => void rebuild()} disabled={scanning}>
-          {scanning ? 'Reading your films' : 'Rebuild'}
+        <Button onClick={() => void reread()} disabled={scanning}>
+          {scanning ? 'Reading your films' : 'Read them again'}
         </Button>
       </Action>
     </>

@@ -41,16 +41,6 @@ const BATCH_CUES: usize = 20_000;
 /// ahead by the whole folder.
 const QUEUE_DEPTH: usize = 128;
 
-/// Above this many files to read, the search index is built once at the end
-/// rather than kept in step row by row.
-///
-/// Building it in one pass costs roughly a tenth of what feeding a million cues
-/// through the triggers does, but it rebuilds the index for the whole library
-/// rather than for the part being written. So it is worth it for a scan large
-/// enough to be dominated by its own writing, and not for one film being added
-/// to a library that is already there.
-const BULK_THRESHOLD: usize = 32;
-
 /// What a scan found and what it did about it.
 #[derive(Clone, Debug)]
 pub struct ScanOutcome {
@@ -459,17 +449,8 @@ fn read_and_write_all(
     if jobs.is_empty() {
         return Ok(Written::default());
     }
-    // Both kinds of reading count towards it. A folder of films carrying their
-    // subtitles inside them has no subtitle files at all, and feeding a million
-    // cues from them through the search index a row at a time is the thing the
-    // threshold is there to avoid.
-    if jobs.len() < BULK_THRESHOLD {
-        return read_and_write(database, &jobs, sink, progress);
-    }
 
-    // The index is rebuilt whether this succeeded or not, so the outcome is
-    // carried through rather than turned into a failure the rebuild would skip.
-    database.bulk_ingest(|| Ok(read_and_write(database, &jobs, sink, progress)))?
+    read_and_write(database, &jobs, sink, progress)
 }
 
 fn read_and_write(

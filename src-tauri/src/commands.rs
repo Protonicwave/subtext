@@ -7,17 +7,17 @@
 use std::path::{Path, PathBuf};
 
 use subtext_core::Timestamp;
-use subtext_index::{Database, SearchOptions, TrackChoice};
+use subtext_index::{Database, TrackChoice};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
     AccentView, AlignProgressed, AlignmentView, Answer, CorrectionView, CueView, Failure, FilmView,
-    FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, SearchView, TrackView,
+    FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, TrackView,
 };
 use crate::state::AppState;
-use crate::{allowed, dropped, posters, recent};
+use crate::{allowed, dropped, posters};
 
 /// What the window the front end is drawing into turned out to be.
 ///
@@ -215,90 +215,6 @@ pub(crate) async fn track_cues(state: State<'_, AppState>, track_id: Id) -> Answ
         .map_err(Failure::of)?;
 
     Ok(cues.into_iter().map(CueView::of).collect())
-}
-
-/// How many lines one search asks the index for.
-///
-/// More than the palette can show at once, because the count under the field
-/// says how many were found and the list is scrolled. Far fewer than the index
-/// would happily return, because nobody reads the four hundredth match.
-const SEARCH_LIMIT: usize = 100;
-
-/// How many lines any one film contributes to a search across the library.
-///
-/// Small on purpose. A search for a common word would otherwise come back as
-/// one film said a hundred times, and the useful answer to "who says this" is
-/// which films say it.
-const PER_FILM: usize = 4;
-
-/// Finds a line of dialogue anywhere in the library, or in one film.
-///
-/// Called on a keystroke, so the work happens on a thread of its own rather
-/// than on the runtime that answers every other command. What comes back is
-/// grouped by film and ranked, and the query itself is treated as words rather
-/// than as index syntax, so nothing anybody types is an error.
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn search_dialogue(
-    app: AppHandle,
-    query: String,
-    film_id: Option<Id>,
-) -> Answer<SearchView> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let film = film_id.map(Id::get);
-        let options = SearchOptions {
-            film,
-            limit: SEARCH_LIMIT,
-            // Within one film every match is worth showing: the list is that
-            // film's own lines in order, and holding some back would be
-            // answering half the question.
-            per_film: if film.is_some() {
-                SEARCH_LIMIT
-            } else {
-                PER_FILM
-            },
-            ..SearchOptions::default()
-        };
-
-        app.state::<AppState>()
-            .scanner()
-            .database()
-            .search()
-            .find(&query, &options)
-            .map(|results| SearchView::of(&results))
-            .map_err(Failure::of)
-    })
-    .await
-    .map_err(|_| Failure::saying("the search did not finish"))?
-}
-
-/// What has been searched for before, most recent first.
-///
-/// What the palette offers before anybody has typed anything.
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn recent_searches(state: State<'_, AppState>) -> Answer<Vec<String>> {
-    recent::list(state.scanner().database())
-}
-
-/// Keeps a search, because it found something worth opening.
-///
-/// Returns the list it made rather than nothing, so the palette shows what was
-/// written rather than what it assumed would be.
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn remember_search(
-    state: State<'_, AppState>,
-    query: String,
-) -> Answer<Vec<String>> {
-    recent::remember(state.scanner().database(), &query)
-}
-
-/// Forgets every search that has been made.
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn forget_searches(state: State<'_, AppState>) -> Answer<()> {
-    recent::forget(state.scanner().database())
 }
 
 /// Records how far through a film somebody is.
@@ -641,29 +557,6 @@ pub(crate) async fn write_preference(
         .preferences()
         .set(&key, &value)
         .map_err(Failure::of)
-}
-
-/// Builds the search index again, and then reads the folders afresh.
-///
-/// For a library whose search has stopped agreeing with its dialogue, which a
-/// scan that was interrupted or a file copied between machines can leave
-/// behind. Nothing is reparsed and no pairing is lost: the index is built from
-/// the cues already stored.
-///
-/// Returns straight away and reports itself through the scan events, like the
-/// scans it ends with.
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn rebuild_index(app: AppHandle) -> Answer<()> {
-    let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = handle.state::<AppState>();
-        state.scanning(&handle, |scanner, sink| {
-            scanner.rebuild_index()?;
-            scanner.scan_all(sink)
-        });
-    });
-    Ok(())
 }
 
 /// Reads every watched folder again.

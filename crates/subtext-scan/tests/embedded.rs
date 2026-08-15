@@ -9,7 +9,7 @@ mod common;
 use std::path::Path;
 
 use subtext_container::fixture::{Entry, Line};
-use subtext_index::{SearchOptions, TrackOrigin, TrackRecord};
+use subtext_index::{TrackOrigin, TrackRecord};
 
 use crate::common::Fixture;
 
@@ -112,10 +112,10 @@ fn the_dialogue_inside_a_film_is_read_out_of_it() {
     );
 }
 
-/// What the whole sequence was for: a film with no subtitle file beside it is
-/// in the search index rather than being a poster and a video element.
+/// What the whole sequence was for: a film with no subtitle file beside it has
+/// dialogue rather than being a poster and a video element.
 #[test]
-fn a_film_with_no_subtitle_file_can_still_be_searched() {
+fn a_film_with_no_subtitle_file_still_has_its_dialogue() {
     let library = Fixture::new();
     library.matroska_saying(
         "Heat.1995.1080p.mkv",
@@ -125,17 +125,17 @@ fn a_film_with_no_subtitle_file_can_still_be_searched() {
 
     library.scan();
 
-    let results = library
-        .database()
-        .search()
-        .find("juice", &SearchOptions::default())
-        .unwrap();
+    assert_eq!(
+        library.dialogue("Heat.1995.1080p.mkv"),
+        ["The action is the juice"]
+    );
 
-    assert_eq!(results.films.len(), 1);
-    let hit = &results.films[0].hits[0];
     // At the moment it is spoken, since a track muxed into a film was timed
     // against those frames and needs no correcting to say so.
-    assert_eq!(hit.start.millis(), 60_000);
+    let film = library.film_id("Heat.1995.1080p.mkv");
+    let tracks = library.database().tracks().for_film(film).unwrap();
+    let cues = library.database().tracks().cues(tracks[0].id).unwrap();
+    assert_eq!(cues[0].start.millis(), 60_000);
 }
 
 /// The property that keeps a library of Matroska films as cheap to rescan as

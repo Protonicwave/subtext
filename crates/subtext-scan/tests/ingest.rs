@@ -9,7 +9,7 @@ mod common;
 use std::sync::Mutex;
 
 use subtext_core::{Matching, ParseWarningKind, Timestamp};
-use subtext_index::{SearchOptions, TrackMatch};
+use subtext_index::TrackMatch;
 use subtext_scan::{ScanProgress, ScanStage, Silent};
 
 use crate::common::{Fixture, exists, names};
@@ -251,12 +251,6 @@ fn a_subtitle_file_that_is_deleted_takes_its_lines_with_it() {
 
     assert_eq!(outcome.tracks_removed, 1);
     assert!(library.dialogue("Heat.1995.mkv").is_empty());
-    let found = library
-        .database()
-        .search()
-        .find("helicopter", &SearchOptions::default())
-        .unwrap();
-    assert!(found.films.is_empty());
 }
 
 #[test]
@@ -398,10 +392,8 @@ fn a_subtitle_file_in_another_encoding_is_read_as_what_it_is() {
 }
 
 #[test]
-fn a_folder_large_enough_to_index_in_one_pass_is_still_searchable() {
+fn a_folder_of_many_films_reads_every_one_of_them() {
     let library = Fixture::new();
-    // Over the threshold at which the search index is built once at the end
-    // rather than kept in step, which is the path a first scan takes.
     for at in 0..40 {
         library.film(&format!("Film {at:02}.2001.mkv"));
         library.subtitle(
@@ -414,12 +406,12 @@ fn a_folder_large_enough_to_index_in_one_pass_is_still_searchable() {
     assert_eq!(outcome.subtitles_read, 40);
     assert_eq!(outcome.cues_indexed, 40);
 
-    let found = library
-        .database()
-        .search()
-        .find("horsemen", &SearchOptions::default())
-        .unwrap();
-    assert_eq!(found.films.len(), 40);
+    for at in 0..40 {
+        assert_eq!(
+            library.dialogue(&format!("Film {at:02}.2001.mkv")),
+            [format!("the {at:02} horsemen of somewhere")]
+        );
+    }
 }
 
 #[test]

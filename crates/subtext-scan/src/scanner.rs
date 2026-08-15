@@ -62,19 +62,6 @@ impl Scanner {
         }
     }
 
-    /// Builds the search index again from the dialogue already stored.
-    ///
-    /// Nothing is reread and no pairing changes: this is for an index that has
-    /// fallen behind the cues it describes, which is what an interrupted scan
-    /// or a copied library file can leave behind. Behind the same gate as a
-    /// scan, since one writing cues while the index is being rebuilt would
-    /// leave the very state this repairs.
-    pub fn rebuild_index(&self) -> Result<()> {
-        let _guard = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        self.database.rebuild_search_index()?;
-        Ok(())
-    }
-
     /// Starts watching a folder, or returns the one already being watched.
     ///
     /// This only records it. Scanning it is a separate step, because the

@@ -158,7 +158,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use subtext_core::{Correction, Cue, SubtitleLabel, Timestamp};
-    use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch, TrackOrigin};
+    use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
     use subtext_speech::fixture::Film;
     use subtext_speech::{Reading, Unwatched};
     use tempfile::TempDir;
@@ -184,17 +184,12 @@ mod tests {
     /// watching can tell.
     const SLACK: i64 = 50;
 
-    /// Which line of the dialogue is the one a search goes looking for.
-    const FINDABLE: u32 = 40;
-
     /// A film's worth of dialogue, in exchanges rather than at a fixed spacing.
     ///
     /// The unevenness is the point. It is what makes one moment in a film tell
     /// itself apart from another, and a transcript of evenly spaced lines would
-    /// line up equally well almost anywhere.
-    ///
-    /// One line in the middle says something nothing else says, so that a search
-    /// can find it and nothing else.
+    /// line up equally well almost anywhere. What the lines say is of no
+    /// interest to any of this: the measurement is of when somebody speaks.
     fn dialogue() -> Vec<Cue> {
         let mut cues = Vec::new();
         let mut at_ms = 20_000;
@@ -205,11 +200,7 @@ mod tests {
                 index: index + 1,
                 start: Timestamp::from_millis(at_ms),
                 end: Timestamp::from_millis(at_ms + length),
-                text: if index == FINDABLE {
-                    "a mind like a diamond".to_owned()
-                } else {
-                    "line".to_owned()
-                },
+                text: "line".to_owned(),
                 position: None,
             });
             at_ms += length + 800 + (index % 11) * 500;
@@ -409,18 +400,6 @@ mod tests {
         let cues = reopened.tracks().cues(fixture.track_id).unwrap();
         let first = i64::from(cues[0].start.millis());
         assert!((first - i64::from(20_000 + TRUTH as u32)).abs() <= SLACK);
-
-        // And so does a search result, which is the whole point of the
-        // correction living where it does: the palette and the player agree
-        // about where a line is because both went through the same operation.
-        let found = reopened
-            .search()
-            .find("diamond", &SearchOptions::default())
-            .unwrap();
-        assert_eq!(
-            found.films[0].hits[0].start, cues[FINDABLE as usize].start,
-            "the palette and the player disagree about where the line is"
-        );
     }
 
     /// The measurement is of the track against the film, not of the track

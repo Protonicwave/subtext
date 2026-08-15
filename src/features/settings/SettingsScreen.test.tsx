@@ -10,7 +10,6 @@ const { ipc } = vi.hoisted(() => ({
     writePreference: vi.fn(() => Promise.resolve(null)),
     readPreferences: vi.fn(() => Promise.resolve([])),
     rescan: vi.fn(() => Promise.resolve(null)),
-    rebuildIndex: vi.fn(() => Promise.resolve(null)),
     removeFolder: vi.fn(() => Promise.resolve(true)),
   },
 }));
@@ -112,15 +111,15 @@ describe('the settings screen', () => {
     expect(ipc.rescan).not.toHaveBeenCalled();
   });
 
-  it('asks for the index to be rebuilt, once', async () => {
+  it('asks for the folders to be read again, once', async () => {
     render(<SettingsScreen />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Rebuild' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Read them again' }));
 
-    expect(ipc.rebuildIndex).toHaveBeenCalledTimes(1);
+    expect(ipc.rescan).toHaveBeenCalledTimes(1);
   });
 
-  it('will not ask for a rebuild while the films are already being read', () => {
+  it('will not ask for a read while the films are already being read', () => {
     useImport.setState({ progress: { filesSeen: 3 } as never });
 
     render(<SettingsScreen />);
