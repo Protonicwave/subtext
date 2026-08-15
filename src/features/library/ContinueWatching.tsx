@@ -4,7 +4,7 @@ import { sourceOf } from '@/shared/media/source';
 import { classes } from '@/shared/ui/classes';
 import { useSetting } from '@/shared/settings/useSettings';
 import { paletteFor } from './accent';
-import { fallbackFor } from './fallback';
+import { ComposedCover } from './ComposedCover';
 import { useFrames } from './frames';
 import { remainingOf } from './remaining';
 import styles from './ContinueWatching.module.css';
@@ -60,9 +60,7 @@ export function ContinueWatching({ films, onOpen }: ContinueWatchingProps) {
               >
                 <span className={styles.shot}>
                   {still === null ? (
-                    <span className={styles.generated} aria-hidden="true">
-                      {fallbackFor(film.title).initials}
-                    </span>
+                    <ComposedCover film={film} />
                   ) : (
                     <img className={styles.still} src={still} alt="" draggable={false} />
                   )}

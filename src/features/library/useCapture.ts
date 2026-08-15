@@ -34,7 +34,7 @@ const refused = new Set<Id>();
 export function useCapture(ready: boolean) {
   useEffect(() => {
     // No worker means no capture: under test, and anywhere else without one,
-    // every film draws its generated tile and nothing goes wrong.
+    // every film draws its composed cover and nothing goes wrong.
     if (!ready || typeof Worker === 'undefined') return;
 
     const abort = new AbortController();

@@ -5,7 +5,7 @@ import { sourceOf } from '@/shared/media/source';
 import { classes } from '@/shared/ui/classes';
 import { stillnessWanted } from '@/shared/ui/stillness';
 import { useFilmPalette } from './accent';
-import { fallbackFor } from './fallback';
+import { ComposedCover } from './ComposedCover';
 import { frameId } from './transition';
 import { linesOf } from './useLibrary';
 import styles from './PosterTile.module.css';
@@ -15,8 +15,8 @@ import styles from './PosterTile.module.css';
  *
  * The tile carries its own colours as custom properties, which is what lets the
  * lift, the glow and the ring all be one film's colour without a component
- * anywhere reading a palette. A film with no captured frame draws the
- * composition made from its title instead, so the grid is never a row of holes.
+ * anywhere reading a palette. A film with no picture anywhere draws the cover
+ * composed from what is known about it, so the grid is never a row of holes.
  */
 
 /** How long a pointer rests on a tile before the preview starts. */
@@ -63,9 +63,7 @@ export function PosterTile({ film, onOpen }: PosterTileProps) {
     >
       <motion.span layoutId={frameId(film.id)} className={styles.frame}>
         {still === null ? (
-          <span className={styles.generated} aria-hidden="true">
-            {fallbackFor(film.title).initials}
-          </span>
+          <ComposedCover film={film} />
         ) : (
           <img className={styles.still} src={still} alt="" draggable={false} />
         )}

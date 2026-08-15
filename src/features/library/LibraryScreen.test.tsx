@@ -87,14 +87,14 @@ describe('the library screen', () => {
   it('says what is there, and how much dialogue it has', () => {
     show({ films: [film] });
 
-    expect(screen.getByText('Heat')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Heat/ })).toBeInTheDocument();
     expect(screen.getByText(/1 film · 1,402 lines of dialogue/)).toBeInTheDocument();
   });
 
   it('opens a film when its tile is chosen', async () => {
     show({ films: [film] });
 
-    await userEvent.click(screen.getByText('Heat'));
+    await userEvent.click(screen.getByRole('button', { name: /Heat/ }));
 
     expect(useNavigation.getState().route).toMatchObject({ screen: 'player', filmId: 7 });
   });
@@ -115,7 +115,7 @@ describe('the library screen', () => {
   it('shows a film whose file has gone as missing rather than hiding it', () => {
     show({ films: [{ ...film, missing: true }] });
 
-    expect(screen.getByText('Heat')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Heat/ })).toBeInTheDocument();
     expect(screen.getAllByText(/missing/i).length).toBeGreaterThan(0);
   });
 
@@ -144,8 +144,10 @@ describe('the library screen', () => {
     // rows behind it or ten thousand.
     const tiles = document.querySelectorAll('button').length;
     expect(tiles).toBeLessThan(60);
-    expect(screen.getByText('Film 1')).toBeInTheDocument();
-    expect(screen.queryByText('Film 9000')).not.toBeInTheDocument();
+    // Found by the tile's caption rather than by its text, since the cover
+    // composed for a film with no picture sets the title as well.
+    expect(screen.getByRole('button', { name: 'Film 11995 · 1,402 lines' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Film 9000/ })).not.toBeInTheDocument();
 
     // Slow enough to catch a return to drawing all of them, and loose enough
     // not to fail on a busy machine.

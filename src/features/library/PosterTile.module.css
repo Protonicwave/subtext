@@ -3,7 +3,7 @@
  *
  * Everything that makes a tile look like the film it shows comes from the two
  * custom properties the component sets: the glow behind it, the ring around it
- * and the wash over the generated composition are all one colour, and it is the
+ * and the wash over the composed cover are all one colour, and it is the
  * film's own.
  */
 
@@ -88,24 +88,6 @@
   from {
     opacity: 0;
   }
-}
-
-/*
- * The composition a film gets when no frame could be taken from it. The
- * initials sit large and low in the display serif, half sunk into the gradient,
- * which reads as a designed cover rather than as a placeholder.
- */
-.generated {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: var(--space-4);
-  font-family: var(--font-display);
-  font-size: 3.6rem;
-  line-height: 0.86;
-  color: color-mix(in oklab, #fff 22%, transparent);
-  letter-spacing: var(--tracking-tight);
 }
 
 .badge {
