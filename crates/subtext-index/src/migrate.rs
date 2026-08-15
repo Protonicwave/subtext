@@ -54,6 +54,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "film cover",
         sql: include_str!("migrations/0007_film_cover.sql"),
     },
+    Migration {
+        version: 8,
+        name: "media details",
+        sql: include_str!("migrations/0008_media_details.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -395,6 +400,34 @@ mod tests {
             })
             .unwrap();
         assert_eq!(cover, None);
+
+        // Nor about what its file is, which is what puts it in the way of the
+        // next scan describing it. Every one of these reads as not known rather
+        // than as a number nobody wrote.
+        for column in [
+            "container",
+            "video_codec",
+            "video_width",
+            "video_height",
+            "bit_depth",
+            "frame_rate",
+        ] {
+            let said: Option<String> = connection
+                .query_row(
+                    &format!("SELECT {column} FROM film WHERE id = 1"),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(said, None, "{column}");
+        }
+
+        // And it carries no sound tracks until something reads them, which is
+        // an empty table rather than a missing one.
+        let sound: i64 = connection
+            .query_row("SELECT count(*) FROM audio_stream", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(sound, 0);
 
         // The mirror and the flag that said whether it was being kept in step.
         let left: i64 = connection

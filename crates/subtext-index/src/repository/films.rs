@@ -8,16 +8,17 @@ use subtext_core::Timestamp;
 use crate::clock::now_millis;
 use crate::database::Database;
 use crate::error::Result;
-use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored, TrackChoice};
+use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored, TrackChoice, VideoDetails};
 use crate::repository::{from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, folder_id, path, title, year, size_bytes, modified_at, \
                        duration_ms, poster_path, cover_path, accent, missing_since, \
-                       chosen_track_id, subtitles_off, added_at";
+                       chosen_track_id, subtitles_off, added_at, container, \
+                       video_codec, video_width, video_height, bit_depth, frame_rate";
 
 /// How many columns [`COLUMNS`] names, for queries that read a film alongside
 /// something else and need to know where the film ends.
-pub(super) const COLUMN_COUNT: usize = 15;
+pub(super) const COLUMN_COUNT: usize = 21;
 
 /// The same columns, qualified with a table alias for use in a join.
 pub(super) fn qualified_columns(alias: &str) -> String {
@@ -136,6 +137,25 @@ impl<'a> Films<'a> {
         self.database.with(|connection| {
             let mut statement = connection
                 .prepare("SELECT id FROM film WHERE folder_id = ?1 AND probed_at IS NULL")?;
+            let ids = statement
+                .query_map([folder_id], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(ids)
+        })
+    }
+
+    /// The films in a folder whose file has never been described.
+    ///
+    /// A film is described when it is new or when its file has changed, which
+    /// between them cover everything a scan does. They do not cover a library
+    /// indexed before this build existed: those rows are unchanged and have
+    /// already been looked inside, so nothing would ever open them again. This
+    /// is what asks, and it costs a header read each rather than a whole film,
+    /// since the dialogue in them was read by the build that came before.
+    pub fn undescribed(&self, folder_id: i64) -> Result<Vec<i64>> {
+        self.database.with(|connection| {
+            let mut statement = connection
+                .prepare("SELECT id FROM film WHERE folder_id = ?1 AND container IS NULL")?;
             let ids = statement
                 .query_map([folder_id], |row| row.get(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -362,7 +382,36 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
         missing_since: row.get(11)?,
         choice: TrackChoice::from_columns(row.get(12)?, row.get(13)?),
         added_at: row.get(14)?,
+        container: row.get(15)?,
+        video: video_in(row)?,
     })
+}
+
+/// The picture a film's row describes, where it describes one.
+///
+/// The codec is what says there is a picture to describe. A film whose header
+/// named no video track, or that has not been looked at, has nothing here, and
+/// the dimensions of such a film are absent rather than zero.
+fn video_in(row: &Row<'_>) -> rusqlite::Result<Option<VideoDetails>> {
+    let Some(codec) = row.get::<_, Option<String>>(16)? else {
+        return Ok(None);
+    };
+
+    Ok(Some(VideoDetails {
+        codec,
+        width: row.get::<_, Option<i64>>(17)?.and_then(narrow),
+        height: row.get::<_, Option<i64>>(18)?.and_then(narrow),
+        bit_depth: row
+            .get::<_, Option<i64>>(19)?
+            .and_then(|depth| u8::try_from(depth).ok()),
+        frame_rate: row.get(20)?,
+    }))
+}
+
+/// A dimension on the way out, where anything a column cannot mean reads as
+/// nothing said rather than as a number nobody wrote.
+fn narrow(value: i64) -> Option<u32> {
+    u32::try_from(value).ok()
 }
 
 #[cfg(test)]
@@ -378,7 +427,7 @@ mod tests {
     fn columns_can_be_qualified_for_a_join() {
         let qualified = qualified_columns("f");
         assert!(qualified.starts_with("f.id, f.folder_id, f.path"));
-        assert!(qualified.ends_with("f.added_at"));
+        assert!(qualified.ends_with("f.frame_rate"));
         assert_eq!(qualified.split(',').count(), COLUMN_COUNT);
     }
 }

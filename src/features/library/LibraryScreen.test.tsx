@@ -32,6 +32,7 @@ const film = {
   posterPath: null,
   accent: null,
   missing: false,
+  details: null,
   tracks: [
     {
       id: 3,

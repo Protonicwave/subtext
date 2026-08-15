@@ -101,6 +101,7 @@ const film = {
   posterPath: null,
   accent: null,
   missing: false,
+  details: null,
   tracks: [english],
   chosenTrackId: null,
   subtitlesOff: false,

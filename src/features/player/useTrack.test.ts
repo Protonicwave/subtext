@@ -45,6 +45,7 @@ function film(tracks: TrackView[], changes: Partial<FilmView> = {}): FilmView {
     posterPath: null,
     accent: null,
     missing: false,
+    details: null,
     tracks,
     chosenTrackId: null,
     subtitlesOff: false,

@@ -23,6 +23,7 @@ const SEEK_ID: u32 = 0x53AB;
 const SEEK_POSITION: u32 = 0x53AC;
 const INFO: u32 = 0x1549_A966;
 const TIMESTAMP_SCALE: u32 = 0x002A_D7B1;
+const DURATION: u32 = 0x4489;
 const VOID: u32 = 0xEC;
 const CLUSTER: u32 = 0x1F43_B675;
 const TIMESTAMP: u32 = 0xE7;
@@ -44,6 +45,14 @@ const LANGUAGE: u32 = 0x0022_B59C;
 const FLAG_DEFAULT: u32 = 0x88;
 const FLAG_FORCED: u32 = 0x55AA;
 const FLAG_HEARING_IMPAIRED: u32 = 0x55AB;
+const DEFAULT_DURATION: u32 = 0x0023_E383;
+const VIDEO_SETTINGS: u32 = 0xE0;
+const PIXEL_WIDTH: u32 = 0xB0;
+const PIXEL_HEIGHT: u32 = 0xBA;
+const COLOUR: u32 = 0x55B0;
+const BITS_PER_CHANNEL: u32 = 0x55B2;
+const AUDIO_SETTINGS: u32 = 0xE1;
+const CHANNELS: u32 = 0x9F;
 
 /// The track types, of which only the last is a subtitle.
 const VIDEO: u64 = 1;
@@ -75,6 +84,13 @@ pub struct Entry {
     default: bool,
     forced: bool,
     hearing_impaired: bool,
+    /// What a picture track says about its pictures, and a sound track about
+    /// its sound. Both are written only when a fixture asks for them, so that
+    /// what a reader does with a file that says nothing is covered too.
+    dimensions: Option<(u64, u64)>,
+    bit_depth: Option<u64>,
+    frame_nanos: Option<u64>,
+    channels: Option<u64>,
 }
 
 impl Entry {
@@ -89,6 +105,10 @@ impl Entry {
             default: true,
             forced: false,
             hearing_impaired: false,
+            dimensions: None,
+            bit_depth: None,
+            frame_nanos: None,
+            channels: None,
         }
     }
 
@@ -134,6 +154,39 @@ impl Entry {
         self
     }
 
+    /// How large the picture is, in pixels.
+    #[must_use]
+    pub fn sized(mut self, width: u64, height: u64) -> Self {
+        self.dimensions = Some((width, height));
+        self
+    }
+
+    /// How many bits each colour channel of the picture is given.
+    #[must_use]
+    pub fn at_bit_depth(mut self, bits: u64) -> Self {
+        self.bit_depth = Some(bits);
+        self
+    }
+
+    /// How many frames a second the picture runs at.
+    ///
+    /// Written as the length of one frame in nanoseconds, which is the only
+    /// place a Matroska file says anything about its rate.
+    #[must_use]
+    pub fn at_frame_rate(mut self, frames_a_second: f64) -> Self {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let nanos = (1_000_000_000.0 / frames_a_second).round() as u64;
+        self.frame_nanos = Some(nanos);
+        self
+    }
+
+    /// How many channels the sound carries.
+    #[must_use]
+    pub fn with_channels(mut self, channels: u64) -> Self {
+        self.channels = Some(channels);
+        self
+    }
+
     fn bytes(&self) -> Vec<u8> {
         let mut body = Vec::new();
         body.extend(uint(TRACK_NUMBER, self.number));
@@ -153,7 +206,37 @@ impl Entry {
         if self.hearing_impaired {
             body.extend(uint(FLAG_HEARING_IMPAIRED, 1));
         }
+        if let Some(nanos) = self.frame_nanos {
+            body.extend(uint(DEFAULT_DURATION, nanos));
+        }
+        body.extend(self.settings());
         element(TRACK_ENTRY, &body)
+    }
+
+    /// What a picture or sound track says about itself, which sits in a box of
+    /// its own inside the track entry.
+    fn settings(&self) -> Vec<u8> {
+        match self.kind {
+            VIDEO => {
+                let mut body = Vec::new();
+                if let Some((width, height)) = self.dimensions {
+                    body.extend(uint(PIXEL_WIDTH, width));
+                    body.extend(uint(PIXEL_HEIGHT, height));
+                }
+                if let Some(bits) = self.bit_depth {
+                    body.extend(element(COLOUR, &uint(BITS_PER_CHANNEL, bits)));
+                }
+                if body.is_empty() {
+                    return Vec::new();
+                }
+                element(VIDEO_SETTINGS, &body)
+            }
+            AUDIO => self
+                .channels
+                .map(|channels| element(AUDIO_SETTINGS, &uint(CHANNELS, channels)))
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -246,6 +329,8 @@ pub struct Container {
     /// large each of them is.
     picture: Option<(u64, usize, usize)>,
     attachments: Vec<Attachment>,
+    /// How long the film says it runs, in milliseconds.
+    runs_for: Option<u64>,
 }
 
 impl Default for Container {
@@ -262,6 +347,7 @@ impl Default for Container {
             scale: DEFAULT_SCALE,
             picture: None,
             attachments: Vec::new(),
+            runs_for: None,
         }
     }
 }
@@ -347,6 +433,16 @@ impl Container {
         self
     }
 
+    /// How long the film says it runs, in milliseconds.
+    ///
+    /// Written in the file's own timestamp units, so a fixture that also
+    /// changes the scale still says the running time it was asked for.
+    #[must_use]
+    pub fn running_for(mut self, millis: u64) -> Self {
+        self.runs_for = Some(millis);
+        self
+    }
+
     /// Filler blocks of the given track in every cluster, standing in for the
     /// picture and sound a film carries between one line and the next.
     ///
@@ -389,7 +485,7 @@ impl Container {
         if self.padding > 0 {
             body.extend(element(VOID, &vec![0; self.padding]));
         }
-        body.extend(element(INFO, &uint(TIMESTAMP_SCALE, self.scale)));
+        body.extend(self.info());
         if self.tracks_after_cluster {
             body.extend(element(CLUSTER, &[]));
         }
@@ -408,6 +504,18 @@ impl Container {
         let mut segment = seek_head_bytes(length(tracks_at));
         segment.extend(body);
         segment
+    }
+
+    /// What the film says about itself: the unit its timestamps are counted in,
+    /// and how long it runs where a fixture says so.
+    fn info(&self) -> Vec<u8> {
+        let mut body = uint(TIMESTAMP_SCALE, self.scale);
+        if let Some(millis) = self.runs_for {
+            #[allow(clippy::cast_precision_loss)]
+            let units = self.units(millis) as f64;
+            body.extend(float(DURATION, units));
+        }
+        element(INFO, &body)
     }
 
     fn tracks(&self) -> Vec<u8> {
@@ -441,7 +549,7 @@ impl Container {
         out.write_all(&element(EBML_HEADER, &text(DOC_TYPE, "matroska")))?;
         out.write_all(&id_bytes(SEGMENT))?;
         out.write_all(&[0xFF])?;
-        out.write_all(&element(INFO, &uint(TIMESTAMP_SCALE, self.scale)))?;
+        out.write_all(&self.info())?;
         out.write_all(&element(TRACKS, &self.tracks()))?;
         out.write_all(&self.attached())?;
 
@@ -589,6 +697,11 @@ fn uint(id: u32, value: u64) -> Vec<u8> {
 
 fn text(id: u32, value: &str) -> Vec<u8> {
     element(id, value.as_bytes())
+}
+
+/// A float, at the wider of the two widths the format allows.
+fn float(id: u32, value: f64) -> Vec<u8> {
+    element(id, &value.to_be_bytes())
 }
 
 /// An identifier, written in as many bytes as it was defined with.

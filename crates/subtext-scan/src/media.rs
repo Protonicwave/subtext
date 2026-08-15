@@ -2,12 +2,23 @@
 
 use std::path::Path;
 
-/// Container extensions the player will try to open.
+/// Container extensions the player will try to open, and what each is called.
 ///
 /// Containers rather than codecs, because the webview decides what it can
 /// decode and Subtext says so plainly when it cannot. Listing a container here
 /// is a claim that the file is a film, not a promise that it will play.
-const FILM_EXTENSIONS: &[&str] = &["mp4", "m4v", "mkv", "mov", "webm", "avi"];
+///
+/// The name comes from the extension rather than from anything inside the file,
+/// which is why it is the one fact known about every film: an MP4 is not parsed
+/// by this application, and what container it is in is still not in doubt.
+const FILM_CONTAINERS: &[(&str, &str)] = &[
+    ("mp4", "MP4"),
+    ("m4v", "MP4"),
+    ("mkv", "Matroska"),
+    ("mov", "QuickTime"),
+    ("webm", "WebM"),
+    ("avi", "AVI"),
+];
 
 /// Only SRT, because that is what the parser reads.
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt"];
@@ -50,10 +61,7 @@ pub(crate) fn classify(file_name: &str) -> Option<FileKind> {
     }
 
     let extension = file_name.rsplit_once('.')?.1;
-    if FILM_EXTENSIONS
-        .iter()
-        .any(|known| known.eq_ignore_ascii_case(extension))
-    {
+    if container_named(extension).is_some() {
         return Some(FileKind::Film);
     }
     if SUBTITLE_EXTENSIONS
@@ -69,6 +77,21 @@ pub(crate) fn classify(file_name: &str) -> Option<FileKind> {
         return Some(FileKind::Image);
     }
     None
+}
+
+/// What container a film is in, by the name of its file.
+///
+/// A film that reached the library got here through [`classify`], so this
+/// answers for every one of them. It is what the file sheet shows, and what
+/// says a film has been described at all.
+pub(crate) fn container_of(file_name: &str) -> Option<&'static str> {
+    container_named(file_name.rsplit_once('.')?.1)
+}
+
+fn container_named(extension: &str) -> Option<&'static str> {
+    FILM_CONTAINERS
+        .iter()
+        .find_map(|(known, name)| known.eq_ignore_ascii_case(extension).then_some(*name))
 }
 
 /// Whether a directory is worth descending into.
@@ -100,7 +123,7 @@ pub(crate) fn might_matter(path: &Path) -> bool {
 mod tests {
     use std::path::Path;
 
-    use super::{FileKind, classify, is_worth_walking, might_matter};
+    use super::{FileKind, classify, container_of, is_worth_walking, might_matter};
 
     #[test]
     fn recognises_films_and_subtitles() {
@@ -117,6 +140,19 @@ mod tests {
         assert_eq!(classify("Heat.1995.PNG"), Some(FileKind::Image));
         assert_eq!(classify("cover.webp"), Some(FileKind::Image));
         assert_eq!(classify("fanart.bmp"), None);
+    }
+
+    #[test]
+    fn a_film_is_named_by_the_container_it_is_in() {
+        assert_eq!(container_of("Heat.1995.mkv"), Some("Matroska"));
+        assert_eq!(container_of("Heat.1995.MKV"), Some("Matroska"));
+        // Two extensions for the one container, which is what people were told
+        // to use for anything with chapters in it.
+        assert_eq!(container_of("Heat.1995.mp4"), Some("MP4"));
+        assert_eq!(container_of("Heat.1995.m4v"), Some("MP4"));
+
+        assert_eq!(container_of("Heat.1995.srt"), None);
+        assert_eq!(container_of("Heat"), None);
     }
 
     #[test]

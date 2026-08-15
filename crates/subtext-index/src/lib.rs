@@ -32,7 +32,8 @@ mod repository;
 pub use crate::database::Database;
 pub use crate::error::{Error, Result};
 pub use crate::model::{
-    FilmRecord, FilmStreams, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored,
-    StreamEntry, TrackChoice, TrackMatch, TrackOrigin, TrackPairing, TrackRecord, WatchedFolder,
+    AudioDetails, FilmRecord, FilmStreams, Fingerprint, MediaDetails, NewFilm, NewTrack,
+    PlaybackPosition, Resumable, Stored, StreamEntry, TrackChoice, TrackMatch, TrackOrigin,
+    TrackPairing, TrackRecord, VideoDetails, WatchedFolder,
 };
-pub use crate::repository::{Films, Folders, Positions, Preferences, Tracks};
+pub use crate::repository::{Details, Films, Folders, Positions, Preferences, Tracks};

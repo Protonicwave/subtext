@@ -23,14 +23,14 @@ use crate::segment::{self, CHILDREN_LIMIT};
 /// The specification's default, and files that mean anything else say so. A
 /// muxer with no idea writes "und", which reads as nothing rather than as
 /// English.
-const ASSUMED_LANGUAGE: &str = "eng";
+pub(crate) const ASSUMED_LANGUAGE: &str = "eng";
 
 /// The most subtitle tracks reported from one file.
 ///
 /// A film with commentary, signs and thirty languages is around forty tracks in
 /// total. This is above anything real and keeps a damaged header from turning
 /// into a list nobody wants.
-const TRACK_LIMIT: usize = 64;
+pub(crate) const TRACK_LIMIT: usize = 64;
 
 /// A subtitle track carried inside a film.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,7 +162,7 @@ fn track_in(payload: &[u8]) -> Option<StreamTrack> {
 /// A tag can carry a region, and "pt-BR" is Portuguese as far as choosing a
 /// subtitle goes. Anything the pairing does not recognise reads as nothing,
 /// which is the same answer a file name with no language suffix gives.
-fn language_of(declared: &str) -> Option<&'static str> {
+pub(crate) fn language_of(declared: &str) -> Option<&'static str> {
     let base = declared.split(['-', '_']).next()?;
     language_code(base)
 }

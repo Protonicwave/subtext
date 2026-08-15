@@ -151,13 +151,18 @@ pub(crate) async fn list_folders(state: State<'_, AppState>) -> Answer<Vec<Folde
 pub(crate) async fn list_library(state: State<'_, AppState>) -> Answer<Vec<FilmView>> {
     let database = state.scanner().database();
     let films = database.films().list().map_err(Failure::of)?;
+    // One query for the sound of the whole library rather than one a film. Most
+    // films carry a track or two, so asking film by film would be several
+    // thousand statements to answer what one statement answers.
+    let mut audio = database.details().all_audio().map_err(Failure::of)?;
 
     films
         .into_iter()
         .map(|film| {
             let tracks = database.tracks().for_film(film.id).map_err(Failure::of)?;
             let position = database.positions().get(film.id).map_err(Failure::of)?;
-            Ok(FilmView::of(film, tracks, position))
+            let sound = audio.remove(&film.id).unwrap_or_default();
+            Ok(FilmView::of(film, tracks, sound, position))
         })
         .collect()
 }
@@ -188,9 +193,14 @@ pub(crate) async fn continue_watching(
                 .tracks()
                 .for_film(resumable.film.id)
                 .map_err(Failure::of)?;
+            let audio = database
+                .details()
+                .audio(resumable.film.id)
+                .map_err(Failure::of)?;
             Ok(FilmView::of(
                 resumable.film,
                 tracks,
+                audio,
                 Some(resumable.position),
             ))
         })
@@ -405,9 +415,10 @@ fn read_back(database: &Database, id: i64) -> Answer<FilmView> {
         .map_err(Failure::of)?
         .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
     let tracks = database.tracks().for_film(id).map_err(Failure::of)?;
+    let audio = database.details().audio(id).map_err(Failure::of)?;
     let position = database.positions().get(id).map_err(Failure::of)?;
 
-    Ok(FilmView::of(film, tracks, position))
+    Ok(FilmView::of(film, tracks, audio, position))
 }
 
 /// Gives a subtitle file to a film because somebody said so.

@@ -335,6 +335,16 @@ wanted: number } |
 /**  Somebody asked for it to stop, and it stopped. */
 { outcome: "stopped" };
 
+/**  One of a film's sound tracks. */
+export type AudioView = {
+	codec: string,
+	/**  What the channel count amounts to, said the way somebody would say it. */
+	layout: string | null,
+	language: string | null,
+	/**  The track the film suggests, which is the one that will be heard. */
+	default: boolean,
+};
+
 /**  What the front end needs to know about the window it is drawing into. */
 export type Chrome = {
 	/**
@@ -420,6 +430,14 @@ export type FilmView = {
 	accent: AccentView | null,
 	/**  The file is not where it was. The film is kept anyway. */
 	missing: boolean,
+	/**
+	 *  What the file turned out to be, once a scan has looked at it.
+	 * 
+	 *  One group rather than a dozen loose fields, because none of it means
+	 *  anything on its own and all of it arrives together. Absent for a film
+	 *  recorded before this build described such things, until the next scan.
+	 */
+	details: MediaView | null,
 	tracks: TrackView[],
 	/**
 	 *  The track this film is watched with, where somebody has said which.
@@ -457,6 +475,32 @@ export type Id = number;
 
 /**  How sure the pairing between a film and a subtitle file is. */
 export type MatchKindView = "exact" | "approximate" | "by-hand";
+
+/**
+ *  What a film's file is, as the sheet describes it.
+ * 
+ *  Everything inside was read once, when the film was scanned, and is held on
+ *  the row from then on. A fact the file did not state is absent rather than
+ *  nought, so a screen can leave out what it does not know instead of printing
+ *  a number nobody wrote.
+ */
+export type MediaView = {
+	/**
+	 *  What the file is, which is known for every film since it comes from the
+	 *  name rather than from anything inside.
+	 */
+	container: string,
+	sizeBytes: number,
+	/**
+	 *  Bits a second across the whole film, from its size and its running time.
+	 * 
+	 *  An average, and labelled as one wherever it is shown: no encode of
+	 *  anything worth watching holds one rate from beginning to end.
+	 */
+	averageBitrate: number | null,
+	video: VideoView | null,
+	audio: AudioView[],
+};
 
 /**
  *  A moment, in milliseconds since the epoch. Wide for the same reason as
@@ -601,6 +645,19 @@ export type TrackView = {
 	 *  have already had done to them.
 	 */
 	correction: CorrectionView,
+};
+
+/**  A film's picture. */
+export type VideoView = {
+	/**
+	 *  What the codec is called, and what the file wrote where nothing here has
+	 *  a name for it. Showing the identifier is more use than the word unknown.
+	 */
+	codec: string,
+	width: number | null,
+	height: number | null,
+	bitDepth: number | null,
+	frameRate: number | null,
 };
 
 /* Tauri Specta runtime */

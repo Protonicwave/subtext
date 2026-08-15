@@ -14,15 +14,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use subtext_container::{EmbeddedTrack, SubtitleCodec};
-use subtext_core::{Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, pair_with, parse_srt};
+use subtext_container::{EmbeddedTrack, MediaStreams, SubtitleCodec};
+use subtext_core::{
+    Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, Timestamp, pair_with, parse_srt,
+};
 use subtext_index::{
-    Database, FilmStreams, NewFilm, NewTrack, Stored, StreamEntry, TrackMatch, TrackOrigin,
-    TrackPairing, WatchedFolder,
+    AudioDetails, Database, FilmStreams, MediaDetails, NewFilm, NewTrack, Stored, StreamEntry,
+    TrackMatch, TrackOrigin, TrackPairing, VideoDetails, WatchedFolder,
 };
 
 use crate::covers;
 use crate::error::{Error, Result};
+use crate::media;
 use crate::progress::{ProgressSink, ScanProgress, ScanStage};
 use crate::walk::{self, FoundFile};
 
@@ -55,7 +58,7 @@ pub struct ScanOutcome {
     pub cues_indexed: usize,
     pub films_missing: usize,
     pub tracks_removed: usize,
-    /// Films opened to see what subtitle tracks they carry.
+    /// Films opened to see what they are and what subtitle tracks they carry.
     pub films_probed: usize,
     /// Subtitle tracks found inside those films.
     pub embedded_tracks: usize,
@@ -135,6 +138,7 @@ pub fn scan_folder(
         &found.films,
         &stored_films,
         &database.films().unprobed(folder.id)?,
+        &database.films().undescribed(folder.id)?,
     );
 
     let plan = Plan::draw_up(
@@ -228,35 +232,73 @@ impl<'a> Names<'a> {
     }
 }
 
-/// One film that needs opening to see what it carries and to read it.
+/// How much of a film is read when it is opened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Depth {
+    /// Everything: what the file is, and the dialogue inside it.
+    Whole,
+    /// The header alone, for a film whose dialogue an earlier build already
+    /// read and whose technical facts it did not. Stepping over every frame of
+    /// picture again to learn nothing new would turn one upgrade into an hour
+    /// of somebody's machine.
+    Header,
+}
+
+/// One film that needs opening to see what it is and what it carries.
 #[derive(Clone, Debug)]
 struct FilmJob {
     film_id: i64,
     path: PathBuf,
+    /// What the name of the file says the film is in, which is the one fact
+    /// about it that needs no reading.
+    container: &'static str,
+    depth: Depth,
     /// The film's own fingerprint, recorded on the tracks found inside it so
     /// that a row says which encode it was read out of.
     size_bytes: u64,
     modified_at: i64,
 }
 
-/// The films worth opening.
+/// The films worth opening, and how far into each.
 ///
 /// A film that has not changed since it was last looked inside is left shut,
 /// and nothing is extracted from it. That is what keeps a rescan of a library
 /// of Matroska files as cheap as a rescan of a library of anything else, and it
 /// is why the row records when it was read rather than only what was found.
-fn films_to_read(films: &[FoundFile], stored: &[Stored], unprobed: &[i64]) -> Vec<FilmJob> {
+///
+/// A film recorded by a build that read dialogue but described no files is the
+/// one case in between. Its dialogue is where it should be and its row says
+/// nothing about what the file is, so its header is read and its frames are
+/// left alone.
+fn films_to_read(
+    films: &[FoundFile],
+    stored: &[Stored],
+    unprobed: &[i64],
+    undescribed: &[i64],
+) -> Vec<FilmJob> {
     let never: HashSet<i64> = unprobed.iter().copied().collect();
+    let undescribed: HashSet<i64> = undescribed.iter().copied().collect();
 
     films
         .iter()
         .zip(stored)
-        .filter(|(_, stored)| stored.changed || never.contains(&stored.id))
-        .map(|(file, stored)| FilmJob {
-            film_id: stored.id,
-            path: file.path.clone(),
-            size_bytes: file.size_bytes,
-            modified_at: file.modified_at,
+        .filter_map(|(file, stored)| {
+            let depth = if stored.changed || never.contains(&stored.id) {
+                Depth::Whole
+            } else if undescribed.contains(&stored.id) {
+                Depth::Header
+            } else {
+                return None;
+            };
+
+            Some(FilmJob {
+                film_id: stored.id,
+                path: file.path.clone(),
+                container: media::container_of(&file.file_name)?,
+                depth,
+                size_bytes: file.size_bytes,
+                modified_at: file.modified_at,
+            })
         })
         .collect()
 }
@@ -477,7 +519,11 @@ struct Parsed<'a> {
 
 struct Probed<'a> {
     job: &'a FilmJob,
-    tracks: Vec<EmbeddedTrack>,
+    /// What the file turned out to be, which every film that was opened has.
+    details: MediaDetails,
+    /// The subtitle tracks inside the film, or nothing for a film whose frames
+    /// were deliberately left alone.
+    tracks: Option<Vec<EmbeddedTrack>>,
     /// Whether the film carries its own artwork, which is a walk over the
     /// attachment headers and none of the image.
     carries_artwork: bool,
@@ -563,27 +609,64 @@ fn parse_one(job: &TrackJob) -> Message<'_> {
     }))
 }
 
-/// What one film carries inside it, and what those tracks say.
+/// What one film is, and what it carries inside it.
 ///
-/// This is the expensive one. The header is a few hundred bytes, but reading
-/// the dialogue means stepping over every frame of picture between one line and
-/// the next, which is why it is done once per film and never again while the
-/// file stays as it is.
+/// Reading the dialogue is the expensive half. The header is a few hundred
+/// bytes, but the tracks inside a film are found by stepping over every frame
+/// of picture between one line and the next, which is why it is done once per
+/// film and never again while the file stays as it is.
 ///
-/// A film that is not Matroska, or whose header makes no sense, reports
-/// nothing, which is the same as a film with no subtitles in it and is treated
-/// the same way.
+/// A film that is not Matroska, or whose header makes no sense, reports the
+/// container its name gives it and nothing else. That is the same answer a film
+/// with nothing in it gives, and it is treated the same way: an MP4 is not
+/// parsed here and must not appear to have been.
 fn read_film(job: &FilmJob) -> Message<'_> {
-    match subtext_container::extract(&job.path) {
-        Ok(tracks) => Message::Probed(Probed {
-            job,
-            tracks,
-            // Asked here because this is the one moment the film is open for
-            // anything else. The image itself is left where it is until
-            // something is going to draw it.
-            carries_artwork: subtext_container::cover(&job.path).is_ok_and(|found| found.is_some()),
+    let Ok(found) = subtext_container::media(&job.path) else {
+        return Message::Unreadable(job.path.clone());
+    };
+
+    let tracks = match job.depth {
+        Depth::Whole => match subtext_container::extract(&job.path) {
+            Ok(tracks) => Some(tracks),
+            Err(_) => return Message::Unreadable(job.path.clone()),
+        },
+        Depth::Header => None,
+    };
+
+    Message::Probed(Probed {
+        job,
+        details: described(job.container, found),
+        tracks,
+        // Asked here because this is the one moment the film is open for
+        // anything else. The image itself is left where it is until something
+        // is going to draw it.
+        carries_artwork: subtext_container::cover(&job.path).is_ok_and(|found| found.is_some()),
+    })
+}
+
+/// What a film is, in the shape the library keeps it.
+fn described(container: &str, found: MediaStreams) -> MediaDetails {
+    MediaDetails {
+        container: container.to_owned(),
+        duration: found.duration_ms.map(Timestamp::from_millis),
+        video: found.video.map(|picture| VideoDetails {
+            codec: picture.codec,
+            width: picture.width,
+            height: picture.height,
+            bit_depth: picture.bit_depth,
+            frame_rate: picture.frame_rate,
         }),
-        Err(_) => Message::Unreadable(job.path.clone()),
+        audio: found
+            .audio
+            .into_iter()
+            .map(|sound| AudioDetails {
+                stream_number: sound.number,
+                codec: sound.codec,
+                channels: sound.channels,
+                language: sound.language.map(ToOwned::to_owned),
+                default: sound.default,
+            })
+            .collect(),
     }
 }
 
@@ -629,11 +712,17 @@ fn write_batches(
     Ok(written)
 }
 
-/// Records what a batch of films turned out to carry, and what it says.
+/// Records what a batch of films turned out to be, and what they carry.
 ///
 /// A film with nothing in it is written too. Being looked inside and found to
 /// hold nothing is an answer, and it is the one that stops the film being
 /// opened again on every scan for the rest of its life.
+///
+/// The two writes are separate because they answer for different sets of films.
+/// Every film that was opened is described. Only the ones whose frames were
+/// read say what subtitle tracks they carry, and a film whose header alone was
+/// read must not have its dialogue cleared on the strength of a list nothing
+/// went looking for.
 fn flush_probed(
     database: &Database,
     batch: &mut Vec<Probed<'_>>,
@@ -643,15 +732,22 @@ fn flush_probed(
         return Ok(());
     }
 
+    let described: Vec<(i64, &MediaDetails)> = batch
+        .iter()
+        .map(|film| (film.job.film_id, &film.details))
+        .collect();
+    database.details().record(&described)?;
+
     let films: Vec<FilmStreams<'_>> = batch
         .iter()
-        .map(|film| {
+        .filter_map(|film| {
             let tracks = film
                 .tracks
+                .as_ref()?
                 .iter()
                 .map(|found| stream_track(film.job, found))
                 .collect();
-            (film.job.film_id, tracks)
+            Some((film.job.film_id, tracks))
         })
         .collect();
 
@@ -664,6 +760,7 @@ fn flush_probed(
         written.cues += film
             .tracks
             .iter()
+            .flatten()
             .map(|found| found.cues.len())
             .sum::<usize>();
     }
@@ -738,4 +835,101 @@ fn flush(database: &Database, batch: &mut Vec<Parsed<'_>>, written: &mut Written
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Depth, FilmJob, films_to_read};
+    use crate::walk::FoundFile;
+    use subtext_index::Stored;
+
+    fn found(name: &str) -> FoundFile {
+        FoundFile {
+            path: format!("/films/{name}").into(),
+            file_name: name.to_owned(),
+            size_bytes: 4_000,
+            modified_at: 1_700_000_000_000,
+        }
+    }
+
+    fn depths(jobs: &[FilmJob]) -> Vec<(i64, Depth)> {
+        jobs.iter().map(|job| (job.film_id, job.depth)).collect()
+    }
+
+    #[test]
+    fn a_film_is_opened_when_it_is_new_or_has_been_replaced() {
+        let films = [found("Heat.mkv"), found("Ronin.mkv")];
+        let stored = [
+            Stored {
+                id: 1,
+                changed: true,
+            },
+            Stored {
+                id: 2,
+                changed: false,
+            },
+        ];
+
+        // The second has been read before and has not moved, so it is left shut
+        // however long the library is rescanned for.
+        assert_eq!(
+            depths(&films_to_read(&films, &stored, &[], &[])),
+            [(1, Depth::Whole)]
+        );
+
+        // And one that has never been looked inside, whatever its fingerprint
+        // says.
+        assert_eq!(
+            depths(&films_to_read(&films, &stored, &[2], &[])),
+            [(1, Depth::Whole), (2, Depth::Whole)]
+        );
+    }
+
+    /// The case an upgrade leaves behind: dialogue already read by the build
+    /// before this one, and nothing said about what the file is.
+    #[test]
+    fn a_film_that_has_never_been_described_gives_up_its_header_only() {
+        let films = [found("Heat.mkv")];
+        let stored = [Stored {
+            id: 1,
+            changed: false,
+        }];
+
+        assert_eq!(
+            depths(&films_to_read(&films, &stored, &[], &[1])),
+            [(1, Depth::Header)]
+        );
+
+        // A film that is new is read whole, and describing it comes with that
+        // rather than instead of it.
+        let fresh = [Stored {
+            id: 1,
+            changed: true,
+        }];
+        assert_eq!(
+            depths(&films_to_read(&films, &fresh, &[], &[1])),
+            [(1, Depth::Whole)]
+        );
+    }
+
+    #[test]
+    fn every_film_opened_knows_what_container_it_is_in() {
+        let films = [found("Heat.mkv"), found("Ronin.mp4")];
+        let stored = [
+            Stored {
+                id: 1,
+                changed: true,
+            },
+            Stored {
+                id: 2,
+                changed: true,
+            },
+        ];
+
+        let containers: Vec<&str> = films_to_read(&films, &stored, &[], &[])
+            .iter()
+            .map(|job| job.container)
+            .collect();
+        assert_eq!(containers, ["Matroska", "MP4"]);
+    }
 }

@@ -13,6 +13,7 @@ function film(position: PositionView | null): FilmView {
     posterPath: null,
     accent: null,
     missing: false,
+    details: null,
     tracks: [],
     chosenTrackId: null,
     subtitlesOff: false,
