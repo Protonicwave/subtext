@@ -6,11 +6,13 @@
 //! the schema can change without the front end changing, and the other way
 //! round.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
-use subtext_core::{Correction, Cue, CuePosition, Timestamp};
+use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
     AudioDetails, FilmRecord, PlaybackPosition, TrackMatch, TrackOrigin, TrackRecord, VideoDetails,
     WatchedFolder,
@@ -110,6 +112,12 @@ pub(crate) struct FilmView {
     pub(crate) id: Id,
     pub(crate) folder_id: Id,
     pub(crate) path: String,
+    /// The row this film sits on, read from where it is filed on disk.
+    ///
+    /// Worked out here rather than on the other side, so that the front end
+    /// groups by a value it was given instead of taking paths apart with a
+    /// separator it would have to guess at.
+    pub(crate) shelf: ShelfView,
     pub(crate) title: String,
     pub(crate) year: Option<u16>,
     pub(crate) duration_ms: Option<u32>,
@@ -135,18 +143,25 @@ pub(crate) struct FilmView {
 }
 
 impl FilmView {
+    /// The folder is the watched folder this film was found in, which is what
+    /// its shelf is measured from. Nothing but a row that has lost its folder
+    /// arrives without one, and such a film is shelved under the directory it
+    /// sits in rather than disappearing from the screen.
     pub(crate) fn of(
         film: FilmRecord,
+        folder: Option<&Path>,
         tracks: Vec<TrackRecord>,
         audio: Vec<AudioDetails>,
         position: Option<PlaybackPosition>,
     ) -> Self {
         let details = MediaView::of(&film, audio);
+        let shelf = ShelfView::of(&film.path, folder);
 
         Self {
             id: Id::of(film.id),
             folder_id: Id::of(film.folder_id),
             path: film.path.display().to_string(),
+            shelf,
             title: film.title,
             year: film.year,
             duration_ms: film.duration.map(Timestamp::millis),
@@ -158,6 +173,29 @@ impl FilmView {
             chosen_track_id: film.choice.track_id().map(Id::of),
             subtitles_off: film.choice.is_off(),
             position: position.map(PositionView::of),
+        }
+    }
+}
+
+/// The row a film sits on, which is the folder somebody filed it in.
+///
+/// The name is the heading and the path is what sits beside it, since two
+/// watched folders can each hold a directory called the same thing and the name
+/// alone would not say which row is which.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShelfView {
+    pub(crate) name: String,
+    pub(crate) path: String,
+}
+
+impl ShelfView {
+    fn of(film: &Path, folder: Option<&Path>) -> Self {
+        let folder = folder.unwrap_or_else(|| film.parent().unwrap_or_else(|| Path::new("")));
+        let shelf = shelf_of(film, folder);
+        Self {
+            name: shelf.name,
+            path: shelf.path.display().to_string(),
         }
     }
 }

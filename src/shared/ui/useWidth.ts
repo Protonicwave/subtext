@@ -13,8 +13,12 @@ import { useEffect, useState } from 'react';
  *
  * Zero until the element has been measured, which callers read as not knowing
  * yet rather than as an element of no width.
+ *
+ * The element itself comes back alongside, for a caller that has something else
+ * to measure about the same element and would otherwise need a second ref on
+ * it.
  */
-export function useWidth(): [(node: HTMLElement | null) => void, number] {
+export function useWidth(): [(node: HTMLElement | null) => void, number, HTMLElement | null] {
   const [node, setNode] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState(0);
 
@@ -42,5 +46,5 @@ export function useWidth(): [(node: HTMLElement | null) => void, number] {
     };
   }, [node]);
 
-  return [setNode, width];
+  return [setNode, width, node];
 }

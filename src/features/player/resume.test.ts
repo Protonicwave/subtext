@@ -7,6 +7,7 @@ function film(position: PositionView | null): FilmView {
     id: 1,
     folderId: 1,
     path: '/films/Heat.1995.mkv',
+    shelf: { name: 'films', path: '/films' },
     title: 'Heat',
     year: 1995,
     durationMs: 10_260_000,
