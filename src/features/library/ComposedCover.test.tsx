@@ -11,6 +11,7 @@ const film = {
   shelf: { name: 'films', path: '/films' },
   title: 'Heat',
   year: 1995,
+  addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: null,
   accent: null,

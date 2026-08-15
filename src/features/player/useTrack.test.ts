@@ -42,6 +42,7 @@ function film(tracks: TrackView[], changes: Partial<FilmView> = {}): FilmView {
     shelf: { name: 'films', path: '/films' },
     title: 'Heat',
     year: 1995,
+    addedAt: Date.UTC(2026, 7, 12),
     durationMs: null,
     posterPath: null,
     accent: null,
