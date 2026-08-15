@@ -59,6 +59,14 @@ Subtext decodes the audio itself for this, so the formats it can read are its ow
 
 Where the measurement is not good enough to act on, nothing is changed and it says so. A subtitle belonging to a different film, or a forced track of a few dozen lines with too little in it to line up, both end that way. Being told that nothing happened leaves you exactly where you were, with the keys above; a wrong answer applied quietly would leave you watching a film that is out from beginning to end, with no reason to suspect the file.
 
+## Covers
+
+A film's cover comes off your disk and from nowhere else. Subtext makes no network requests, so there is no artwork service to consent to and none to be wrong.
+
+Three places are tried in order. An image attached inside a Matroska file, which is where a well made one keeps its artwork. An image beside the film, named after it or called `cover`, `poster` or `folder` in the film's own folder, which is the layout Plex, Jellyfin and Kodi have taught people to keep. Then a frame from the film itself, taken a fifth of the way in.
+
+The first two were chosen by somebody and the third is a guess, which is why the guess comes last. A film with none of the three is drawn as a cover composed from its title, its year and how long it runs. Whatever is used, the image is cached in Subtext's own data directory and nothing is written beside your films.
+
 ## Codec support
 
 Playback uses the webview your system already has, so Subtext plays what the webview plays. H.264 video in an MP4 container works everywhere. HEVC video and DTS audio frequently do not, and support varies by platform.
@@ -97,7 +105,7 @@ CI runs all of these on Windows, macOS and Linux.
 | Path                       | Contains                                                  |
 | -------------------------- | --------------------------------------------------------- |
 | `crates/subtext-core`      | Domain types, subtitle parsing, filename pairing. No I/O. |
-| `crates/subtext-container` | Reading the subtitle tracks inside a film file.           |
+| `crates/subtext-container` | Reading the subtitle tracks and artwork inside a film.    |
 | `crates/subtext-index`     | SQLite persistence, migrations, repositories.             |
 | `crates/subtext-scan`      | Filesystem walking, watching, the ingest pipeline.        |
 | `crates/subtext-align`     | Lining two activity signals up. No files, no audio.       |
