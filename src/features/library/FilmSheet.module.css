@@ -50,12 +50,18 @@
   }
 }
 
-/* Only the panel's own arrival. The cover travels from the tile it was clicked
-   on, which is a layout animation and not this. */
+/*
+ * Only the panel's own arrival. The cover travels from the tile it was clicked
+ * on, which is a layout animation and not this.
+ *
+ * On the transform rather than on the translate the panel is centred with,
+ * which the animation would otherwise replace for as long as it ran: the panel
+ * would arrive from half its own width to the right instead of from below.
+ */
 @keyframes rise {
   from {
     opacity: 0;
-    translate: 0 12px;
+    transform: translateY(12px);
   }
 }
 
