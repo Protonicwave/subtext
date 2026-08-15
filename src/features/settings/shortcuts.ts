@@ -37,7 +37,6 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['→'], does: 'On a line, or by the skip interval' },
       { keys: ['M'], does: 'Mute' },
       { keys: ['F'], does: 'Full screen' },
-      { keys: ['T'], does: 'Show or hide the transcript' },
       { keys: ['['], does: 'Subtitles a little earlier' },
       { keys: [']'], does: 'Subtitles a little later' },
       { keys: ['S'], does: 'Show or hide the subtitle timing controls' },
@@ -52,14 +51,6 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['↓'], does: 'Next result' },
       { keys: ['Enter'], does: 'Open the film at that line' },
       { keys: ['Ctrl', 'Shift', 'K'], does: 'Widen the search to the library, and back' },
-    ],
-  },
-  {
-    title: 'In the transcript',
-    shortcuts: [
-      { keys: ['Enter'], does: 'Go to the line that has focus' },
-      { keys: ['Page up'], does: 'Read back, which stops it following' },
-      { keys: ['Page down'], does: 'Read on, which stops it following' },
     ],
   },
 ];

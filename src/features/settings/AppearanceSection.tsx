@@ -1,4 +1,4 @@
-import { Choice, Slider, Switch } from './controls';
+import { Choice, Slider } from './controls';
 
 /**
  * How the window looks, which is mostly how much of the film is let into it.
@@ -43,22 +43,6 @@ export function AppearanceSection() {
           { value: 'system', label: 'Follow the system' },
           { value: 'reduced', label: 'Keep it still' },
         ]}
-      />
-
-      <Choice
-        name="transcriptTypeface"
-        label="Transcript typeface"
-        hint="The panel beside the film is set for reading rather than for glancing at, which is what the serif is for."
-        options={[
-          { value: 'serif', label: 'Serif' },
-          { value: 'sans', label: 'Sans' },
-        ]}
-      />
-
-      <Switch
-        name="transcriptFollow"
-        label="Transcript follows the film"
-        hint="Scrolling the panel by hand always stops it following, whatever this says. This is where it starts."
       />
     </>
   );

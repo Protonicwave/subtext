@@ -74,11 +74,9 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       choosing={false}
       visible={visible}
       fullscreen={false}
-      transcript={false}
       onToggleFullscreen={vi.fn()}
       onToggleSync={onToggleSync}
       onToggleTracks={onToggleTracks}
-      onToggleTranscript={vi.fn()}
       onHold={vi.fn()}
     />,
   );

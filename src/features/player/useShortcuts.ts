@@ -11,8 +11,8 @@ import type { Transport } from './usePlayback';
  * Bound on the window rather than on the player, because the point of them is
  * that they work without having clicked anything first. What they do not do is
  * take keys away from whatever has focus: the sliders in the control bar handle
- * their own arrows, a line of the transcript handles its own Enter and space,
- * and a key pressed while one of them is focused belongs to it.
+ * their own arrows, and a key pressed while one of them is focused belongs to
+ * it.
  *
  * Escape is not here. The shell already uses it to go back, and the platform
  * uses it to leave full screen.
@@ -31,7 +31,6 @@ export interface Actions {
   toggleFullscreen: () => void;
   toggleSync: () => void;
   toggleTracks: () => void;
-  toggleTranscript: () => void;
   /** Something happened, so the controls should be on screen to show what. */
   wake: () => void;
 }
@@ -61,7 +60,6 @@ export function useShortcuts(actions: Actions) {
         toggleFullscreen,
         toggleSync,
         toggleTracks,
-        toggleTranscript,
         wake,
       } = latest.current;
 
@@ -89,9 +87,6 @@ export function useShortcuts(actions: Actions) {
           break;
         case 'f':
           toggleFullscreen();
-          break;
-        case 't':
-          toggleTranscript();
           break;
         /*
          * The brackets, because they read as moving something one way or the

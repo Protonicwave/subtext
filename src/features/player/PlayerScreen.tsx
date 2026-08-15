@@ -8,8 +8,6 @@ import { type Moment, useNavigation } from '@/app/routes';
 import { useFilmAccent, useFilmPalette } from '@/features/library/accent';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
-import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
-import { usePanel } from '@/features/transcript/usePanel';
 import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
 import { Controls } from './Controls';
@@ -118,10 +116,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
 
-  const open = usePanel((panel) => panel.open);
-  const toggleTranscript = usePanel((panel) => panel.toggle);
-  const close = usePanel((panel) => panel.close);
-
   const stepping = useStepping(timeline, transport);
   const [syncing, setSyncing] = useState(false);
   const toggleSync = useCallback(() => {
@@ -152,7 +146,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     toggleFullscreen,
     toggleSync,
     toggleTracks,
-    toggleTranscript,
     wake,
   });
 
@@ -192,8 +185,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
         className={styles.frame}
         // The pointer resting still over a playing film is somebody watching
         // it, and the cursor is as much a thing over the picture as the
-        // controls are. Only over the picture: the transcript beside it is
-        // being read, and neither its cursor nor its scrolling is playback.
+        // controls are.
         data-idle={!visible}
         onPointerMove={wake}
       >
@@ -244,11 +236,9 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             choosing={choosing}
             visible={visible}
             fullscreen={fullscreen}
-            transcript={open}
             onToggleFullscreen={toggleFullscreen}
             onToggleSync={toggleSync}
             onToggleTracks={toggleTracks}
-            onToggleTranscript={toggleTranscript}
             onHold={hold}
           />
         ) : (
@@ -260,15 +250,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
           </div>
         )}
       </motion.div>
-
-      {open && (
-        <TranscriptPanel
-          cues={timeline.cues}
-          active={active}
-          onSeek={transport.seekTo}
-          onClose={close}
-        />
-      )}
     </div>
   );
 }

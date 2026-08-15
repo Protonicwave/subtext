@@ -65,8 +65,8 @@
 }
 
 /*
- * A control that is not an action but a state: the transcript is either beside
- * the film or it is not, and the button says which.
+ * A control that is not an action but a state: the panel it opens is either
+ * showing or it is not, and the button says which.
  */
 .on {
   color: var(--colour-accent);
