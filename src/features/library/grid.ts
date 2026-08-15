@@ -13,6 +13,22 @@ export const MIN_TILE = 176;
 export const TILE_GAP = 20;
 
 /**
+ * How wide a tile is on a shelf.
+ *
+ * Fixed rather than stretched, unlike the wall: a rail is scrolled rather than
+ * wrapped, so there is no width to divide up, and every rail on the screen
+ * should have tiles of the same size whatever is in it. Given to the stylesheet
+ * as a custom property so that this is the only place it is written down.
+ */
+export const RAIL_TILE = 168;
+
+/** The gap between tiles on a rail, which is tighter than the wall's. */
+export const RAIL_GAP = 16;
+
+/** Room under each tile for the title and the line beneath it. */
+export const CAPTION = 44;
+
+/**
  * Two by three, the shape a film poster has been for a century.
  *
  * The frames captured from a film are sixteen by nine, so they are cropped to

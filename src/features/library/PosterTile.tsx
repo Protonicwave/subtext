@@ -25,9 +25,17 @@ const DWELL = 650;
 interface PosterTileProps {
   film: FilmView;
   onOpen: (film: FilmView) => void;
+  /**
+   * Whether this tile is the one that moves into the player.
+   *
+   * The same film can be on the screen twice, once on the row of what to carry
+   * on with and once in its own folder, and a shared element has to be one
+   * element. The film's own row is the one that travels.
+   */
+  shared?: boolean;
 }
 
-export function PosterTile({ film, onOpen }: PosterTileProps) {
+export function PosterTile({ film, onOpen, shared = true }: PosterTileProps) {
   const [hovered, setHovered] = useState(false);
   const preview = usePreview(hovered && !film.missing, film.path);
 
@@ -61,7 +69,7 @@ export function PosterTile({ film, onOpen }: PosterTileProps) {
         setHovered(false);
       }}
     >
-      <motion.span layoutId={frameId(film.id)} className={styles.frame}>
+      <motion.span {...(shared && { layoutId: frameId(film.id) })} className={styles.frame}>
         {still === null ? (
           <ComposedCover film={film} />
         ) : (

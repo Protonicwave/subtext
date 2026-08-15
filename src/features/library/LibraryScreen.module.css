@@ -1,7 +1,7 @@
 /*
  * The library screen scrolls itself rather than leaving it to the shell. The
  * virtualiser has to be told which element is scrolled, and it has to be one
- * that only holds the grid.
+ * that only holds the library.
  */
 .screen {
   height: 100%;
@@ -10,58 +10,36 @@
 }
 
 /* The padding is here rather than on the scroller, so the scrollbar sits at the
-   edge of the window and not inset from it. */
+   edge of the window and not inset from it, and so the billboard above can run
+   the full width. */
 .inner {
-  padding: var(--space-10) var(--space-12) var(--space-16);
+  padding: 0 var(--space-12) var(--space-16);
 }
 
-.top {
+/*
+ * What there is, and how to add more. It sits over the top of the rows as they
+ * pass under it, on a fade rather than a hard edge, so that the count stays
+ * readable without a bar being drawn across the screen.
+ */
+.tools {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  margin-bottom: var(--space-8);
+  padding: var(--space-6) 0 var(--space-8);
+  background: linear-gradient(to bottom, var(--colour-bg) 62%, transparent);
 }
 
-.title {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-tight);
-}
-
-.title small {
-  display: block;
-  margin-top: var(--space-1);
-  font-family: var(--font-sans);
+.count {
   font-size: var(--text-xs);
   color: var(--colour-text-faint);
-  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty {
   color: var(--colour-text-faint);
   font-size: var(--text-sm);
-}
-
-/*
- * The grid is as tall as every row it would have, and holds only the rows in
- * view. Each row is positioned rather than flowed, which is what lets the ones
- * between be absent without the scroll position moving.
- */
-.grid {
-  position: relative;
-  width: 100%;
-}
-
-.line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: grid;
-  gap: var(--space-5);
-  width: 100%;
-  /* Rows are placed by transform rather than by top, so that scrolling moves
-     them on the compositor instead of laying the grid out again. */
-  will-change: transform;
 }

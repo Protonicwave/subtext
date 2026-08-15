@@ -1,0 +1,21 @@
+/*
+ * The grid is as tall as every row it would have, and holds only the rows in
+ * view. Each row is positioned rather than flowed, which is what lets the ones
+ * between be absent without the scroll position moving.
+ */
+.grid {
+  position: relative;
+  width: 100%;
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+  /* Rows are placed by transform rather than by top, so that scrolling moves
+     them on the compositor instead of laying the grid out again. */
+  will-change: transform;
+}

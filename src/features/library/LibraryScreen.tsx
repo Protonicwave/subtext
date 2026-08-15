@@ -1,37 +1,29 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useMemo, useRef } from 'react';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { FolderIcon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
-import { useWidth } from '@/shared/ui/useWidth';
 import { useSetting } from '@/shared/settings/useSettings';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
+import { Billboard } from './Billboard';
 import { ContinueWatching } from './ContinueWatching';
-import { PosterTile } from './PosterTile';
-import { columnsFor, rowHeight, rowsOf, TILE_GAP } from './grid';
+import { Shelf } from './Shelf';
+import { Wall } from './Wall';
+import { billboardOf, shelvesOf } from './shelves';
+import { libraryTotalOf, sizeOf } from './size';
 import { useCapture } from './useCapture';
-import { linesOf, useLibrary } from './useLibrary';
+import { useLibrary } from './useLibrary';
 import styles from './LibraryScreen.module.css';
 
 /**
  * The screen you land on.
  *
- * The grid is virtualised by row: a library of ten thousand films is ten
- * thousand tiles, and ten thousand tiles is thirty thousand elements, which no
- * amount of care elsewhere would make scroll smoothly. Only the rows in view
- * and a few either side exist at any moment.
- *
- * This screen owns its scrolling rather than leaving it to the shell, because
- * the virtualiser has to be the thing that is scrolled to know what is in view.
+ * One film shown large above rows built from the folders somebody already made,
+ * or the one wall for anybody who would rather have every film at once. Both
+ * are drawn against the same scrolling, which this screen owns rather than
+ * leaving to the shell: the wall is virtualised, and a virtualiser has to be
+ * told which element is scrolled to know what is in view.
  */
-
-/** Room under each tile for the title and the line beneath it. */
-const CAPTION = 44;
-
-/** How many rows either side of the view are kept ready. */
-const OVERSCAN = 3;
-
 export function LibraryScreen() {
   const held = useLibrary((library) => library.films);
   const folders = useLibrary((library) => library.folders);
@@ -41,7 +33,6 @@ export function LibraryScreen() {
   const openFilm = useNavigation((navigation) => navigation.openFilm);
 
   const scroller = useRef<HTMLDivElement>(null);
-  const [grid, width] = useWidth();
 
   // A film whose file has gone is still a film Subtext knows about, and where
   // it was left is kept whichever of these is chosen. All that is in question
@@ -56,31 +47,12 @@ export function LibraryScreen() {
     [stopped, showMissing],
   );
 
-  const columns = columnsFor(width);
-  const rows = useMemo(() => rowsOf(films, columns), [films, columns]);
-  const size = rowHeight(width, columns, TILE_GAP, CAPTION);
-
-  // The compiler will not memoise a component holding this, because the
-  // virtualiser hands back functions whose answers change as the view moves and
-  // a remembered one would be wrong. That is the arrangement being asked for
-  // here: this component redraws as it is scrolled, and it is nine elements.
-  // eslint-disable-next-line react-hooks/incompatible-library -- see above
-  const virtualiser = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scroller.current,
-    estimateSize: () => size,
-    overscan: OVERSCAN,
-    // What to assume until the element has been measured. The window is the
-    // closest thing to the truth available before a layout has happened, and it
-    // is the difference between a first paint with tiles in it and one without.
-    initialRect: { width: window.innerWidth, height: window.innerHeight },
-  });
-
-  // A window that changed width has rows of a different height, and the
-  // virtualiser holds the old ones until it is told to look again.
-  useEffect(() => {
-    virtualiser.measure();
-  }, [virtualiser, size]);
+  const shelved = useSetting('libraryLayout') === 'shelves';
+  const shelves = useMemo(
+    () => (shelved ? shelvesOf(films, resumable) : []),
+    [shelved, films, resumable],
+  );
+  const billboard = useMemo(() => billboardOf(films, resumable), [films, resumable]);
 
   // Nothing is captured until the library has been read, so that a first run
   // does not open a decoder before there is anything to point it at.
@@ -91,28 +63,25 @@ export function LibraryScreen() {
     openFilm(film.id);
   };
 
-  const lines = films.reduce((total, film) => total + linesOf(film), 0);
-
   return (
     <div className={styles.screen} ref={scroller}>
+      {billboard && <Billboard film={billboard} onOpen={open} />}
+
       <div className={styles.inner}>
-        <header className={styles.top}>
-          <h1 className={styles.title}>
-            Your films
-            {/*
-             * Announced, because this is the one place the screen says whether
-             * it is still reading, and somebody who cannot see the grid fill in
-             * has nothing else to go on.
-             */}
-            <small role="status">{summaryOf(loaded, films.length, lines)}</small>
-          </h1>
-          <Button tone="primary" onClick={() => void chooseFolder()}>
+        <div className={styles.tools}>
+          {/*
+           * Announced, because this is the one place the screen says whether it
+           * is still reading, and somebody who cannot see the rows fill in has
+           * nothing else to go on.
+           */}
+          <p className={styles.count} role="status">
+            {summaryOf(loaded, films, shelves.length)}
+          </p>
+          <Button onClick={() => void chooseFolder()}>
             <FolderIcon size={14} />
             Choose folder
           </Button>
-        </header>
-
-        <ContinueWatching films={resumable} onOpen={open} />
+        </div>
 
         {/*
          * Nothing at all until the first read has come back. Every one of the
@@ -123,44 +92,42 @@ export function LibraryScreen() {
         {loaded &&
           (films.length === 0 ? (
             <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
+          ) : shelved ? (
+            shelves.map((shelf) => <Shelf key={shelf.key} shelf={shelf} onOpen={open} />)
           ) : (
-            <div
-              className={styles.grid}
-              ref={grid}
-              style={{ height: `${String(virtualiser.getTotalSize())}px` }}
-            >
-              {virtualiser.getVirtualItems().map((row) => (
-                <div
-                  key={row.key}
-                  className={styles.line}
-                  style={{
-                    height: `${String(row.size)}px`,
-                    transform: `translateY(${String(row.start)}px)`,
-                    gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {(rows[row.index] ?? []).map((film) => (
-                    <PosterTile key={film.id} film={film} onOpen={open} />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <>
+              <ContinueWatching films={resumable} onOpen={open} />
+              <Wall films={films} scroller={scroller} onOpen={open} />
+            </>
           ))}
       </div>
     </div>
   );
 }
 
-/** The line under the heading: still reading, read and empty, or how much there is. */
-function summaryOf(loaded: boolean, films: number, lines: number): string {
+/**
+ * The line above the rows: still reading, read and empty, or what there is.
+ *
+ * The size is left out entirely unless every film has one, since a total that
+ * quietly skipped the films this build has not looked at yet would be wrong
+ * without saying so.
+ */
+function summaryOf(loaded: boolean, films: readonly FilmView[], shelves: number): string {
   if (!loaded) return 'Reading your films';
-  if (films === 0) return 'Nothing yet';
+  if (films.length === 0) return 'Nothing yet';
 
-  return `${count(films, 'film')} · ${lines.toLocaleString('en-GB')} lines of dialogue`;
+  const total = libraryTotalOf(films);
+  return [
+    count(films.length, 'film'),
+    shelves > 0 ? count(shelves, 'shelf', 'shelves') : null,
+    total === null ? null : sizeOf(total),
+  ]
+    .filter((part) => part !== null)
+    .join(' · ');
 }
 
 /**
- * Why the grid is empty, which is three different situations and not one.
+ * Why the library is empty, which is three different situations and not one.
  *
  * The third is a library that is entirely missing its files, with the setting
  * that hides those turned on: an unplugged drive, and worth saying so rather
@@ -174,6 +141,6 @@ function emptyBecause(folders: number, held: number): string {
   return 'Nothing was found in the folders being watched.';
 }
 
-function count(many: number, thing: string): string {
-  return `${String(many)} ${thing}${many === 1 ? '' : 's'}`;
+function count(many: number, thing: string, plural = `${thing}s`): string {
+  return `${String(many)} ${many === 1 ? thing : plural}`;
 }

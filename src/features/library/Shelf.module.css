@@ -1,0 +1,75 @@
+.shelf {
+  margin-bottom: var(--space-10);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-regular);
+  white-space: nowrap;
+}
+
+/* Which folder this is, since two watched folders can each hold a directory of
+   the same name and the heading alone would not say which row is which. */
+.path {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  margin-left: auto;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--colour-text-faint);
+  white-space: nowrap;
+}
+
+/*
+ * The rail runs past the page padding to the edge of the window, so that a row
+ * holding more than fits reads as continuing rather than as stopping.
+ *
+ * It keeps its height whether it has drawn its tiles or not, so that the page
+ * is as long as it will ever be from the first paint and nothing shifts under
+ * the scrollbar as the rows fill in.
+ */
+.rail {
+  height: calc(var(--rail-tile) * var(--rail-ratio) + var(--caption-height));
+  margin-right: calc(var(--space-12) * -1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  height: 0;
+}
+
+.track {
+  position: relative;
+  height: 100%;
+  /* A little past the last tile, so it can be scrolled clear of the window. */
+  width: calc(var(--track) + var(--space-12));
+}
+
+.slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--rail-tile);
+  /* Placed by transform rather than by left, so scrolling the rail moves them
+     on the compositor instead of laying it out again. */
+  will-change: transform;
+}

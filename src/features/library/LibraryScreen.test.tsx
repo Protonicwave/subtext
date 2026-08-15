@@ -19,6 +19,8 @@ vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://$
 const { LibraryScreen } = await import('./LibraryScreen');
 const { useLibrary } = await import('./useLibrary');
 const { useNavigation } = await import('@/app/routes');
+const { useSettings } = await import('@/shared/settings/useSettings');
+const { DEFAULTS } = await import('@/shared/settings/schema');
 
 const folder = { id: 1, path: '/films', addedAt: 0, films: 2, watching: true } satisfies FolderView;
 
@@ -26,6 +28,7 @@ const film = {
   id: 7,
   folderId: 1,
   path: '/films/Heat.1995.mkv',
+  shelf: { name: 'films', path: '/films' },
   title: 'Heat',
   year: 1995,
   durationMs: 170 * 60_000,
@@ -66,6 +69,11 @@ const watching = {
   },
 } satisfies FilmView;
 
+/** A film on a shelf of its own, since which folder a film is in is now a fact. */
+function on(shelf: string, changes: Partial<FilmView> = {}): FilmView {
+  return { ...film, shelf: { name: shelf, path: `/films/${shelf}` }, ...changes };
+}
+
 /** Read, unless a test is about what the screen says before the read comes back. */
 function show(
   state: Partial<{
@@ -79,17 +87,23 @@ function show(
   render(<LibraryScreen />);
 }
 
+/** The rows, in the order they are drawn. */
+function shelfNames(): string[] {
+  return screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+}
+
 describe('the library screen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useNavigation.setState({ route: { screen: 'library' }, previous: null });
+    useSettings.setState({ settings: DEFAULTS });
   });
 
-  it('says what is there, and how much dialogue it has', () => {
+  it('says what is there', () => {
     show({ films: [film] });
 
     expect(screen.getByRole('button', { name: /Heat/ })).toBeInTheDocument();
-    expect(screen.getByText(/1 film · 1,402 lines of dialogue/)).toBeInTheDocument();
+    expect(screen.getByText('1 film · 1 shelf')).toBeInTheDocument();
   });
 
   it('opens a film when its tile is chosen', async () => {
@@ -113,6 +127,60 @@ describe('the library screen', () => {
     expect(screen.queryByRole('heading', { name: /carry on watching/i })).not.toBeInTheDocument();
   });
 
+  it('makes a row of each folder, named and with its path beside it', () => {
+    show({ films: [on('Crime'), on('Epics', { id: 9, title: 'Stalker' })] });
+
+    expect(shelfNames()).toEqual(['Crime', 'Epics']);
+    expect(screen.getByText('/films/Crime')).toBeInTheDocument();
+    expect(screen.getByText('/films/Epics')).toBeInTheDocument();
+  });
+
+  /*
+   * The library arrives in alphabetical order, and the rows do not follow it:
+   * they follow the order the folders were first met on disk, which is what
+   * makes them the same rows in the same places between runs.
+   */
+  it('puts the rows in the order the folders were first met on disk', () => {
+    show({
+      films: [on('Crime', { id: 9 }), on('Epics', { id: 2, title: 'Stalker' })],
+    });
+
+    expect(shelfNames()).toEqual(['Epics', 'Crime']);
+  });
+
+  it('puts what there is to carry on with above the folders', () => {
+    show({ films: [on('Crime'), watching], resumable: [watching] });
+
+    expect(shelfNames()).toEqual(['Carry on watching', 'Crime', 'films']);
+  });
+
+  it('shows the film to carry on with large, above the rows', () => {
+    show({ films: [film, watching], resumable: [watching] });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Ronin' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /carry on/i })).toBeInTheDocument();
+  });
+
+  /*
+   * A library nobody has watched yet still has something to show, and what
+   * arrived last is the likeliest reason the application was opened.
+   */
+  it('shows the most recently added film large when nothing has been started', () => {
+    show({ films: [film, on('Crime', { id: 40, title: 'Stalker' })] });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Stalker' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^play$/i })).toBeInTheDocument();
+  });
+
+  it('gives back the one wall when the shelves are turned off', () => {
+    useSettings.setState({ settings: { ...DEFAULTS, libraryLayout: 'wall' } });
+    show({ films: [on('Crime'), on('Epics', { id: 9, title: 'Stalker' })] });
+
+    expect(screen.queryByText('/films/Crime')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Heat/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Stalker/ })).toBeInTheDocument();
+  });
+
   it('shows a film whose file has gone as missing rather than hiding it', () => {
     show({ films: [{ ...film, missing: true }] });
 
@@ -128,7 +196,24 @@ describe('the library screen', () => {
     expect(document.querySelector('img')).toHaveAttribute('src', 'asset:///data/posters/abc.webp');
   });
 
-  it('draws a handful of tiles for a library of ten thousand films', () => {
+  it('draws a handful of tiles along a row of ten thousand films', () => {
+    const many = Array.from({ length: 10_000 }, (_, at) => ({
+      ...film,
+      id: at + 1,
+      title: `Film ${String(at + 1)}`,
+    }));
+
+    show({ films: many });
+
+    // A rail holds only the tiles that fit across it and a few either side,
+    // however many films the folder turned out to have in it.
+    expect(document.querySelectorAll('button').length).toBeLessThan(60);
+    expect(screen.getByRole('button', { name: 'Film 11995 · 1,402 lines' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Film 9000/ })).not.toBeInTheDocument();
+  });
+
+  it('draws a handful of tiles for a wall of ten thousand films', () => {
+    useSettings.setState({ settings: { ...DEFAULTS, libraryLayout: 'wall' } });
     const many = Array.from({ length: 10_000 }, (_, at) => ({
       ...film,
       id: at + 1,

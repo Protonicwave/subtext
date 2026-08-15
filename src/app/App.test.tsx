@@ -53,6 +53,7 @@ const film = {
   id: 7,
   folderId: 1,
   path: '/films/Heat.1995.mkv',
+  shelf: { name: 'films', path: '/films' },
   title: 'Heat',
   year: 1995,
   durationMs: null,
@@ -108,7 +109,8 @@ describe('the application', () => {
     expect(await screen.findByRole('heading', { name: /watched folders/i })).toBeInTheDocument();
 
     await userEvent.keyboard('{Escape}');
-    expect(await screen.findByRole('heading', { name: /your films/i })).toBeInTheDocument();
+    // The library screen is the one with a film shown large at the top of it.
+    expect(await screen.findByRole('heading', { name: 'Heat' })).toBeInTheDocument();
   });
 
   it('opens a film in the player', async () => {

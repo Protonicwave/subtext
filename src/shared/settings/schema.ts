@@ -117,6 +117,13 @@ const GRAIN = 0.035;
 
 export const FIELDS = {
   missingFilms: choice('library.missing', ['keep', 'hide'], 'keep'),
+  /*
+   * Shelved, because the folders somebody made say something about their films
+   * and one wall of two thousand posters says nothing. The wall is still there
+   * for a library that was never sorted, or for anybody who would rather see
+   * all of it at once.
+   */
+  libraryLayout: choice('library.layout', ['shelves', 'wall'], 'shelves'),
   // The value Rust reads under this key is the name of the strict one, so these
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),
