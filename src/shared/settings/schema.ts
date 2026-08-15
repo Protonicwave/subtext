@@ -124,6 +124,24 @@ export const FIELDS = {
    * all of it at once.
    */
   libraryLayout: choice('library.layout', ['shelves', 'wall'], 'shelves'),
+  /*
+   * Covers or a list. The wall stops serving somewhere around two hundred
+   * films and a table serves ten thousand, so both are here rather than one of
+   * them being the right answer for every library.
+   */
+  libraryView: choice('library.view', ['covers', 'list'], 'covers'),
+  /*
+   * Which column the list is ordered by, and whether it runs the other way.
+   * The names are the columns themselves, so that a sort a version from later
+   * knows about and this one does not reads as the title rather than as
+   * nothing.
+   */
+  librarySort: choice(
+    'library.sort',
+    ['title', 'folder', 'year', 'runtime', 'video', 'size', 'added', 'watched'],
+    'title',
+  ),
+  libraryDescending: toggle('library.descending', false),
   // The value Rust reads under this key is the name of the strict one, so these
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),
