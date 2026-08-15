@@ -433,6 +433,13 @@ export type FilmView = {
 	shelf: ShelfView,
 	title: string,
 	year: number | null,
+	/**
+	 *  When the film was first recorded, which is as near as this gets to when
+	 *  somebody acquired it. A file's own timestamps are not used: copying a
+	 *  library onto a new drive rewrites those and would date every film to the
+	 *  afternoon of the copy.
+	 */
+	addedAt: Millis,
 	durationMs: number | null,
 	posterPath: string | null,
 	accent: AccentView | null,

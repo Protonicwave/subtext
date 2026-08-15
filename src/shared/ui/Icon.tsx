@@ -45,6 +45,36 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+/** The library as covers, which is four tiles of the shape a poster has. */
+export function CoversIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.8}>
+      <rect x="3" y="3" width="7" height="8.5" rx="1.4" />
+      <rect x="14" y="3" width="7" height="8.5" rx="1.4" />
+      <rect x="3" y="14" width="7" height="8.5" rx="1.4" />
+      <rect x="14" y="14" width="7" height="8.5" rx="1.4" />
+    </Icon>
+  );
+}
+
+/** The library as a list. */
+export function ListIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.8}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </Icon>
+  );
+}
+
+/** Which way a column is sorted. Drawn pointing down and turned for the other. */
+export function CaretIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={2.4}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -10,6 +10,7 @@ function film(position: PositionView | null): FilmView {
     shelf: { name: 'films', path: '/films' },
     title: 'Heat',
     year: 1995,
+    addedAt: Date.UTC(2026, 7, 12),
     durationMs: 10_260_000,
     posterPath: null,
     accent: null,

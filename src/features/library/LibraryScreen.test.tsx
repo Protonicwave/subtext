@@ -5,7 +5,11 @@ import type * as ClientModule from '@/shared/ipc/client';
 import type { FilmView, FolderView } from '@/shared/ipc/bindings';
 
 const { ipc } = vi.hoisted(() => ({
-  ipc: { chooseFolder: vi.fn(), postersWanted: vi.fn(() => Promise.resolve([])) },
+  ipc: {
+    chooseFolder: vi.fn(),
+    postersWanted: vi.fn(() => Promise.resolve([])),
+    writePreference: vi.fn(() => Promise.resolve(null)),
+  },
 }));
 
 vi.mock('@/shared/ipc/client', async () => {
@@ -31,6 +35,7 @@ const film = {
   shelf: { name: 'films', path: '/films' },
   title: 'Heat',
   year: 1995,
+  addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: null,
   accent: null,
@@ -179,6 +184,31 @@ describe('the library screen', () => {
     expect(screen.queryByText('/films/Crime')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Heat/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Stalker/ })).toBeInTheDocument();
+  });
+
+  /*
+   * The list serves a library the wall has stopped serving, so it is a second
+   * view over the same films rather than a screen of its own.
+   */
+  it('gives the list instead of the covers when that is the view chosen', () => {
+    useSettings.setState({ settings: { ...DEFAULTS, libraryView: 'list' } });
+    show({ films: [on('Crime'), on('Epics', { id: 9, title: 'Stalker' })] });
+
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Heat' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
+  });
+
+  it('remembers which of the two views somebody asked for', async () => {
+    show({ films: [film] });
+
+    await userEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(useSettings.getState().settings.libraryView).toBe('list');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Covers' }));
+    expect(useSettings.getState().settings.libraryView).toBe('covers');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('shows a film whose file has gone as missing rather than hiding it', () => {

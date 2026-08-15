@@ -120,6 +120,11 @@ pub(crate) struct FilmView {
     pub(crate) shelf: ShelfView,
     pub(crate) title: String,
     pub(crate) year: Option<u16>,
+    /// When the film was first recorded, which is as near as this gets to when
+    /// somebody acquired it. A file's own timestamps are not used: copying a
+    /// library onto a new drive rewrites those and would date every film to the
+    /// afternoon of the copy.
+    pub(crate) added_at: Millis,
     pub(crate) duration_ms: Option<u32>,
     pub(crate) poster_path: Option<String>,
     pub(crate) accent: Option<AccentView>,
@@ -164,6 +169,7 @@ impl FilmView {
             shelf,
             title: film.title,
             year: film.year,
+            added_at: Millis::of(film.added_at),
             duration_ms: film.duration.map(Timestamp::millis),
             poster_path: film.poster_path.map(|path| path.display().to_string()),
             accent: film.accent.as_deref().and_then(AccentView::parse),
