@@ -5,12 +5,14 @@
 //! sees a query, which is what makes the schema something that can be changed
 //! without going looking for string literals in the front end.
 
+mod details;
 mod films;
 mod folders;
 mod positions;
 mod preferences;
 mod tracks;
 
+pub use self::details::Details;
 pub use self::films::Films;
 pub use self::folders::Folders;
 pub use self::positions::Positions;

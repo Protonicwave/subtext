@@ -55,6 +55,12 @@ pub struct FilmRecord {
     pub cover_path: Option<PathBuf>,
     /// The colour pair taken from the poster, as the front end wrote it.
     pub accent: Option<String>,
+    /// What the film's file is, which is also what says whether the rest of
+    /// these facts have ever been read. Nothing for a film recorded before this
+    /// build looked inside for them, until the next scan opens it.
+    pub container: Option<String>,
+    /// The picture, where the container said anything about it.
+    pub video: Option<VideoDetails>,
     /// When the file stopped being there, or `None` while it is present.
     pub missing_since: Option<i64>,
     /// Which of the film's subtitle tracks it is watched with.
@@ -67,6 +73,52 @@ impl FilmRecord {
     pub fn is_missing(&self) -> bool {
         self.missing_since.is_some()
     }
+}
+
+/// A film's picture, as the container described it.
+///
+/// Every field but the codec is optional, because a header states what it
+/// states. A file that did not say how deep its colour is has not said, and
+/// filling in the usual answer would be putting a fact on the screen that
+/// nothing read.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VideoDetails {
+    /// The identifier the file wrote, which is named where anybody has a name
+    /// for it and shown as it stands where nobody does.
+    pub codec: String,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub bit_depth: Option<u8>,
+    pub frame_rate: Option<f64>,
+}
+
+/// One of a film's sound tracks.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AudioDetails {
+    /// The number the container knows the track by.
+    pub stream_number: u64,
+    pub codec: String,
+    /// How many channels, from which the layout is named.
+    pub channels: Option<u8>,
+    pub language: Option<String>,
+    /// The track the film suggests, which is the one that will be heard.
+    pub default: bool,
+}
+
+/// What a scan found out about a film's file, on its way to being recorded.
+///
+/// The container is the one fact always known, since it comes from the name of
+/// the file rather than from anything inside it, and it is what says that a
+/// film has been looked at.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MediaDetails {
+    pub container: String,
+    /// How long the film runs, where the container said. The player finds this
+    /// out too, the first time anybody watches, and either answer describes the
+    /// same file.
+    pub duration: Option<Timestamp>,
+    pub video: Option<VideoDetails>,
+    pub audio: Vec<AudioDetails>,
 }
 
 /// Which subtitle track a film is watched with.

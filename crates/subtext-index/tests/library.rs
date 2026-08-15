@@ -20,7 +20,7 @@ fn a_new_file_is_migrated_and_reopening_it_changes_nothing() {
     // leave what is already there alone.
     let reopened = library.reopen();
     assert_eq!(reopened.films().list().unwrap().len(), 1);
-    assert_eq!(Database::schema_version(), 7);
+    assert_eq!(Database::schema_version(), 8);
 }
 
 #[test]

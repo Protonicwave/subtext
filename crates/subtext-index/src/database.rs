@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 use crate::migrate;
 use crate::pool::Pool;
-use crate::repository::{Films, Folders, Positions, Preferences, Tracks};
+use crate::repository::{Details, Films, Folders, Positions, Preferences, Tracks};
 
 /// One SQLite file holding everything Subtext knows.
 ///
@@ -53,6 +53,12 @@ impl Database {
     #[must_use]
     pub fn tracks(&self) -> Tracks<'_> {
         Tracks::new(self)
+    }
+
+    /// What each film's file turned out to be.
+    #[must_use]
+    pub fn details(&self) -> Details<'_> {
+        Details::new(self)
     }
 
     /// Where each film was left.
