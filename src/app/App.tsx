@@ -12,7 +12,6 @@ import { DropZone } from '@/features/onboarding/DropZone';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { ImportFlow } from '@/features/onboarding/ImportFlow';
 import { useImport } from '@/features/onboarding/useImport';
-import { CommandPalette } from '@/features/search/CommandPalette';
 import { ShortcutSheet } from '@/features/settings/ShortcutSheet';
 import { TitleBar } from './TitleBar';
 import { useNavigation } from './routes';
@@ -70,7 +69,7 @@ export function App() {
       <main className={styles.stage}>
         {route.screen === 'library' && <LibraryScreen />}
         {route.screen === 'settings' && <SettingsScreen />}
-        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} at={route.at} />}
+        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} />}
       </main>
 
       {firstRun && <FirstRun />}
@@ -89,7 +88,6 @@ export function App() {
         </p>
       )}
 
-      <CommandPalette />
       <ShortcutSheet />
       <ImportFlow />
       <DropZone />

@@ -189,6 +189,6 @@ describe('the settings screen', () => {
     render(<SettingsScreen />);
     const shortcuts = await open('Shortcuts');
 
-    expect(within(shortcuts).getByText('Search dialogue, in the film being watched')).toBeVisible();
+    expect(within(shortcuts).getByText('Choose which subtitle to read, or none')).toBeVisible();
   });
 });

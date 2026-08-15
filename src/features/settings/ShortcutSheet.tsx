@@ -18,7 +18,7 @@ export function ShortcutSheet() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-      // A question mark typed into the search field is a search for one.
+      // A question mark typed into a field is a question mark.
       if (event.key !== '?' || isTyping(event.target)) return;
 
       setOpen((showing) => !showing);

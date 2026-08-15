@@ -1,10 +1,10 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
-import { type Moment, useNavigation } from '@/app/routes';
+import { useNavigation } from '@/app/routes';
 import { useFilmAccent, useFilmPalette } from '@/features/library/accent';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
@@ -20,7 +20,7 @@ import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
 import { useKeepPosition } from './useKeepPosition';
-import { type Transport, usePlayback } from './usePlayback';
+import { usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
 import { useStepping } from './useStepping';
 import { offsetLabel, useSync } from './useSync';
@@ -42,11 +42,9 @@ import styles from './PlayerScreen.module.css';
 
 interface PlayerScreenProps {
   filmId: Id;
-  /** The moment to open at, where a search result named one. */
-  at: Moment | null;
 }
 
-export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
+export function PlayerScreen({ filmId }: PlayerScreenProps) {
   const film = useLibrary((library) => library.films.find((known) => known.id === filmId));
   const back = useNavigation((navigation) => navigation.back);
 
@@ -75,23 +73,22 @@ export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
     );
   }
 
-  // Keyed by the film, so that opening a second one from search gets a fresh
-  // element and fresh state rather than the last film's position.
-  return <Film key={film.id} film={film} at={at} onBack={back} />;
+  // Keyed by the film, so that opening a second one gets a fresh element and
+  // fresh state rather than the last film's position.
+  return <Film key={film.id} film={film} onBack={back} />;
 }
 
-function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack: () => void }) {
+function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   const screen = useRef<HTMLDivElement>(null);
 
   const settings = useSettings((state) => state.settings);
   // Worked out once, and not again when a setting the player also reads
   // changes: the element has already been told where to start.
-  const [start] = useState(
-    () => at?.ms ?? (settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs)),
+  const [start] = useState(() =>
+    settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs),
   );
 
-  // A film opened from a search result starts at the line that was found; one
-  // opened from the library starts a little before where it was left.
+  // A film starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
   // Which subtitle is being read comes first: the dialogue and the timing
   // controls are both about that track and not about the film.
@@ -134,7 +131,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     setChoosing((showing) => !showing);
   }, []);
 
-  useJumpTo(at, transport);
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
   useShortcuts({
     transport,
@@ -242,23 +238,4 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
       </motion.div>
     </div>
   );
-}
-
-/**
- * Moves a film that is already open to the moment a search result named.
- *
- * Only the ones after the first. The first is where the element was told to
- * load, which is a better way to arrive than loading the beginning and jumping
- * away from it, and seeking to it here would be a seek to where the film
- * already is.
- */
-function useJumpTo(at: Moment | null, transport: Transport) {
-  const jumped = useRef(at?.count ?? null);
-
-  useEffect(() => {
-    if (at === null || at.count === jumped.current) return;
-
-    jumped.current = at.count;
-    transport.seekTo(at.ms);
-  }, [at, transport]);
 }

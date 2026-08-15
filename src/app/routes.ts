@@ -14,21 +14,8 @@ import type { Id } from '@/shared/ipc/bindings';
  */
 export type Route =
   | { readonly screen: 'library' }
-  | { readonly screen: 'player'; readonly filmId: Id; readonly at: Moment | null }
+  | { readonly screen: 'player'; readonly filmId: Id }
   | { readonly screen: 'settings' };
-
-/**
- * A moment a film was asked to open at, rather than resumed at.
- *
- * The count is what tells one jump from the next. Searching for the same line
- * twice names the same millisecond both times, and without something to tell
- * them apart the second one would look like the state the player is already in
- * and move nothing.
- */
-export interface Moment {
-  readonly ms: number;
-  readonly count: number;
-}
 
 /** Screens reached by name alone. A film is opened through `openFilm`. */
 type Elsewhere = Exclude<Route, { screen: 'player' }>;
@@ -38,16 +25,10 @@ interface Navigation {
   /** Where the last move came from, so Escape can go back to it. */
   readonly previous: Route | null;
   readonly go: (route: Elsewhere) => void;
-  /**
-   * Opens a film, at a given moment if one is named rather than where it was
-   * last left. What a search result does when it is chosen.
-   */
-  readonly openFilm: (filmId: Id, atMs?: number) => void;
+  /** Opens a film, where it was last left. */
+  readonly openFilm: (filmId: Id) => void;
   readonly back: () => void;
 }
-
-/** How many films have been opened at a named moment. See [`Moment`]. */
-let jumps = 0;
 
 export const useNavigation = create<Navigation>((set) => ({
   route: { screen: 'library' },
@@ -59,18 +40,13 @@ export const useNavigation = create<Navigation>((set) => ({
       navigation.route.screen === route.screen ? navigation : { route, previous: navigation.route },
     );
   },
-  openFilm: (filmId, atMs) => {
-    jumps += 1;
-    const at = atMs === undefined ? null : { ms: atMs, count: jumps };
-
+  openFilm: (filmId) => {
     set((navigation) => {
-      const route = { screen: 'player', filmId, at } as const;
       const playing = navigation.route.screen === 'player' && navigation.route.filmId === filmId;
-
-      // Already watching this film: the moment moves, but where Escape goes
-      // does not, because nothing new was left behind to come back to.
-      if (playing) return at === null ? navigation : { ...navigation, route };
-      return { route, previous: navigation.route };
+      // Already watching this film, so nothing moves and nothing new is left
+      // behind to come back to.
+      if (playing) return navigation;
+      return { route: { screen: 'player', filmId }, previous: navigation.route };
     });
   },
   back: () => {

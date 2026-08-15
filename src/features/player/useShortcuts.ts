@@ -145,10 +145,10 @@ export function useShortcuts(actions: Actions) {
 /**
  * Whether something is over the film, which the keys then belong to.
  *
- * The search palette and the import sheet are both modal dialogs, and both can
- * be opened over a film that is playing. The field in each of them takes the
- * keys that are typed into it, but the buttons beside it do not: space on one
- * of those would press the button and start the film behind it at once.
+ * The import sheet and the shortcut card are both modal dialogs, and both can
+ * be opened over a film that is playing. A field in one of them takes the keys
+ * that are typed into it, but the buttons beside it do not: space on one of
+ * those would press the button and start the film behind it at once.
  */
 function isCovered(): boolean {
   return document.querySelector('dialog[open]') !== null;
