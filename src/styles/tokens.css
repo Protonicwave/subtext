@@ -54,7 +54,6 @@
   /* Typefaces. The fallbacks matter for the moment before the fonts load. */
   --font-sans: 'Instrument Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
-  --font-reading: 'Newsreader Variable', Georgia, serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
 
   /*

@@ -45,15 +45,6 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
-export function SearchIcon(props: IconProps) {
-  return (
-    <Icon {...props} strokeWidth={2.2}>
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </Icon>
-  );
-}
-
 export function SettingsIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -189,19 +180,6 @@ export function MuteIcon(props: IconProps) {
     <Icon {...props}>
       <path d="M4 9.5h3L11 6v12L7 14.5H4Z" />
       <path d="m15 10 4.5 4.5M19.5 10 15 14.5" />
-    </Icon>
-  );
-}
-
-/**
- * The transcript: the picture with the dialogue beside it, which is what the
- * button it sits on does to the screen.
- */
-export function TranscriptIcon(props: IconProps) {
-  return (
-    <Icon {...props} strokeWidth={1.7}>
-      <rect x="3" y="5" width="18" height="14" rx="2.5" />
-      <path d="M13.5 5v14M16 9.5h2.5M16 14.5h2" />
     </Icon>
   );
 }

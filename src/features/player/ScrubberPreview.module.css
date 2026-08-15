@@ -46,7 +46,7 @@
 }
 
 /*
- * What is said there, in the reading face, and clipped to three lines. A
+ * What is said there, in the display face, and clipped to three lines. A
  * preview that grows to hold a long speech would cover the film it is about.
  */
 .line {
@@ -54,7 +54,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
-  font-family: var(--font-reading);
+  font-family: var(--font-display);
   font-size: var(--text-sm);
   line-height: var(--leading-snug);
   color: var(--colour-text);

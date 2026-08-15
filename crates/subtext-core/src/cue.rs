@@ -23,8 +23,8 @@ impl Cue {
     /// Whether the cue is on screen at `at`.
     ///
     /// The end is exclusive, so a cue of zero length is never on screen. Files
-    /// do contain such cues, and they are kept because their text is still
-    /// worth searching, but they are not drawn.
+    /// do contain such cues, and they are kept as part of what the file says,
+    /// but they are not drawn.
     #[must_use]
     pub fn contains(&self, at: Timestamp) -> bool {
         self.start <= at && at < self.end

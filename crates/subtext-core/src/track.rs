@@ -5,9 +5,9 @@ use crate::{Cue, Timestamp};
 /// The cues of one subtitle file, in playback order.
 ///
 /// Lookups are the reason this is a type rather than a bare vector: the player
-/// asks which cue is on screen sixty times a second, and the transcript asks
-/// for the neighbours of the current position every time someone presses an
-/// arrow key. Both are binary searches over the sorted cues.
+/// asks which cue is on screen sixty times a second, and asks for the
+/// neighbours of the current position every time somebody presses an arrow
+/// key. Both are binary searches over the sorted cues.
 #[derive(Clone, Debug)]
 pub struct SubtitleTrack {
     cues: Vec<Cue>,

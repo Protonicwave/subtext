@@ -139,30 +139,6 @@ export const commands = {
 	 */
 	setFilmTrack: (filmId: Id, trackId: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("set_film_track", { filmId, trackId })),
 	/**
-	 *  Finds a line of dialogue anywhere in the library, or in one film.
-	 * 
-	 *  Called on a keystroke, so the work happens on a thread of its own rather
-	 *  than on the runtime that answers every other command. What comes back is
-	 *  grouped by film and ranked, and the query itself is treated as words rather
-	 *  than as index syntax, so nothing anybody types is an error.
-	 */
-	searchDialogue: (query: string, filmId: number | null) => typedError<SearchView, Failure>(__TAURI_INVOKE("search_dialogue", { query, filmId })),
-	/**
-	 *  What has been searched for before, most recent first.
-	 * 
-	 *  What the palette offers before anybody has typed anything.
-	 */
-	recentSearches: () => typedError<string[], Failure>(__TAURI_INVOKE("recent_searches")),
-	/**
-	 *  Keeps a search, because it found something worth opening.
-	 * 
-	 *  Returns the list it made rather than nothing, so the palette shows what was
-	 *  written rather than what it assumed would be.
-	 */
-	rememberSearch: (query: string) => typedError<string[], Failure>(__TAURI_INVOKE("remember_search", { query })),
-	/**  Forgets every search that has been made. */
-	forgetSearches: () => typedError<null, Failure>(__TAURI_INVOKE("forget_searches")),
-	/**
 	 *  Records how far through a film somebody is.
 	 * 
 	 *  Called on a throttle while playing and once on the way out, so it is one row
@@ -205,9 +181,9 @@ export const commands = {
 	 * 
 	 *  The whole lot in one call rather than a call per control. There are a few
 	 *  dozen of them, they are read once when the window opens, and the settings
-	 *  screen is not the only thing that wants them: the player, the transcript and
-	 *  the window itself are all drawn from these before anybody has opened
-	 *  settings at all.
+	 *  screen is not the only thing that wants them: the player and the window
+	 *  itself are both drawn from these before anybody has opened settings at
+	 *  all.
 	 */
 	readPreferences: () => typedError<PreferenceView[], Failure>(__TAURI_INVOKE("read_preferences")),
 	/**
@@ -218,18 +194,6 @@ export const commands = {
 	 *  a moment later should still open the way it was left.
 	 */
 	writePreference: (key: string, value: string) => typedError<null, Failure>(__TAURI_INVOKE("write_preference", { key, value })),
-	/**
-	 *  Builds the search index again, and then reads the folders afresh.
-	 * 
-	 *  For a library whose search has stopped agreeing with its dialogue, which a
-	 *  scan that was interrupted or a file copied between machines can leave
-	 *  behind. Nothing is reparsed and no pairing is lost: the index is built from
-	 *  the cues already stored.
-	 * 
-	 *  Returns straight away and reports itself through the scan events, like the
-	 *  scans it ends with.
-	 */
-	rebuildIndex: () => typedError<null, Failure>(__TAURI_INVOKE("rebuild_index")),
 	/**
 	 *  Reads every watched folder again.
 	 * 
@@ -393,7 +357,7 @@ export type CorrectionView = {
 export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
 
 /**
- *  One line of dialogue, as the player and the transcript want it.
+ *  One line of dialogue, as the player wants it.
  * 
  *  Deliberately flat and deliberately small. A film of five thousand cues
  *  crosses the boundary in one go and is then searched sixty times a second, so
@@ -411,14 +375,6 @@ export type CueView = {
 	position: CuePositionView | null,
 };
 
-/**  One line of dialogue that matched. */
-export type DialogueHit = {
-	/**  Where in the film it is said, which is where selecting it opens the film. */
-	startMs: number,
-	/**  The line around the match, split at the matched words. */
-	snippet: SnippetPart[],
-};
-
 /**
  *  Something that went wrong, said in a way a person can act on.
  * 
@@ -434,24 +390,6 @@ export type Failure = {
 export type FileWarnings = {
 	path: string,
 	warnings: string[],
-};
-
-/**  The lines one film had to offer, best first. */
-export type FilmMatches = {
-	filmId: Id,
-	/**
-	 *  Carried rather than looked up on the other side, so that a film indexed
-	 *  since the library screen last read itself still has a name in the
-	 *  palette.
-	 */
-	title: string,
-	year: number | null,
-	hits: DialogueHit[],
-	/**
-	 *  Matches in this film that were not returned, because the film had
-	 *  reached its share of the results.
-	 */
-	withheld: number,
 };
 
 /**  A film and everything the library screen needs to draw it. */
@@ -581,45 +519,12 @@ export type ScanSummary = {
 	 *  attach by hand.
 	 */
 	unpairedSubtitles: string[],
-	/**  Films with no subtitle, which get no transcript and no search. */
+	/**  Films with no subtitle, which the sheet marks as such. */
 	filmsWithoutSubtitles: string[],
 	/**  Files that could not be read at all. */
 	unreadable: string[],
 	/**  Files the parser had to work around, and what was wrong with each. */
 	warnings: FileWarnings[],
-};
-
-/**  Everything one search found, grouped by the film it was found in. */
-export type SearchView = {
-	/**  Films in the order their best line ranked. */
-	films: FilmMatches[],
-	/**  How many lines are being shown, which the palette says out loud. */
-	shown: number,
-	/**
-	 *  Whether the search stopped at the limit rather than running out of
-	 *  matches, so the palette can say "the first hundred" honestly.
-	 */
-	truncated: boolean,
-	/**
-	 *  Whether these are the best matches or simply the first ones. A search
-	 *  matching half the library gives up ranking rather than keeping somebody
-	 *  waiting for an order they typed straight past.
-	 */
-	ranked: boolean,
-};
-
-/**
- *  A stretch of a snippet, and whether it is one of the words searched for.
- * 
- *  The index marks matches with two control characters, and splitting on them
- *  happens here rather than on the other side. A front end handed the marked
- *  string would have to find them again to draw the highlight, and a line of
- *  dialogue that happened to contain one would be drawn wrongly. Across the
- *  boundary the shape says what it means.
- */
-export type SnippetPart = {
-	text: string,
-	matched: boolean,
 };
 
 /**  Which step of a scan is running. */
@@ -633,7 +538,7 @@ export type StageView = "discovering" | "pairing" | "indexing" | "finished";
  *  would mean the front end keeping its own list of which codecs are which.
  */
 export type TrackFormView = 
-/**  Dialogue, which becomes a transcript and lines in the search index. */
+/**  Dialogue, which is what the player draws and steps between. */
 "text" | 
 /**
  *  Images of dialogue, as Blu-ray discs and DVDs carry. Naming them is as

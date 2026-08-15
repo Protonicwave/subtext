@@ -14,11 +14,9 @@ use crate::progress::ProgressSink;
 
 /// Scans watched folders into the library.
 ///
-/// Scans are serialised. A large one stands the search index triggers down for
-/// the whole database and builds the index again at the end, which two scans
-/// running at once would tread on. Serialising them costs nothing worth having:
-/// the expensive part of a scan is already spread across every core, and two
-/// folders scanned at once would only contend for the same single writer.
+/// Scans are serialised, and it costs nothing worth having: the expensive part
+/// of a scan is already spread across every core, and two folders scanned at
+/// once would only contend for the same single writer.
 #[derive(Debug)]
 pub struct Scanner {
     database: Database,
@@ -60,19 +58,6 @@ impl Scanner {
         } else {
             Matching::Relaxed
         }
-    }
-
-    /// Builds the search index again from the dialogue already stored.
-    ///
-    /// Nothing is reread and no pairing changes: this is for an index that has
-    /// fallen behind the cues it describes, which is what an interrupted scan
-    /// or a copied library file can leave behind. Behind the same gate as a
-    /// scan, since one writing cues while the index is being rebuilt would
-    /// leave the very state this repairs.
-    pub fn rebuild_index(&self) -> Result<()> {
-        let _guard = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        self.database.rebuild_search_index()?;
-        Ok(())
     }
 
     /// Starts watching a folder, or returns the one already being watched.

@@ -3,8 +3,8 @@
 /// The subtitle codecs a Matroska file declares, and what each of them is.
 ///
 /// The distinction that matters is text against pictures. A text track is
-/// dialogue and becomes a transcript, a search index and everything else the
-/// application is for. A bitmap track is a sequence of images of dialogue, and
+/// dialogue, and dialogue is what this application reads. A bitmap track is a
+/// sequence of images of dialogue, and
 /// turning those into words means optical character recognition, a large
 /// dependency and an accuracy figure nothing else here has to apologise for. So
 /// they are recognised, named, and left alone.
@@ -152,8 +152,8 @@ mod tests {
     #[test]
     fn anything_else_is_unknown_rather_than_assumed() {
         // Both of these are text of a sort. Neither is text this build reads,
-        // and claiming otherwise would put an empty transcript in front of
-        // somebody.
+        // and claiming otherwise would offer somebody a track with nothing in
+        // it.
         assert_eq!(SubtitleCodec::of("S_TEXT/USF"), SubtitleCodec::Unknown);
         assert_eq!(SubtitleCodec::of("S_HDMV/TEXTST"), SubtitleCodec::Unknown);
         assert_eq!(SubtitleCodec::of(""), SubtitleCodec::Unknown);

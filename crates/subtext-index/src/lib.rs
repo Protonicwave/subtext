@@ -1,19 +1,16 @@
-//! Persistence and search for Subtext.
+//! Persistence for Subtext.
 //!
 //! Wraps a single SQLite database holding watched folders, films, subtitle
-//! tracks, cues, playback positions and preferences, together with the full text
-//! index over cue text. Callers work through repositories rather than SQL.
+//! tracks, cues, playback positions and preferences. Callers work through
+//! repositories rather than SQL.
 //!
 //! ```no_run
 //! # fn main() -> Result<(), Box<dyn core::error::Error>> {
-//! use subtext_index::{Database, SearchOptions};
+//! use subtext_index::Database;
 //!
 //! let database = Database::open("library.db")?;
-//! let results = database.search().find("we'll always have", &SearchOptions::default())?;
-//! for film in &results.films {
-//!     for hit in &film.hits {
-//!         println!("{} at {}: {}", film.title, hit.start, hit.text);
-//!     }
+//! for film in database.films().list()? {
+//!     println!("{} at {}", film.title, film.path.display());
 //! }
 //! # Ok(())
 //! # }
@@ -38,7 +35,4 @@ pub use crate::model::{
     FilmRecord, FilmStreams, Fingerprint, NewFilm, NewTrack, PlaybackPosition, Resumable, Stored,
     StreamEntry, TrackChoice, TrackMatch, TrackOrigin, TrackPairing, TrackRecord, WatchedFolder,
 };
-pub use crate::repository::{
-    CueHit, FilmHits, Films, Folders, MATCH_END, MATCH_START, Positions, Preferences, Search,
-    SearchOptions, SearchResults, Tracks,
-};
+pub use crate::repository::{Films, Folders, Positions, Preferences, Tracks};

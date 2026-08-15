@@ -65,8 +65,8 @@
 }
 
 /*
- * A control that is not an action but a state: the transcript is either beside
- * the film or it is not, and the button says which.
+ * A control that is not an action but a state: the panel it opens is either
+ * showing or it is not, and the button says which.
  */
 .on {
   color: var(--colour-accent);
@@ -111,8 +111,7 @@
 /*
  * The sliders. A range input is styled rather than rebuilt, so that dragging,
  * the arrow keys, Home and End and the correct role all come from the platform.
- * The track is drawn as a gradient stop at the played fraction, which is also
- * where the dialogue density map will be drawn later.
+ * The track is drawn as a gradient stop at the played fraction.
  */
 .slider {
   appearance: none;
@@ -160,60 +159,20 @@
 }
 
 /*
- * The scrubber and the film's dialogue behind it, in the same box. The played
- * fraction lives here rather than on the input, because both of them read it.
+ * The scrubber, and the preview that sits above it while the pointer is over
+ * it. The played fraction lives on the box rather than on the input, because
+ * the preview is placed against it as well.
  */
 .track {
   position: relative;
   height: 26px;
+  display: flex;
+  align-items: center;
 }
 
-.density {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.quiet {
-  fill: rgb(255 255 255 / 22%);
-}
-
-/*
- * The same shape again, cut off at how much has been played. Clipping one path
- * costs nothing per frame; drawing a second one from the cues would cost the
- * whole shape every time the position moved.
- */
-.spoken {
-  fill: var(--colour-accent);
-  clip-path: inset(0 calc(100% - var(--played, 0) * 100%) 0 0);
-}
-
-/*
- * The input itself is only the thumb and the dragging: its track is the
- * dialogue drawn behind it.
- */
 .scrubber {
   position: relative;
   width: 100%;
-  height: 100%;
-}
-
-.scrubber::-webkit-slider-runnable-track {
-  height: 100%;
-  background: transparent;
-}
-
-/*
- * Centred in the track by the platform, which is the middle of the bar and so
- * the line the shape is drawn about. The ring is what keeps it visible where
- * the dialogue behind it is at its thickest.
- */
-.scrubber::-webkit-slider-thumb {
-  margin-top: 0;
-  width: 13px;
-  height: 13px;
-  box-shadow: 0 0 0 3px rgb(0 0 0 / 45%);
 }
 
 .scrubber:disabled {

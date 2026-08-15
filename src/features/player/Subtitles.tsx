@@ -42,7 +42,7 @@ export function Subtitles({ cue, appearance, lifted }: SubtitlesProps) {
           '--subtitle-colour': appearance.colour,
           '--subtitle-position': appearance.position,
           '--subtitle-font':
-            appearance.typeface === 'serif' ? 'var(--font-reading)' : 'var(--font-sans)',
+            appearance.typeface === 'serif' ? 'var(--font-display)' : 'var(--font-sans)',
         } as CSSProperties
       }
     >

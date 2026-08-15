@@ -1,17 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as ClientModule from '@/shared/ipc/client';
 import type { FilmView } from '@/shared/ipc/bindings';
-
-const { ipc } = vi.hoisted(() => ({
-  ipc: { recentSearches: vi.fn(() => Promise.resolve<string[]>([])) },
-}));
-
-vi.mock('@/shared/ipc/client', async () => {
-  const actual = await vi.importActual<typeof ClientModule>('@/shared/ipc/client');
-  return { ...actual, ipc };
-});
 
 const { windowControls } = vi.hoisted(() => ({
   windowControls: {
@@ -28,7 +18,6 @@ vi.mock('@/shared/window/controls', () => ({ windowControls }));
 const { TitleBar } = await import('./TitleBar');
 const { useNavigation } = await import('./routes');
 const { useLibrary } = await import('@/features/library/useLibrary');
-const { useSearch } = await import('@/features/search/useSearch');
 
 const heat = {
   id: 7,
@@ -92,25 +81,5 @@ describe('the title bar', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(useNavigation.getState().route).toEqual({ screen: 'library' });
-  });
-
-  it('opens dialogue search, and says which keys do it without one', async () => {
-    render(<TitleBar />);
-
-    const search = screen.getByRole('button', { name: /search dialogue/i });
-    expect(search).toHaveTextContent('Ctrl K');
-
-    await userEvent.click(search);
-
-    expect(useSearch.getState().open).toBe(true);
-  });
-
-  it('keeps the search to the film being watched when one is', async () => {
-    useNavigation.getState().openFilm(7);
-    render(<TitleBar />);
-
-    await userEvent.click(screen.getByRole('button', { name: /search dialogue/i }));
-
-    expect(useSearch.getState().scope).toBe(7);
   });
 });

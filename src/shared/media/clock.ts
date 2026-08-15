@@ -2,7 +2,7 @@
  * A moment in a film, written the way a person would say it.
  *
  * One way of writing a time for the whole application: the control bar, the
- * timecode against each line of the transcript, and the timecodes attached to a
+ * timecode against a line, and the timecodes attached to a
  * passage copied out of it. A film talked about in two different notations in
  * two different places is a film that reads as two applications.
  *

@@ -44,6 +44,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "reread films",
         sql: include_str!("migrations/0005_reread_films.sql"),
     },
+    Migration {
+        version: 6,
+        name: "drop cue search",
+        sql: include_str!("migrations/0006_drop_cue_search.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -254,8 +259,8 @@ mod tests {
     ///
     /// The release before this one opened each film, wrote down which tracks
     /// were inside it, and stopped there. Those films match what is on disk, so
-    /// nothing would ever open them again, and their tracks would keep an empty
-    /// transcript for ever.
+    /// nothing would ever open them again, and their tracks would stay empty
+    /// for ever.
     #[test]
     fn a_film_already_looked_inside_is_looked_inside_again() {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -308,6 +313,96 @@ mod tests {
         // point at what they pointed at. Only the cues under it are missing,
         // and the scan this puts the film back in the way of writes them.
         assert_eq!(tracks, 1);
+    }
+
+    /// A library file the last release wrote, opened by this one.
+    ///
+    /// The full text mirror over cue text goes, and nothing else does. The cues
+    /// underneath it stay, since they are what opens a film without a parse and
+    /// what an alignment measures against the speech in the film.
+    #[test]
+    fn a_library_from_the_last_release_keeps_everything_but_the_mirror() {
+        let mut connection = Connection::open_in_memory().unwrap();
+
+        connection
+            .execute_batch("PRAGMA foreign_keys = OFF;")
+            .unwrap();
+        for migration in MIGRATIONS.iter().take_while(|it| it.version <= 5) {
+            connection.execute_batch(migration.sql).unwrap();
+        }
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migration (
+                     version    INTEGER PRIMARY KEY,
+                     name       TEXT    NOT NULL,
+                     applied_at INTEGER NOT NULL
+                 ) STRICT;
+                 INSERT INTO schema_migration (version, name, applied_at)
+                 VALUES (1, 'a', 0), (2, 'b', 0), (3, 'c', 0), (4, 'd', 0), (5, 'e', 0);
+
+                 INSERT INTO watched_folder (id, path, added_at) VALUES (1, '/films', 0);
+                 INSERT INTO film (
+                     id, folder_id, path, title, size_bytes, modified_at, added_at, chosen_track_id
+                 )
+                 VALUES (1, 1, '/films/Heat.mkv', 'Heat', 4000, 0, 0, 1);
+                 INSERT INTO subtitle_track (
+                     id, film_id, path, origin, stream_number, codec, forced,
+                     hearing_impaired, match_kind, encoding, cue_count, size_bytes,
+                     modified_at, offset_ms, rate
+                 )
+                 VALUES (1, 1, '/films/Heat.srt', 'sidecar', 0, 'subrip', 0, 0,
+                         'exact', 'UTF-8', 1, 60, 0, -1200, 1.0427);
+                 INSERT INTO cue (id, track_id, ordinal, start_ms, end_ms, text)
+                 VALUES (1, 1, 1, 0, 1000, 'the action is the juice');
+                 INSERT INTO playback_position
+                     (film_id, position_ms, duration_ms, finished, updated_at)
+                 VALUES (1, 600000, 10260000, 0, 0);
+                 INSERT INTO preference (key, value)
+                 VALUES ('search.recent', '[\"juice\"]'), ('subtitles.size', '4.4');",
+            )
+            .unwrap();
+
+        assert_eq!(apply(&mut connection).unwrap(), supported_version());
+
+        let (cues, offset, chosen, position): (i64, i64, Option<i64>, i64) = connection
+            .query_row(
+                "SELECT count(c.id), t.offset_ms, f.chosen_track_id, p.position_ms
+                 FROM subtitle_track AS t
+                 JOIN film AS f ON f.id = t.film_id
+                 JOIN playback_position AS p ON p.film_id = f.id
+                 LEFT JOIN cue AS c ON c.track_id = t.id
+                 WHERE t.id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(cues, 1);
+        assert_eq!(offset, -1_200);
+        assert_eq!(chosen, Some(1));
+        assert_eq!(position, 600_000);
+
+        // The mirror and the flag that said whether it was being kept in step.
+        let left: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master
+                 WHERE name IN ('cue_search', 'index_state', 'cue_indexed')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 0);
+
+        // The searches somebody made, which nothing reads now. Every other
+        // preference is left where it was.
+        let preferences: Vec<String> = connection
+            .prepare("SELECT key FROM preference ORDER BY key")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(preferences, ["subtitles.size"]);
     }
 
     #[test]

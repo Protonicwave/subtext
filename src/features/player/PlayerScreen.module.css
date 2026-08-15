@@ -1,7 +1,4 @@
-/*
- * The film and the transcript, side by side. The picture takes what the panel
- * leaves, which is all of it when the panel is away.
- */
+/* The film, filling the window. */
 .screen {
   display: flex;
   position: relative;
@@ -12,8 +9,7 @@
 
 /*
  * The pointer left still over a playing film. The cursor is as much a thing
- * drawn over the picture as the control bar is, and it goes away with it. Only
- * over the picture: the transcript is being read.
+ * drawn over the picture as the control bar is, and it goes away with it.
  */
 .frame[data-idle='true'] {
   cursor: none;

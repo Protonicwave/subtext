@@ -17,12 +17,10 @@ import {
   SkipForwardIcon,
   SubtitlesIcon,
   SyncIcon,
-  TranscriptIcon,
   VolumeIcon,
 } from '@/shared/ui/Icon';
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
-import { BANDS } from './density';
 import { useSetting } from '@/shared/settings/useSettings';
 import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
@@ -40,9 +38,7 @@ import styles from './Controls.module.css';
  * The scrubber and the volume are range inputs rather than something drawn from
  * dividers and pointer events. That buys keyboard control, the correct roles
  * and the platform's own drag behaviour for nothing, and the parts of it that
- * are visible are all replaceable in CSS. The density map in the scrubber
- * track is what this becomes later; it is the same element with something drawn
- * behind it.
+ * are visible are all replaceable in CSS.
  */
 
 /** What the bar needs to show the moment the pointer is resting over. */
@@ -58,8 +54,6 @@ interface ControlsProps {
   transport: Transport;
   /** Moving by line, which a film with no subtitles cannot do. */
   stepping: Stepping;
-  /** The dialogue drawn along the scrubber, as a path. */
-  density: string;
   /** What the bar shows about the moment under the pointer. */
   preview: Preview;
   /** Putting the subtitles back in step with the film. */
@@ -75,11 +69,8 @@ interface ControlsProps {
   onToggleTracks: () => void;
   visible: boolean;
   fullscreen: boolean;
-  /** The transcript is beside the film. */
-  transcript: boolean;
   onToggleFullscreen: () => void;
   onToggleSync: () => void;
-  onToggleTranscript: () => void;
   /** The pointer is resting here, so the bar should not go away under it. */
   onHold: (holding: boolean) => void;
 }
@@ -88,7 +79,6 @@ export function Controls({
   playback,
   transport,
   stepping,
-  density,
   preview,
   sync,
   alignment,
@@ -97,11 +87,9 @@ export function Controls({
   choosing,
   visible,
   fullscreen,
-  transcript,
   onToggleFullscreen,
   onToggleSync,
   onToggleTracks,
-  onToggleTranscript,
   onHold,
 }: ControlsProps) {
   const { positionMs, durationMs, playing, volume, muted } = playback;
@@ -170,21 +158,6 @@ export function Controls({
             line={preview.spokenAt(along * durationMs)}
           />
         )}
-
-        {/*
-         * The film's dialogue, drawn behind the scrubber. Two copies of the
-         * same shape: the second is clipped to how much has been played, which
-         * is what fills it in as the film runs without redrawing the path.
-         */}
-        <svg
-          className={styles.density}
-          viewBox={`0 0 ${String(BANDS)} 100`}
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <path className={styles.quiet} d={density} />
-          <path className={styles.spoken} d={density} />
-        </svg>
 
         <input
           type="range"
@@ -294,14 +267,6 @@ export function Controls({
           className={syncing ? styles.on : undefined}
         >
           <SyncIcon size={17} />
-        </Control>
-
-        <Control
-          label={transcript ? 'Hide the transcript' : 'Show the transcript'}
-          onClick={onToggleTranscript}
-          className={transcript ? styles.on : undefined}
-        >
-          <TranscriptIcon size={17} />
         </Control>
 
         <Control

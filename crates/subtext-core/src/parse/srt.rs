@@ -91,14 +91,14 @@ fn read_block(
     if cleaned.text.is_empty() {
         // A cue with no words is either a stray block or a deliberate gap. We
         // draw subtitles ourselves and honour the end time, so neither needs
-        // to survive into the transcript.
+        // to be kept.
         warnings.push(lines[timing].number, ParseWarningKind::EmptyCue);
         return next;
     }
 
     let end = if end < start {
-        // The dialogue is still worth reading and searching, so the cue is kept
-        // with the timing collapsed rather than thrown away.
+        // The line is still worth keeping, so the cue survives with the timing
+        // collapsed rather than being thrown away.
         warnings.push(lines[timing].number, ParseWarningKind::NegativeDuration);
         start
     } else {

@@ -84,7 +84,7 @@ describe('the library screen', () => {
     useNavigation.setState({ route: { screen: 'library' }, previous: null });
   });
 
-  it('says what is there, and how much of it there is to search', () => {
+  it('says what is there, and how much dialogue it has', () => {
     show({ films: [film] });
 
     expect(screen.getByText('Heat')).toBeInTheDocument();

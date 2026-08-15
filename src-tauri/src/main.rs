@@ -10,7 +10,6 @@ mod dropped;
 mod dto;
 mod ipc;
 mod posters;
-mod recent;
 mod settings;
 mod state;
 mod stream;

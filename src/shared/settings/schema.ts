@@ -173,8 +173,6 @@ export const FIELDS = {
   glow: amount('appearance.glow', { least: 0, most: 1.6, step: 0.05 }, 1),
   grain: amount('appearance.grain', { least: 0, most: 0.09, step: 0.005 }, GRAIN),
   motion: choice('appearance.motion', ['system', 'reduced'], 'system'),
-  transcriptTypeface: choice('transcript.typeface', ['serif', 'sans'], 'serif'),
-  transcriptFollow: toggle('transcript.follow', true),
 } as const;
 
 type Held<F> = F extends Field<infer T> ? T : never;

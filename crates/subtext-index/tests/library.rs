@@ -6,7 +6,7 @@
 mod common;
 
 use subtext_core::{Cue, CuePosition, SubtitleLabel, Timestamp};
-use subtext_index::{Database, NewFilm, NewTrack, SearchOptions, TrackMatch, TrackOrigin};
+use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
 
 use crate::common::{Library, cues};
 
@@ -20,7 +20,7 @@ fn a_new_file_is_migrated_and_reopening_it_changes_nothing() {
     // leave what is already there alone.
     let reopened = library.reopen();
     assert_eq!(reopened.films().list().unwrap().len(), 1);
-    assert_eq!(Database::schema_version(), 5);
+    assert_eq!(Database::schema_version(), 6);
 }
 
 #[test]
@@ -252,26 +252,17 @@ fn cues_come_back_as_they_went_in() {
 }
 
 #[test]
-fn replacing_the_cues_replaces_what_can_be_found() {
+fn replacing_the_cues_leaves_none_of_the_old_ones_behind() {
     let library = Library::new();
     let folder = library.watch();
     let film_id = library.add_film(folder, "Heat");
     let track_id = library.add_track(film_id, "Heat");
-    let options = SearchOptions::default();
 
     library
         .database
         .tracks()
         .replace_cues(track_id, &cues(&["a helicopter over the freeway"]))
         .unwrap();
-    assert!(
-        !library
-            .database
-            .search()
-            .find("helicopter", &options)
-            .unwrap()
-            .is_empty()
-    );
 
     // A corrected subtitle file replaces the old one.
     library
@@ -280,138 +271,25 @@ fn replacing_the_cues_replaces_what_can_be_found() {
         .replace_cues(track_id, &cues(&["a lighthouse over the harbour"]))
         .unwrap();
 
-    assert!(
-        library
-            .database
-            .search()
-            .find("helicopter", &options)
-            .unwrap()
-            .is_empty(),
-        "the old lines must leave the index with the old cues"
-    );
-    assert!(
-        !library
-            .database
-            .search()
-            .find("lighthouse", &options)
-            .unwrap()
-            .is_empty()
-    );
+    let read = library.database.tracks().cues(track_id).unwrap();
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0].text, "a lighthouse over the harbour");
 }
 
 #[test]
-fn removing_a_folder_takes_everything_under_it_including_the_index() {
+fn removing_a_folder_takes_everything_under_it() {
     let library = Library::new();
     let folder = library.watch();
-    library.add_film_with_dialogue(folder, "Heat", &["a helicopter over the freeway"]);
-    let options = SearchOptions::default();
-    assert!(
-        !library
-            .database
-            .search()
-            .find("helicopter", &options)
-            .unwrap()
-            .is_empty()
-    );
+    let film_id =
+        library.add_film_with_dialogue(folder, "Heat", &["a helicopter over the freeway"]);
+    let track_id = library.database.tracks().for_film(film_id).unwrap()[0].id;
 
     assert!(library.database.folders().remove(folder).unwrap());
 
     assert!(library.database.films().list().unwrap().is_empty());
     assert!(
-        library
-            .database
-            .search()
-            .find("helicopter", &options)
-            .unwrap()
-            .is_empty(),
-        "cues deleted through a cascade must leave the search index too"
-    );
-}
-
-#[test]
-fn a_bulk_ingest_indexes_everything_once_it_is_done() {
-    let library = Library::new();
-    let folder = library.watch();
-    let options = SearchOptions::default();
-
-    library
-        .database
-        .bulk_ingest(|| {
-            library.add_film_with_dialogue(folder, "Heat", &["a helicopter over the freeway"]);
-            library.add_film_with_dialogue(folder, "Ronin", &["a lighthouse over the harbour"]);
-
-            // Nothing is searchable while the scan is running, which is the
-            // trade that makes a first scan of a thousand films quick.
-            assert!(
-                library
-                    .database
-                    .search()
-                    .find("helicopter", &SearchOptions::default())
-                    .unwrap()
-                    .is_empty()
-            );
-            Ok(())
-        })
-        .unwrap();
-
-    assert_eq!(
-        library
-            .database
-            .search()
-            .find("helicopter", &options)
-            .unwrap()
-            .shown(),
-        1
-    );
-    assert_eq!(
-        library
-            .database
-            .search()
-            .find("lighthouse", &options)
-            .unwrap()
-            .shown(),
-        1
-    );
-
-    // And the index is being kept in step again, so the next film to arrive is
-    // searchable without another rebuild.
-    library.add_film_with_dialogue(folder, "Casablanca", &["a letter of transit"]);
-    assert_eq!(
-        library
-            .database
-            .search()
-            .find("transit", &options)
-            .unwrap()
-            .shown(),
-        1
-    );
-}
-
-#[test]
-fn a_scan_that_never_finished_is_put_right_on_the_next_start() {
-    let library = Library::new();
-    let folder = library.watch();
-
-    // A scan that stops half way, as an application closed mid-ingest does.
-    let interrupted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        library
-            .database
-            .bulk_ingest(|| -> subtext_index::Result<()> {
-                library.add_film_with_dialogue(folder, "Heat", &["a helicopter over the freeway"]);
-                panic!("the application stopped");
-            })
-    }));
-    assert!(interrupted.is_err());
-
-    let restarted = library.reopen();
-    assert_eq!(
-        restarted
-            .search()
-            .find("helicopter", &SearchOptions::default())
-            .unwrap()
-            .shown(),
-        1,
-        "the index must be rebuilt from the cues that were written"
+        library.database.tracks().cues(track_id).unwrap().is_empty(),
+        "the cues under a folder must go with it"
     );
 }
 

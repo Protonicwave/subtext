@@ -77,10 +77,9 @@ impl Pool {
 /// few transactions, and since every row can be rebuilt by rescanning the
 /// folder, that is a cheap thing to risk for the write throughput.
 ///
-/// Recursive triggers matter more than they look. Deleting a film cascades to
-/// its cues, and without this the delete triggers that take those cues back out
-/// of the search index would not fire, leaving the index claiming lines that no
-/// longer exist.
+/// Recursive triggers are on because a cascade is a delete like any other:
+/// removing a film takes its tracks, and its tracks take their cues, and a
+/// trigger on any of those has to fire for the row it is written about.
 fn prepare(connection: &Connection) -> Result<()> {
     connection.execute_batch(
         "PRAGMA journal_mode = WAL;

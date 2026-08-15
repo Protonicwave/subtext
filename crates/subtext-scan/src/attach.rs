@@ -29,8 +29,8 @@ pub struct Attached {
 /// Reads a subtitle file and gives it to a film.
 ///
 /// The file is read here and now rather than left for the next scan, because
-/// the person doing it is looking at the screen and expects the transcript to
-/// exist afterwards. It may sit outside every watched folder: someone whose
+/// the person doing it is looking at the screen and expects the film to have
+/// its dialogue afterwards. It may sit outside every watched folder: someone whose
 /// subtitles live in their downloads folder should not have to move files
 /// around to use them.
 pub fn attach_subtitle(database: &Database, film_id: i64, path: &Path) -> Result<Attached> {

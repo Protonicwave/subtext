@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BindingsModule from '@/shared/ipc/bindings';
@@ -58,7 +58,6 @@ vi.mock('@/shared/media/source', () => ({
 
 const { PlayerScreen } = await import('./PlayerScreen');
 const { useLibrary } = await import('./../library/useLibrary');
-const { usePanel } = await import('@/features/transcript/usePanel');
 const { useNavigation } = await import('@/app/routes');
 const { DEFAULTS } = await import('@/shared/settings/schema');
 const { useSettings } = await import('@/shared/settings/useSettings');
@@ -71,11 +70,10 @@ const RUNS = 10_260_000;
  * How far before its written start a line goes up, and therefore how far before
  * it going anywhere by line lands.
  *
- * Stepping and the transcript both go to the moment the line is on screen from
- * rather than to the moment it was written at, because they are the same
- * timeline: one answer to where a line is, shared by everything that asks.
- * Landing a little before the first syllable is also what somebody who missed
- * the line wanted.
+ * Stepping goes to the moment the line is on screen from rather than to the
+ * moment it was written at, because they are the same timeline: one answer to
+ * where a line is, shared by everything that asks. Landing a little before the
+ * first syllable is also what somebody who missed the line wanted.
  */
 const LEAD = DEFAULTS.subtitleLeadInMs;
 
@@ -111,9 +109,22 @@ const film = {
 
 function open(changes: Partial<FilmView> = {}) {
   useLibrary.setState({ folders: [], films: [{ ...film, ...changes }], resumable: [] });
-  const view = render(<PlayerScreen filmId={7} at={null} />);
+  const view = render(<PlayerScreen filmId={7} />);
 
   return { view, video: playing };
+}
+
+/**
+ * Waits for the film's dialogue to have been read.
+ *
+ * Nothing on screen says so directly: a line is only drawn at the moment it is
+ * spoken. The line controls are the honest signal, since they are enabled by
+ * there being lines to step between.
+ */
+async function dialogueArrives(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: /next line/i })).toBeEnabled();
+  });
 }
 
 /** The element on screen, or a failed test rather than a null dereference. */
@@ -126,8 +137,7 @@ function playing(): HTMLVideoElement {
 describe('playing a film', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useNavigation.setState({ route: { screen: 'player', filmId: 7, at: null }, previous: null });
-    usePanel.setState({ open: true });
+    useNavigation.setState({ route: { screen: 'player', filmId: 7 }, previous: null });
     useSettings.setState({ settings: DEFAULTS, problem: null });
   });
 
@@ -158,53 +168,6 @@ describe('playing a film', () => {
     opens(video(), RUNS);
 
     expect(positionOf(video())).toBe(595_000);
-  });
-
-  it('opens at the line a search found rather than where it was left', () => {
-    useLibrary.setState({
-      folders: [],
-      films: [
-        {
-          ...film,
-          position: {
-            positionMs: 600_000,
-            durationMs: RUNS,
-            finished: false,
-            updatedAt: 0,
-            progress: null,
-          },
-        },
-      ],
-      resumable: [],
-    });
-    render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
-    opens(playing(), RUNS);
-
-    expect(positionOf(playing())).toBe(92_000);
-  });
-
-  it('moves to the next line found in a film it is already playing', () => {
-    useLibrary.setState({ folders: [], films: [film], resumable: [] });
-    const view = render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
-    opens(playing(), RUNS);
-
-    view.rerender(<PlayerScreen filmId={7} at={{ ms: 415_000, count: 2 }} />);
-
-    expect(positionOf(playing())).toBe(415_000);
-  });
-
-  it('stays put when the same line is chosen twice over', () => {
-    useLibrary.setState({ folders: [], films: [film], resumable: [] });
-    const view = render(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 1 }} />);
-    opens(playing(), RUNS);
-    reaches(playing(), 130_000);
-
-    // The same moment, chosen again. It is a fresh jump and the film has moved
-    // on since the first one, so it goes back to the line rather than ignoring
-    // a millisecond it has seen before.
-    view.rerender(<PlayerScreen filmId={7} at={{ ms: 92_000, count: 2 }} />);
-
-    expect(positionOf(playing())).toBe(92_000);
   });
 
   it('writes down where it got to on the way out', async () => {
@@ -268,7 +231,7 @@ describe('playing a film', () => {
 
   it('says so when the film is no longer in the library at all', () => {
     useLibrary.setState({ folders: [], films: [], resumable: [] });
-    render(<PlayerScreen filmId={7} at={null} />);
+    render(<PlayerScreen filmId={7} />);
 
     expect(screen.getByText(/no longer in the library/i)).toBeInTheDocument();
   });
@@ -291,37 +254,6 @@ describe('playing a film', () => {
     expect(video().muted).toBe(true);
   });
 
-  it('puts the dialogue beside the film, and takes it away again', async () => {
-    ipc.trackCues.mockResolvedValueOnce([
-      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
-    ]);
-
-    const { video } = open();
-    opens(video(), RUNS);
-
-    expect(await screen.findByRole('complementary', { name: /transcript/i })).toBeInTheDocument();
-
-    await userEvent.keyboard('t');
-    expect(screen.queryByRole('complementary', { name: /transcript/i })).not.toBeInTheDocument();
-
-    await userEvent.keyboard('t');
-    expect(screen.getByRole('complementary', { name: /transcript/i })).toBeInTheDocument();
-  });
-
-  it('goes to a line that is chosen in the transcript', async () => {
-    ipc.trackCues.mockResolvedValueOnce([
-      { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
-      { index: 2, startMs: 600_000, endMs: 604_000, text: 'I rob banks.', position: null },
-    ]);
-
-    const { video } = open();
-    opens(video(), RUNS);
-
-    await userEvent.click(await screen.findByText('I rob banks.'));
-
-    expect(positionOf(video())).toBe(600_000 - LEAD);
-  });
-
   it('lands the arrow keys on dialogue rather than on a fixed ten seconds', async () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
@@ -330,7 +262,7 @@ describe('playing a film', () => {
 
     const { video } = open();
     opens(video(), RUNS);
-    await screen.findByText('I rob banks.');
+    await dialogueArrives();
     reaches(video(), 300_000);
 
     await userEvent.keyboard('{ArrowRight}');
@@ -347,7 +279,7 @@ describe('playing a film', () => {
 
     const { video } = open();
     opens(video(), RUNS);
-    await screen.findByText('I take scores.');
+    await dialogueArrives();
 
     await userEvent.click(screen.getByRole('button', { name: /next line/i }));
     expect(positionOf(video())).toBe(60_000 - LEAD);
@@ -357,9 +289,6 @@ describe('playing a film', () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 1_000, endMs: 4_000, text: 'I take scores.', position: null },
     ]);
-    // Over the picture, which is what this is about. The transcript says the
-    // same line beside it, and would answer for the subtitles if it were here.
-    usePanel.setState({ open: false });
 
     const { video } = open();
     opens(video(), RUNS);
@@ -374,7 +303,6 @@ describe('playing a film', () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 1_000, endMs: 1_250, text: 'Not really.', position: null },
     ]);
-    usePanel.setState({ open: false });
     useSettings.setState({
       settings: { ...DEFAULTS, subtitleLeadInMs: 100, subtitleMinimumMs: 1_000 },
       problem: null,
@@ -404,7 +332,6 @@ describe('playing a film', () => {
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 5_000, endMs: 7_000, text: 'I take scores.', position: null },
     ]);
-    usePanel.setState({ open: false });
     useSettings.setState({
       settings: { ...DEFAULTS, subtitleLeadInMs: 0, subtitleMinimumMs: 0 },
       problem: null,
@@ -446,7 +373,7 @@ describe('playing a film', () => {
     });
     opens(video(), RUNS);
 
-    await screen.findByText('I take scores.');
+    await dialogueArrives();
     expect(ipc.trackCues).toHaveBeenCalledWith(4);
   });
 
@@ -462,7 +389,8 @@ describe('playing a film', () => {
 
     const { video } = open({ tracks });
     opens(video(), RUNS);
-    await screen.findByText('I take scores.');
+    reaches(video(), 2_000);
+    expect(await screen.findByText('I take scores.')).toBeInTheDocument();
 
     ipc.trackCues.mockResolvedValueOnce([
       { index: 1, startMs: 1_000, endMs: 4_000, text: 'Je fais des casses.', position: null },
@@ -472,16 +400,13 @@ describe('playing a film', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /French/ }));
 
     expect(ipc.setFilmTrack).toHaveBeenCalledWith(7, 4);
-    // The transcript beside the film is the same timeline the subtitles are
-    // drawn from, so it following is the same fact said where it can be seen at
-    // a moment the film is not on a line.
-    const transcript = await screen.findByRole('complementary', { name: /transcript/i });
-    expect(await within(transcript).findByText('Je fais des casses.')).toBeInTheDocument();
-    expect(within(transcript).queryByText('I take scores.')).not.toBeInTheDocument();
+    // The same moment of the same film, saying what the other track says there.
+    expect(await screen.findByText('Je fais des casses.')).toBeInTheDocument();
+    expect(screen.queryByText('I take scores.')).not.toBeInTheDocument();
     // The picture was never touched: a different track is a different array of
     // cues and nothing else.
     expect(video().paused).toBe(false);
-    expect(positionOf(video())).toBe(0);
+    expect(positionOf(video())).toBe(2_000);
   });
 
   /*

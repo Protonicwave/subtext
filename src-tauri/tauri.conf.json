@@ -37,7 +37,7 @@
     "targets": "all",
     "category": "Video",
     "shortDescription": "A film player that treats subtitles as data",
-    "longDescription": "Subtext is a local player for your film collection. It parses and indexes the subtitles, which gives you a transcript that follows playback and search across every line of dialogue in your library.",
+    "longDescription": "Subtext is a local player for your film collection. It reads the subtitles beside your films and inside them, lets you choose between them, and can put a mistimed one right by listening to the film.",
     "copyright": "Copyright (c) 2026 Shlok Bhusal",
     "licenseFile": "../LICENSE",
     "icon": [

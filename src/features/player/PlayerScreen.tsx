@@ -1,20 +1,17 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '@/shared/ui/Button';
 import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { nearestFrom, timelineOf } from '@/shared/media/cues';
 import { sourceOf, streamOf } from '@/shared/media/source';
-import { type Moment, useNavigation } from '@/app/routes';
+import { useNavigation } from '@/app/routes';
 import { useFilmAccent, useFilmPalette } from '@/features/library/accent';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
-import { TranscriptPanel } from '@/features/transcript/TranscriptPanel';
-import { usePanel } from '@/features/transcript/usePanel';
 import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
-import { shapeFor } from './density';
 import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
@@ -23,7 +20,7 @@ import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
 import { useKeepPosition } from './useKeepPosition';
-import { type Transport, usePlayback } from './usePlayback';
+import { usePlayback } from './usePlayback';
 import { useShortcuts } from './useShortcuts';
 import { useStepping } from './useStepping';
 import { offsetLabel, useSync } from './useSync';
@@ -45,11 +42,9 @@ import styles from './PlayerScreen.module.css';
 
 interface PlayerScreenProps {
   filmId: Id;
-  /** The moment to open at, where a search result named one. */
-  at: Moment | null;
 }
 
-export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
+export function PlayerScreen({ filmId }: PlayerScreenProps) {
   const film = useLibrary((library) => library.films.find((known) => known.id === filmId));
   const back = useNavigation((navigation) => navigation.back);
 
@@ -78,23 +73,22 @@ export function PlayerScreen({ filmId, at }: PlayerScreenProps) {
     );
   }
 
-  // Keyed by the film, so that opening a second one from search gets a fresh
-  // element and fresh state rather than the last film's position.
-  return <Film key={film.id} film={film} at={at} onBack={back} />;
+  // Keyed by the film, so that opening a second one gets a fresh element and
+  // fresh state rather than the last film's position.
+  return <Film key={film.id} film={film} onBack={back} />;
 }
 
-function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack: () => void }) {
+function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   const screen = useRef<HTMLDivElement>(null);
 
   const settings = useSettings((state) => state.settings);
   // Worked out once, and not again when a setting the player also reads
   // changes: the element has already been told where to start.
-  const [start] = useState(
-    () => at?.ms ?? (settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs)),
+  const [start] = useState(() =>
+    settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs),
   );
 
-  // A film opened from a search result starts at the line that was found; one
-  // opened from the library starts a little before where it was left.
+  // A film starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
   // Which subtitle is being read comes first: the dialogue and the timing
   // controls are both about that track and not about the film.
@@ -118,10 +112,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
   const { visible, wake, hold } = useControls(playback.playing);
   const [fullscreen, toggleFullscreen] = useFullscreen(screen);
 
-  const open = usePanel((panel) => panel.open);
-  const toggleTranscript = usePanel((panel) => panel.toggle);
-  const close = usePanel((panel) => panel.close);
-
   const stepping = useStepping(timeline, transport);
   const [syncing, setSyncing] = useState(false);
   const toggleSync = useCallback(() => {
@@ -141,7 +131,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     setChoosing((showing) => !showing);
   }, []);
 
-  useJumpTo(at, transport);
   useKeepPosition(film.id, playback.positionMs, playback.playing, playback.durationMs);
   useShortcuts({
     transport,
@@ -152,17 +141,8 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
     toggleFullscreen,
     toggleSync,
     toggleTracks,
-    toggleTranscript,
     wake,
   });
-
-  // Worked out once per film and remembered, which is what makes it free to
-  // ask for on every redraw of the control bar.
-  const density = shapeFor(
-    `${String(film.id)}:${String(playback.durationMs)}`,
-    timeline.cues,
-    playback.durationMs,
-  );
 
   const preview = useMemo(
     () => ({
@@ -192,8 +172,7 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
         className={styles.frame}
         // The pointer resting still over a playing film is somebody watching
         // it, and the cursor is as much a thing over the picture as the
-        // controls are. Only over the picture: the transcript beside it is
-        // being read, and neither its cursor nor its scrolling is playback.
+        // controls are.
         data-idle={!visible}
         onPointerMove={wake}
       >
@@ -235,7 +214,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             playback={playback}
             transport={transport}
             stepping={stepping}
-            density={density}
             preview={preview}
             sync={sync}
             alignment={alignment}
@@ -244,11 +222,9 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
             choosing={choosing}
             visible={visible}
             fullscreen={fullscreen}
-            transcript={open}
             onToggleFullscreen={toggleFullscreen}
             onToggleSync={toggleSync}
             onToggleTracks={toggleTracks}
-            onToggleTranscript={toggleTranscript}
             onHold={hold}
           />
         ) : (
@@ -260,34 +236,6 @@ function Film({ film, at, onBack }: { film: FilmView; at: Moment | null; onBack:
           </div>
         )}
       </motion.div>
-
-      {open && (
-        <TranscriptPanel
-          cues={timeline.cues}
-          active={active}
-          onSeek={transport.seekTo}
-          onClose={close}
-        />
-      )}
     </div>
   );
-}
-
-/**
- * Moves a film that is already open to the moment a search result named.
- *
- * Only the ones after the first. The first is where the element was told to
- * load, which is a better way to arrive than loading the beginning and jumping
- * away from it, and seeking to it here would be a seek to where the film
- * already is.
- */
-function useJumpTo(at: Moment | null, transport: Transport) {
-  const jumped = useRef(at?.count ?? null);
-
-  useEffect(() => {
-    if (at === null || at.count === jumped.current) return;
-
-    jumped.current = at.count;
-    transport.seekTo(at.ms);
-  }, [at, transport]);
 }

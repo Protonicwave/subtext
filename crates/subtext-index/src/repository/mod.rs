@@ -9,17 +9,12 @@ mod films;
 mod folders;
 mod positions;
 mod preferences;
-mod query;
-mod search;
 mod tracks;
 
 pub use self::films::Films;
 pub use self::folders::Folders;
 pub use self::positions::Positions;
 pub use self::preferences::Preferences;
-pub use self::search::{
-    CueHit, FilmHits, MATCH_END, MATCH_START, Search, SearchOptions, SearchResults,
-};
 pub use self::tracks::Tracks;
 
 /// The text a path goes into the database as.

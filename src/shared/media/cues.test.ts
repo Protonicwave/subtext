@@ -159,7 +159,7 @@ describe('the awkward cues a real file holds', () => {
   it('answers a frame of a full length film in well under a frame', () => {
     // Two hours of dialogue, looked at once per frame for four minutes of it.
     // The whole point of the binary search is that this is nothing: the
-    // transcript, the subtitles and the frame loop all rest on it.
+    // subtitles and the frame loop both rest on it.
     const many = timelineOf(
       Array.from({ length: 5_000 }, (_, at) => cue(at * 1_400, at * 1_400 + 1_200)),
     );
@@ -174,7 +174,7 @@ describe('the awkward cues a real file holds', () => {
   });
 
   it('finds a line at any point in a full length film', () => {
-    // Two hours of dialogue, which is the size the search has to hold up at.
+    // Two hours of dialogue, which is the size the lookup has to hold up at.
     const many = timelineOf(
       Array.from({ length: 5_000 }, (_, at) =>
         cue(at * 1_400, at * 1_400 + 1_200, `line ${String(at)}`),

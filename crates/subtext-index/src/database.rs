@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 use crate::migrate;
 use crate::pool::Pool;
-use crate::repository::{Films, Folders, Positions, Preferences, Search, Tracks};
+use crate::repository::{Films, Folders, Positions, Preferences, Tracks};
 
 /// One SQLite file holding everything Subtext knows.
 ///
@@ -27,12 +27,6 @@ impl Database {
             pool: Arc::new(Pool::new(PathBuf::from(path.as_ref()))),
         };
         database.pool.with(migrate::apply)?;
-
-        // A scan that was interrupted left the search index behind the cues it
-        // is meant to describe. Nothing may search it until that is put right.
-        if database.bulk_ingest_was_interrupted()? {
-            database.rebuild_search_index()?;
-        }
 
         Ok(database)
     }
@@ -71,60 +65,6 @@ impl Database {
     #[must_use]
     pub fn preferences(&self) -> Preferences<'_> {
         Preferences::new(self)
-    }
-
-    /// Dialogue search across the whole library.
-    #[must_use]
-    pub fn search(&self) -> Search<'_> {
-        Search::new(self)
-    }
-
-    /// Runs a large ingest with the search index built once at the end.
-    ///
-    /// Keeping the index in step cue by cue is right for a film being added to
-    /// a library that is already there, and wrong for the first scan of a
-    /// thousand of them: building the index in one pass is roughly ten times
-    /// faster than feeding a million cues through it one at a time.
-    ///
-    /// The index is rebuilt whether the work succeeded or not, so a scan that
-    /// gave up half way still leaves the index describing what was written.
-    /// Calls do not nest.
-    pub fn bulk_ingest<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
-        self.set_bulk(true)?;
-        let outcome = work();
-        self.rebuild_search_index()?;
-        outcome
-    }
-
-    /// Builds the search index again from the cues, and puts the database back
-    /// into keeping it in step.
-    ///
-    /// Also what the rebuild button in the settings does.
-    pub fn rebuild_search_index(&self) -> Result<()> {
-        self.with(|connection| {
-            connection.execute_batch(
-                "INSERT INTO cue_search (cue_search) VALUES ('rebuild');
-                 UPDATE index_state SET bulk = 0 WHERE id = 0;",
-            )?;
-            Ok(())
-        })
-    }
-
-    fn bulk_ingest_was_interrupted(&self) -> Result<bool> {
-        self.with(|connection| {
-            let bulk: i64 =
-                connection.query_row("SELECT bulk FROM index_state WHERE id = 0", [], |row| {
-                    row.get(0)
-                })?;
-            Ok(bulk != 0)
-        })
-    }
-
-    fn set_bulk(&self, bulk: bool) -> Result<()> {
-        self.with(|connection| {
-            connection.execute("UPDATE index_state SET bulk = ?1 WHERE id = 0", [bulk])?;
-            Ok(())
-        })
     }
 
     /// Hands one piece of work a connection.

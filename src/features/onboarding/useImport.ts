@@ -31,8 +31,8 @@ interface ImportState {
   chooseFolder: () => Promise<void>;
   /** Adds folders that were dropped on the window. */
   addDropped: (paths: string[]) => Promise<void>;
-  /** Builds the search index again and reads every folder afresh. */
-  rebuild: () => Promise<void>;
+  /** Reads every watched folder afresh. */
+  reread: () => Promise<void>;
   saw: (progress: ScanProgressed) => void;
   finished: (summaries: ScanSummary[]) => void;
   failed: (message: string) => void;
@@ -72,14 +72,14 @@ export const useImport = create<ImportState>((set, get) => ({
   },
 
   /*
-   * A rebuild is a scan of everything, so it says where it has got to the same
-   * way and ends in the same summary. Asked for, and therefore shown: somebody
+   * A scan of everything, so it says where it has got to the same way an import
+   * does and ends in the same summary. Asked for, and therefore shown: somebody
    * who pressed the button is waiting to hear that it worked.
    */
-  rebuild: async () => {
+  reread: async () => {
     set({ stage: 'indexing', asked: true, problem: null, progress: null, summaries: [] });
     try {
-      await ipc.rebuildIndex();
+      await ipc.rescan();
     } catch (failure) {
       set({ problem: reasonFor(failure), stage: 'idle', asked: false });
     }
