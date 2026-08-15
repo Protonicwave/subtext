@@ -38,6 +38,32 @@ enum Claim {
     Fixed,
 }
 
+/// Where one film's cover comes from, which is the only place that is decided.
+///
+/// Three answers, tried in order. The artwork the film carries inside it wins,
+/// then the picture somebody put beside it, and then nothing, which leaves a
+/// frame taken from the film itself as the only answer left. The first two were
+/// chosen by a person and the third is a guess, which is the whole reason for
+/// the order.
+///
+/// Whether a film carries its own artwork is known only when the film was
+/// opened during this scan. A film that has not changed is not opened again, so
+/// what the row already said stands: it was read from the same file and the
+/// file is still the same one.
+pub(crate) fn decide(
+    film: &Path,
+    opened: Option<bool>,
+    recorded: Option<&Path>,
+    beside: Option<&Path>,
+) -> Option<PathBuf> {
+    let carries_its_own = opened.unwrap_or_else(|| recorded == Some(film));
+
+    if carries_its_own {
+        return Some(film.to_path_buf());
+    }
+    beside.map(Path::to_path_buf)
+}
+
 /// The cover beside each film, in the order the films were given.
 ///
 /// The names are the films' parsed names, which the pairing has already worked
@@ -142,11 +168,11 @@ fn films_per_folder(films: &[FoundFile]) -> HashMap<&Path, usize> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use subtext_core::ParsedName;
 
-    use super::{beside, without_suffix};
+    use super::{beside, decide, without_suffix};
     use crate::walk::FoundFile;
 
     fn file(path: &str) -> FoundFile {
@@ -177,6 +203,52 @@ mod tests {
             .into_iter()
             .map(|found| found.map(|path| path.display().to_string()))
             .collect()
+    }
+
+    /// Every level of the order, on one film that has all three answers
+    /// available to it.
+    #[test]
+    fn the_artwork_a_film_carries_comes_before_anything_beside_it() {
+        let film = Path::new("/films/Heat.1995.mkv");
+        let beside = Path::new("/films/Heat.1995.jpg");
+
+        // Carries its own, so the picture beside it is not reached.
+        assert_eq!(
+            decide(film, Some(true), None, Some(beside)),
+            Some(film.to_path_buf())
+        );
+        // Carries none, so the picture beside it is the cover.
+        assert_eq!(
+            decide(film, Some(false), None, Some(beside)),
+            Some(beside.to_path_buf())
+        );
+        // Neither, which leaves a frame from the film as the only answer.
+        assert_eq!(decide(film, Some(false), None, None), None);
+    }
+
+    /// The film that was not opened this time, which is almost every film in
+    /// almost every scan.
+    #[test]
+    fn a_film_nobody_opened_keeps_what_was_recorded_about_it() {
+        let film = Path::new("/films/Heat.1995.mkv");
+        let beside = Path::new("/films/Heat.1995.jpg");
+
+        // The row says the artwork is inside the film, and the film has not
+        // changed since it was read, so it still is.
+        assert_eq!(
+            decide(film, None, Some(film), Some(beside)),
+            Some(film.to_path_buf())
+        );
+
+        // The row says there was nothing, and a picture has appeared beside it
+        // since, which is a change the scan is entitled to act on.
+        assert_eq!(
+            decide(film, None, None, Some(beside)),
+            Some(beside.to_path_buf())
+        );
+
+        // The picture that was beside it has gone, and nothing takes its place.
+        assert_eq!(decide(film, None, Some(beside), None), None);
     }
 
     #[test]
