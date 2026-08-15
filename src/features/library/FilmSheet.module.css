@@ -1,0 +1,390 @@
+/*
+ * A film's page, over the library rather than instead of it.
+ *
+ * The technical block below is deliberately the densest thing in the
+ * application: it is a reference rather than a headline, so it is set small, in
+ * the mono face, with the values aligned down one edge where they can be read
+ * against each other.
+ */
+
+.over {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--colour-bg) 62%, transparent);
+  backdrop-filter: blur(6px);
+  animation: fade var(--duration-quick) var(--ease-out);
+}
+
+.sheet {
+  position: absolute;
+  inset: var(--space-10) auto var(--space-10) 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  width: min(940px, calc(100vw - var(--space-16)));
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-xl);
+  background: var(--colour-surface);
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+  animation: rise var(--duration-settle) var(--ease-out);
+}
+
+.sheet:focus {
+  outline: none;
+}
+
+.scroll {
+  overflow-y: auto;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Only the panel's own arrival. The cover travels from the tile it was clicked
+   on, which is a layout animation and not this. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+/* The film's own frame, behind its own page. Two scrims: one seating the type
+   at the bottom, one keeping the right of the picture open. */
+.top {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+  min-height: 280px;
+  padding: var(--space-8);
+}
+
+.art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--colour-surface) 6%,
+    color-mix(in oklab, var(--colour-surface) 55%, transparent) 60%,
+    transparent
+  );
+}
+
+.still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 132px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow:
+    var(--shadow-raised),
+    inset 0 0 0 1px color-mix(in oklab, #fff 10%, transparent);
+}
+
+.head {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.sub {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--colour-text-dim);
+}
+
+.resume {
+  max-width: 320px;
+  margin-top: var(--space-4);
+}
+
+.bar {
+  display: block;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--colour-line-strong);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--film-accent);
+}
+
+.resume small {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/* A film whose drive is unplugged. Not an error: the film is still in the
+   library and where it was stopped is still on it. */
+.gone {
+  max-width: 44ch;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-faint);
+}
+
+.close {
+  position: absolute;
+  z-index: 2;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--colour-bg) 70%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--colour-text-dim);
+  cursor: pointer;
+  transition:
+    background var(--duration-instant) var(--ease-out),
+    color var(--duration-instant) var(--ease-out);
+}
+
+.close:hover {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--space-10);
+  padding: var(--space-8);
+  border-top: 1px solid var(--colour-line);
+}
+
+/* One column under this width, where two would leave the facts too narrow to
+   keep a path and its label on one line. */
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+    gap: var(--space-8);
+  }
+}
+
+.block {
+  min-width: 0;
+}
+
+.heading {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--colour-line);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--colour-text-faint);
+}
+
+.second {
+  margin-top: var(--space-6);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+/* Label left, value right, on one baseline. The values are in the mono face so
+   that the figures line up down the column whatever they are. */
+.fact {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-6);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.fact dt {
+  color: var(--colour-text-faint);
+}
+
+.fact dd {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cut from the left, so what survives is the file name rather than the drive. */
+.path {
+  direction: rtl;
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--colour-line) 55%, transparent);
+  font-size: var(--text-xs);
+}
+
+.track:last-of-type {
+  border-bottom: 0;
+}
+
+.lang {
+  flex: none;
+  width: 30px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  color: var(--colour-text-faint);
+}
+
+.what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--colour-text-dim);
+}
+
+.none {
+  padding: var(--space-2) 0;
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.tag {
+  flex: none;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-full);
+  font-size: 9.5px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--colour-text-faint);
+}
+
+/* A track of pictures. Something to know rather than something wrong, so it is
+   the amber the import sheet uses and not an error colour. */
+.warn {
+  color: var(--colour-attention);
+  border-color: color-mix(in oklab, var(--colour-attention) 35%, transparent);
+}
+
+/*
+ * The offer to line the subtitles up by listening to the film. In the film's
+ * own colour, because it is the one thing on this page that does something to
+ * the film rather than describing it.
+ */
+.align {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--film-accent) 22%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--film-accent) 7%, transparent);
+}
+
+.offerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--colour-text);
+}
+
+.offerTitle svg {
+  color: var(--film-accent);
+}
+
+.offer {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--colour-text-dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.working {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--colour-text-dim);
+}
+
+.progress {
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--colour-line-strong);
+  overflow: hidden;
+}
+
+/* Scaled rather than sized, so that a reading which reports itself two hundred
+   times over a film does not lay the bar out again on each of them. */
+.done {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--film-accent);
+  transform-origin: left;
+  scale: 0 1;
+  transition: scale var(--duration-quick) var(--ease-out);
+}

@@ -4,8 +4,10 @@ import { useAppearance } from '@/shared/settings/appearance';
 import { useSettings } from '@/shared/settings/useSettings';
 import { useChrome } from '@/shared/window/chrome';
 import { CloseIcon } from '@/shared/ui/Icon';
+import { FilmSheet } from '@/features/library/FilmSheet';
 import { LibraryScreen } from '@/features/library/LibraryScreen';
 import { useLibrary } from '@/features/library/useLibrary';
+import { useSheet } from '@/features/library/useSheet';
 import { PlayerScreen } from '@/features/player/PlayerScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 import { DropZone } from '@/features/onboarding/DropZone';
@@ -31,6 +33,7 @@ export function App() {
   const settingsProblem = useSettings((state) => state.problem);
   const clearSettingsProblem = useSettings((state) => state.clearProblem);
   const motion = useSettings((state) => state.settings.motion);
+  const sheetOpen = useSheet((sheet) => sheet.filmId !== null);
 
   useEffect(() => {
     void refresh();
@@ -66,7 +69,15 @@ export function App() {
     <MotionConfig reducedMotion={motion === 'reduced' ? 'always' : 'user'}>
       <TitleBar />
 
-      <main className={styles.stage}>
+      {/*
+       * Nothing behind an open sheet is reachable while it is open, which is
+       * what a modal panel means and what the platform's own dialog element
+       * would have given. The sheet is not one: the cover travelling from the
+       * tile it was opened from is a layout animation, and an element in the
+       * top layer is measured against a different origin than the tile it is
+       * flying from.
+       */}
+      <main className={styles.stage} inert={sheetOpen}>
         {route.screen === 'library' && <LibraryScreen />}
         {route.screen === 'settings' && <SettingsScreen />}
         {route.screen === 'player' && <PlayerScreen filmId={route.filmId} />}
@@ -88,6 +99,7 @@ export function App() {
         </p>
       )}
 
+      <FilmSheet />
       <ShortcutSheet />
       <ImportFlow />
       <DropZone />
