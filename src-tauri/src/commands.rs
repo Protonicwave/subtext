@@ -246,13 +246,18 @@ pub(crate) async fn save_position(
         .map_err(Failure::of)
 }
 
-/// The films with no frame captured from them yet.
+/// The films with no poster drawn for them yet.
 ///
 /// A poster is wanted when the film has none, when the file it names is not
-/// there any more, and when the film's own file has changed since the frame was
-/// taken. The last of those needs nothing stored to compare against: the name a
-/// poster is filed under is derived from the film's path and modification time,
-/// so a film whose row names a different file is a film whose frame is stale.
+/// there any more, when the film's own file has changed since it was drawn, and
+/// when the cover it was drawn from is no longer where the cover comes from.
+/// None of those needs anything stored to compare against: the name a poster is
+/// filed under is derived from all three, so a film whose row names a different
+/// file is a film whose poster is stale.
+///
+/// Each film also says whether there is an image to draw it from. Where there
+/// is, the front end asks for those bytes; where there is not, it opens the
+/// film and takes a frame, which is the expensive answer and the last one.
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn posters_wanted(app: AppHandle) -> Answer<Vec<PosterWanted>> {
@@ -271,26 +276,70 @@ pub(crate) async fn posters_wanted(app: AppHandle) -> Answer<Vec<PosterWanted>> 
         // those as missing rather than waiting for a frame that never comes.
         .filter(|film| !film.is_missing())
         .filter(|film| {
-            let wanted = directory.join(posters::file_name(&film.path, film.modified_at));
+            let wanted = directory.join(posters::file_name(
+                &film.path,
+                film.modified_at,
+                film.cover_path.as_deref(),
+            ));
             film.poster_path.as_deref() != Some(wanted.as_path()) || !wanted.is_file()
         })
         .map(|film| PosterWanted {
             id: Id::of(film.id),
             path: film.path.display().to_string(),
+            cover: film.cover_path.is_some(),
         })
         .collect())
 }
 
-/// Records the frame captured from a film, and what was learnt taking it.
+/// The cover image a film's poster is to be drawn from.
+///
+/// One command whichever of the two sources it came from, so the front end has
+/// one thing to do with an image and no idea where it was: the scan settled
+/// that, and the row says so. What comes back is a picture as it sits on the
+/// disk, tens of kilobytes of it, which the same worker crops, encodes and
+/// takes the colours from as it does a frame.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn cover_image(app: AppHandle, film_id: Id) -> Answer<Vec<u8>> {
+    // Reading a file, on a thread that is not the one answering commands.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let film = state
+            .scanner()
+            .database()
+            .films()
+            .by_id(film_id.get())
+            .map_err(Failure::of)?
+            .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+
+        let cover = film
+            .cover_path
+            .ok_or_else(|| Failure::saying("that film has no cover to read"))?;
+
+        // The film's own path says the image is attached inside it, which is
+        // what the scan wrote when it found one there.
+        if cover == film.path {
+            return subtext_container::cover_image(&cover)
+                .map_err(Failure::of)?
+                .ok_or_else(|| Failure::saying("that film no longer carries a cover"));
+        }
+        std::fs::read(&cover).map_err(Failure::of)
+    })
+    .await
+    .map_err(|_| Failure::saying("the cover could not be read"))?
+}
+
+/// Records the poster drawn for a film, and what was learnt drawing it.
 ///
 /// The encoding and the colours are the front end's work, because the frame is
 /// already decoded there and sending four megabytes of pixels across to have
 /// them squeezed here would cost more than it saved. What arrives is a WebP of
 /// a few tens of kilobytes.
 ///
-/// The running time comes with it: opening the file is the only way to find out
-/// how long a film is, and the capture has just done that. Without it a partly
-/// watched film has a position and no fraction to draw it as.
+/// The running time comes with it where there is one: opening the file is the
+/// only way to find out how long a film is, and a capture has just done that.
+/// A poster drawn from a cover image says nothing about it, since nothing
+/// opened the film, and the player fills it in the first time anybody watches.
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn save_poster(
@@ -315,7 +364,11 @@ pub(crate) async fn save_poster(
             .map_err(Failure::of)?
             .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
-        let poster = directory.join(posters::file_name(&film.path, film.modified_at));
+        let poster = directory.join(posters::file_name(
+            &film.path,
+            film.modified_at,
+            film.cover_path.as_deref(),
+        ));
         std::fs::write(&poster, &image).map_err(Failure::of)?;
 
         // The frame taken from the file this film used to be is of no use to

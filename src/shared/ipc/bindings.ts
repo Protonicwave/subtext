@@ -149,26 +149,42 @@ export const commands = {
 	 */
 	savePosition: (filmId: Id, positionMs: number, durationMs: number | null, finished: boolean) => typedError<null, Failure>(__TAURI_INVOKE("save_position", { filmId, positionMs, durationMs, finished })),
 	/**
-	 *  The films with no frame captured from them yet.
+	 *  The films with no poster drawn for them yet.
 	 * 
 	 *  A poster is wanted when the film has none, when the file it names is not
-	 *  there any more, and when the film's own file has changed since the frame was
-	 *  taken. The last of those needs nothing stored to compare against: the name a
-	 *  poster is filed under is derived from the film's path and modification time,
-	 *  so a film whose row names a different file is a film whose frame is stale.
+	 *  there any more, when the film's own file has changed since it was drawn, and
+	 *  when the cover it was drawn from is no longer where the cover comes from.
+	 *  None of those needs anything stored to compare against: the name a poster is
+	 *  filed under is derived from all three, so a film whose row names a different
+	 *  file is a film whose poster is stale.
+	 * 
+	 *  Each film also says whether there is an image to draw it from. Where there
+	 *  is, the front end asks for those bytes; where there is not, it opens the
+	 *  film and takes a frame, which is the expensive answer and the last one.
 	 */
 	postersWanted: () => typedError<PosterWanted[], Failure>(__TAURI_INVOKE("posters_wanted")),
 	/**
-	 *  Records the frame captured from a film, and what was learnt taking it.
+	 *  The cover image a film's poster is to be drawn from.
+	 * 
+	 *  One command whichever of the two sources it came from, so the front end has
+	 *  one thing to do with an image and no idea where it was: the scan settled
+	 *  that, and the row says so. What comes back is a picture as it sits on the
+	 *  disk, tens of kilobytes of it, which the same worker crops, encodes and
+	 *  takes the colours from as it does a frame.
+	 */
+	coverImage: (filmId: Id) => typedError<number[], Failure>(__TAURI_INVOKE("cover_image", { filmId })),
+	/**
+	 *  Records the poster drawn for a film, and what was learnt drawing it.
 	 * 
 	 *  The encoding and the colours are the front end's work, because the frame is
 	 *  already decoded there and sending four megabytes of pixels across to have
 	 *  them squeezed here would cost more than it saved. What arrives is a WebP of
 	 *  a few tens of kilobytes.
 	 * 
-	 *  The running time comes with it: opening the file is the only way to find out
-	 *  how long a film is, and the capture has just done that. Without it a partly
-	 *  watched film has a position and no fraction to draw it as.
+	 *  The running time comes with it where there is one: opening the file is the
+	 *  only way to find out how long a film is, and a capture has just done that.
+	 *  A poster drawn from a cover image says nothing about it, since nothing
+	 *  opened the film, and the player fills it in the first time anybody watches.
 	 */
 	savePoster: (filmId: Id, image: number[], accent: {
 	/**  The colour the film's glow and its accent are drawn in. */
@@ -458,10 +474,16 @@ export type PositionView = {
 	progress: number | null,
 };
 
-/**  A film with no frame captured from it yet. */
+/**  A film with no poster drawn for it yet. */
 export type PosterWanted = {
 	id: Id,
 	path: string,
+	/**
+	 *  Whether there is an image on the disk to draw it from, either inside the
+	 *  film or beside it. Where there is not, a frame has to be taken from the
+	 *  picture, which means opening the film and decoding it.
+	 */
+	cover: boolean,
 };
 
 /**

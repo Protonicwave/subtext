@@ -23,27 +23,32 @@ pub(crate) fn directory<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Failu
 
 /// What a film's poster is called.
 ///
-/// Keyed by the path and the modification time together, so that replacing a
-/// file with a different cut of the same film asks for a new frame rather than
-/// showing the frame from the old one for ever. A film whose row still names a
+/// Keyed by the path, the modification time and where the cover came from, so
+/// that replacing a file with a different cut of the same film asks for a new
+/// poster rather than showing the old one for ever, and so does putting a
+/// picture beside a film that had none. A film whose row still names a
 /// different file is a film with no poster, which is how a stale one is noticed
 /// without storing anything else to compare.
-pub(crate) fn file_name(path: &Path, modified_at: i64) -> String {
-    format!("{:016x}.webp", key(path, modified_at))
+pub(crate) fn file_name(path: &Path, modified_at: i64, cover: Option<&Path>) -> String {
+    format!("{:016x}.webp", key(path, modified_at, cover))
 }
 
-/// FNV-1a, over the path and the modification time.
+/// FNV-1a, over the path, the modification time and the cover.
 ///
 /// Written out rather than taken from the standard library because
 /// `DefaultHasher` makes no promise that two releases of Rust hash the same
 /// bytes to the same value, and every cached poster in the application would be
 /// orphaned by an upgrade that changed it. Collisions cost one film the wrong
 /// frame until its file changes, which is why this is a hash and not a digest.
-fn key(path: &Path, modified_at: i64) -> u64 {
+fn key(path: &Path, modified_at: i64, cover: Option<&Path>) -> u64 {
     const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 
     let hash = eaten(OFFSET, path.as_os_str().as_encoded_bytes());
-    eaten(hash, &modified_at.to_le_bytes())
+    let hash = eaten(hash, &modified_at.to_le_bytes());
+    match cover {
+        Some(cover) => eaten(hash, cover.as_os_str().as_encoded_bytes()),
+        None => hash,
+    }
 }
 
 fn eaten(mut hash: u64, bytes: &[u8]) -> u64 {
@@ -68,7 +73,7 @@ mod tests {
 
     #[test]
     fn a_name_is_hexadecimal_and_a_webp() {
-        let name = file_name(Path::new("/films/Heat.1995.mkv"), 1_700_000_000_000);
+        let name = file_name(Path::new("/films/Heat.1995.mkv"), 1_700_000_000_000, None);
 
         let digits = name
             .strip_suffix(".webp")
@@ -82,17 +87,35 @@ mod tests {
     fn the_same_file_is_always_the_same_name() {
         let path = Path::new("/films/Heat.1995.mkv");
 
-        assert_eq!(file_name(path, 12), file_name(path, 12));
+        assert_eq!(file_name(path, 12, None), file_name(path, 12, None));
     }
 
     #[test]
     fn a_file_that_changed_asks_for_a_new_frame() {
         let path = Path::new("/films/Heat.1995.mkv");
 
-        assert_ne!(file_name(path, 12), file_name(path, 13));
+        assert_ne!(file_name(path, 12, None), file_name(path, 13, None));
         assert_ne!(
-            file_name(path, 12),
-            file_name(Path::new("/films/Ronin.mkv"), 12)
+            file_name(path, 12, None),
+            file_name(Path::new("/films/Ronin.mkv"), 12, None)
+        );
+    }
+
+    #[test]
+    fn a_cover_that_appeared_asks_for_a_new_poster() {
+        let path = Path::new("/films/Heat.1995.mkv");
+        let beside = Path::new("/films/Heat.1995.jpg");
+
+        // A picture put beside a film that had none, which is a better poster
+        // than the frame already cached under the old name.
+        assert_ne!(file_name(path, 12, None), file_name(path, 12, Some(beside)));
+        assert_ne!(
+            file_name(path, 12, Some(path)),
+            file_name(path, 12, Some(beside))
+        );
+        assert_eq!(
+            file_name(path, 12, Some(beside)),
+            file_name(path, 12, Some(beside))
         );
     }
 }

@@ -489,12 +489,16 @@ pub(crate) struct PreferenceView {
     pub(crate) value: String,
 }
 
-/// A film with no frame captured from it yet.
+/// A film with no poster drawn for it yet.
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PosterWanted {
     pub(crate) id: Id,
     pub(crate) path: String,
+    /// Whether there is an image on the disk to draw it from, either inside the
+    /// film or beside it. Where there is not, a frame has to be taken from the
+    /// picture, which means opening the film and decoding it.
+    pub(crate) cover: bool,
 }
 
 /// Where a film was left.

@@ -1,23 +1,24 @@
 import { useEffect } from 'react';
-import type { FilmView, Id } from '@/shared/ipc/bindings';
+import type { FilmView, Id, PosterWanted } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { streamOf } from '@/shared/media/source';
-import { captureFrom } from './capture';
+import { captureFrom, posterFrom } from './capture';
 import { keyFor, useFrames } from './frames';
 import { useLibrary } from './useLibrary';
 
 /**
- * Taking the frames the library draws itself with.
+ * Drawing the pictures the library shows itself with.
  *
  * Background work in the ordinary sense: one film at a time, yielding to the
  * window between each, and never anything a person is waiting for. A folder
  * that has just been added shows its tiles straight away and they take on their
- * frames over the following minute.
+ * pictures over the following minute.
  *
- * Two kinds of frame come from the same loop because they want the same things:
- * a decoder, a worker, and to be the only capture running. The posters are
- * cached to disk and the back end says which are wanted; the frames for the
- * continue watching row are held in memory for as long as the window is open.
+ * Everything here comes from the same loop because it all wants the same
+ * things: a worker, a decoder for the films that need one, and to be the only
+ * one running. The posters are cached to disk and the back end says which are
+ * wanted and where each of them comes from; the frames for the continue
+ * watching row are held in memory for as long as the window is open.
  */
 
 /**
@@ -57,7 +58,7 @@ async function run(worker: Worker, signal: AbortSignal) {
   }
 }
 
-/** The films with no frame cached, or whose file has changed since it was taken. */
+/** The films with no poster cached, or whose poster is no longer the right one. */
 async function posters(worker: Worker, signal: AbortSignal) {
   let wanted;
   try {
@@ -75,15 +76,34 @@ async function posters(worker: Worker, signal: AbortSignal) {
     await idle();
 
     try {
-      const { image, accent, durationMs } = await captureFrom(streamOf(film.path), worker);
-      const updated = await ipc.savePoster(film.id, [...new Uint8Array(image)], accent, durationMs);
+      const drawn = await drawnFrom(film, worker);
+      const updated = await ipc.savePoster(
+        film.id,
+        [...new Uint8Array(drawn.image)],
+        drawn.accent,
+        drawn.durationMs,
+      );
       useLibrary.getState().replace(updated);
     } catch {
       // A film that cannot be opened, decoded or written is a film with a
-      // generated tile, which is a complete answer rather than a failure.
+      // composed tile, which is a complete answer rather than a failure.
       refused.add(film.id);
     }
   }
+}
+
+/**
+ * The image a film's poster is made from.
+ *
+ * Which of the two it is was decided during the scan and is on the film's row;
+ * all that is left here is to fetch an image or to open the film. The second is
+ * far more expensive, which is why it is only reached when there was no image.
+ */
+async function drawnFrom(film: PosterWanted, worker: Worker) {
+  if (!film.cover) return captureFrom(streamOf(film.path), worker);
+
+  const bytes = await ipc.coverImage(film.id);
+  return posterFrom(new Uint8Array(bytes), worker);
 }
 
 /** A frame from where each partly watched film was left. */
