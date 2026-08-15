@@ -39,6 +39,7 @@ function film(tracks: TrackView[], changes: Partial<FilmView> = {}): FilmView {
     id: 7,
     folderId: 1,
     path: '/films/Heat.1995.mkv',
+    shelf: { name: 'films', path: '/films' },
     title: 'Heat',
     year: 1995,
     durationMs: null,
