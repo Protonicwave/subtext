@@ -58,7 +58,7 @@ impl<'a> Tracks<'a> {
     /// Together matters. A scan that is interrupted half way through must not
     /// leave a track row claiming a file has been read when its cues were never
     /// written: the next scan would see a fingerprint that matches, skip the
-    /// file, and the film would have a transcript of nothing. Either both are
+    /// file, and the film would have no dialogue at all. Either both are
     /// there or neither is.
     pub fn write_batch(&self, entries: &[(NewTrack<'_>, &[Cue])]) -> Result<Vec<Stored>> {
         if entries.is_empty() {
@@ -109,7 +109,7 @@ impl<'a> Tracks<'a> {
                     // only looked inside when it is new or has been replaced,
                     // so there is nothing to save by comparing, and a row that
                     // was recorded before there was any reading of dialogue
-                    // would otherwise keep its empty transcript for ever.
+                    // would otherwise stay empty for ever.
                     replace_cues_on(&transaction, stored.id, cues)?;
                     written += 1;
                 }
@@ -147,8 +147,7 @@ impl<'a> Tracks<'a> {
         })
     }
 
-    /// The cues of a track in playback order, as the player and the transcript
-    /// want them.
+    /// The cues of a track in playback order, as the player wants them.
     ///
     /// Corrected on the way out. This is the point at which an authored timing
     /// becomes a playback timing, so nothing above here ever sees the other
@@ -282,7 +281,7 @@ impl<'a> Tracks<'a> {
         })
     }
 
-    /// Removes a track and its cues, taking them out of the search index too.
+    /// Removes a track, and the cues under it with it.
     pub fn remove(&self, id: i64) -> Result<bool> {
         self.database.with(|connection| {
             let removed = connection.execute("DELETE FROM subtitle_track WHERE id = ?1", [id])?;

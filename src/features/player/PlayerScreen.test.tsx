@@ -170,7 +170,6 @@ describe('playing a film', () => {
     expect(positionOf(video())).toBe(595_000);
   });
 
-
   it('writes down where it got to on the way out', async () => {
     const { view, video } = open();
     opens(video(), RUNS);

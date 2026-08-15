@@ -1,18 +1,17 @@
 # Subtext
 
 <!--
-  The demo belongs here, above everything else: Ctrl+K, a line of dialogue
-  typed, and the film opening at that moment. Record it and add it as
+  The demo belongs here, above everything else. Record it and add it as
   docs/demo.gif before tagging a release.
 -->
 
-A desktop player for your film collection that treats subtitles as data rather than as pixels painted over the video.
+A desktop player for your film collection that reads subtitles as data rather than painting them over the picture.
 
-Most players draw a subtitle file over the picture and forget it. Subtext parses every line once and indexes it, which gives you three things that follow from that one decision:
+Most players hand a subtitle file to the video element and forget it. Subtext parses every line itself, which is what the rest of this follows from:
 
-- **A transcript beside the film** that follows playback. Click any line to seek to it. Select a passage and copy it with its timecodes.
-- **Search across every line of dialogue in your library.** Ctrl+K, type a half remembered line, and open the film at the second it is spoken.
-- **A scrubber that shows where the dialogue is**, so quiet stretches read as valleys, and arrow keys that land on the start of a line rather than an arbitrary ten seconds back.
+- **Every subtitle a film has**, whether it sits beside the file or inside it, named by language and chosen between with one key.
+- **A subtitle that does not match its film, put right.** Nudge it by ear while you watch, or press A and let Subtext listen to the film and work the offset out for you.
+- **Arrow keys that land on the start of a line** rather than an arbitrary ten seconds back, with lines that go up a little before they are spoken and stay up long enough to read.
 
 Nothing is uploaded. No file is copied, moved or written beside your films. Subtext watches folders that already exist on your disk, and a film that goes missing keeps its playback position until it comes back.
 
@@ -28,7 +27,7 @@ Subtext reads subtitles from two places, and a film can have them in both.
 
 **Files beside the film.** An SRT next to `Heat.1995.1080p.BluRay.mkv` is paired to it by name, with the resolution, source, codec, release group and language suffixes stripped from both before they are compared. Every file that matches is kept, not only the first one found.
 
-**Tracks inside the film.** Matroska files, which is what `.mkv` and `.webm` are, often carry their subtitles in the container. Subtext reads the text tracks straight out of them, so a film with nothing beside it still gets a transcript, a dialogue scrubber and a place in your search results. Only the parts of the file that hold subtitles are read, nothing is extracted to a new file, and nothing is written back to your film.
+**Tracks inside the film.** Matroska files, which is what `.mkv` and `.webm` are, often carry their subtitles in the container. Subtext reads the text tracks straight out of them, so a film with nothing beside it still has its dialogue. Only the parts of the file that hold subtitles are read, nothing is extracted to a new file, and nothing is written back to your film.
 
 MP4 files are not read this way. They can carry timed text, but do so rarely enough that a second reader for them is not worth writing. An MP4 needs an SRT beside it.
 
@@ -46,7 +45,7 @@ Some subtitles in a Matroska file are pictures rather than text: PGS on a Blu-ra
 
 A file that came from somewhere else says nothing about which encode it was timed against, so it can run early or late. While watching, `[` and `]` move it fifty milliseconds at a time and show the current offset over the picture, which is the fastest way to find the right value by ear. S opens the timing panel, which has the same nudges plus the framerate conversions that make a subtitle drift further out as the film goes on rather than being wrong by a fixed amount.
 
-The correction is saved against that track and applied everywhere afterwards, including the transcript and the second a search result opens the film at. A track from inside the film needs none of this: it was timed against those exact frames by whoever made the file.
+The correction is saved against that track and applied every time its dialogue is read afterwards. A track from inside the film needs none of this: it was timed against those exact frames by whoever made the file.
 
 Two settings apply to every subtitle whatever it came from. A lead-in puts a line on screen slightly before it is spoken, and a minimum time on screen keeps a short line up long enough to be read. Both are what broadcast subtitling does and what a file timed to the first syllable does not, and both can be set to zero if you would rather have the file exactly as written.
 
@@ -99,7 +98,7 @@ CI runs all of these on Windows, macOS and Linux.
 | -------------------------- | --------------------------------------------------------- |
 | `crates/subtext-core`      | Domain types, subtitle parsing, filename pairing. No I/O. |
 | `crates/subtext-container` | Reading the subtitle tracks inside a film file.           |
-| `crates/subtext-index`     | SQLite persistence, full text search, migrations.         |
+| `crates/subtext-index`     | SQLite persistence, migrations, repositories.             |
 | `crates/subtext-scan`      | Filesystem walking, watching, the ingest pipeline.        |
 | `crates/subtext-align`     | Lining two activity signals up. No files, no audio.       |
 | `crates/subtext-speech`    | Decoding a film's audio to say where the talking is.      |

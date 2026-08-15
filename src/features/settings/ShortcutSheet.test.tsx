@@ -31,15 +31,15 @@ describe('the keys card', () => {
   it('leaves a question mark typed into a field alone', async () => {
     render(
       <>
-        <input aria-label="Search" />
+        <input aria-label="A field" />
         <ShortcutSheet />
       </>,
     );
 
-    await userEvent.click(screen.getByRole('textbox', { name: 'Search' }));
+    await userEvent.click(screen.getByRole('textbox', { name: 'A field' }));
     await userEvent.keyboard('?');
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue('?');
+    expect(screen.getByRole('textbox', { name: 'A field' })).toHaveValue('?');
   });
 });

@@ -4,7 +4,7 @@ import type { CueView } from '@/shared/ipc/bindings';
  * Which line of dialogue is on screen, and which ones are either side of it.
  *
  * Every question here is answered against the same sorted array by the same
- * binary search, which is what lets the transcript, the subtitles and the
+ * binary search, which is what lets the subtitles and the
  * scrubber all ask about a moment without any of them holding a second copy of
  * the dialogue or an index of their own.
  *
@@ -35,7 +35,7 @@ export interface Timeline {
    * starts earlier can still be on screen after a later one has begun. This is
    * what bounds the walk back through the overlap: once a cue started longer
    * ago than the longest cue lasts, neither it nor anything before it can be on
-   * screen, and the search stops.
+   * screen, and the walk stops.
    *
    * Measured after the reading comfort adjustment rather than before it, since
    * both preferences make cues longer. A bound taken from the file as written
@@ -170,7 +170,8 @@ function shownFrom(startMs: number, afterMs: number, leadInMs: number): number {
  * The index of the line on screen at a moment, or [`NONE`].
  *
  * A cue covers its start and not its end, which matches how the parser reads
- * them: a cue of no length is never drawn, though its text is still searchable.
+ * them: a cue of no length is never drawn, though it is still part of the
+ * file.
  * Where two cues overlap the later one wins, since that is the line that has
  * just been spoken.
  */

@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  CloseIcon,
-  MaximiseIcon,
-  MinimiseIcon,
-  RestoreIcon,
-  SettingsIcon,
-} from '@/shared/ui/Icon';
+import { CloseIcon, MaximiseIcon, MinimiseIcon, RestoreIcon, SettingsIcon } from '@/shared/ui/Icon';
 import { classes } from '@/shared/ui/classes';
 import { windowControls } from '@/shared/window/controls';
 import { breadcrumbFor, useNavigation } from './routes';

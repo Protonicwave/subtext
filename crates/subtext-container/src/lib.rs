@@ -2,9 +2,9 @@
 //!
 //! Many films carry their subtitles inside the container rather than beside it,
 //! muxed by whoever produced that encode and therefore timed against those
-//! exact frames. Without this a film with no sidecar file contributes nothing
-//! to the library beyond a poster: no transcript, no search, no dialogue in the
-//! scrubber.
+//! exact frames. Without this a film with no sidecar file has no dialogue at
+//! all: no subtitles to draw, nothing to step between, and nothing to line up
+//! against the film.
 //!
 //! The crate reads. It does not decode, transcode, or write anything back. A
 //! file is opened, a bounded number of bytes are read from known offsets, and

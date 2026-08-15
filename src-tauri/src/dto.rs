@@ -326,7 +326,7 @@ impl TrackOriginView {
 #[derive(Clone, Copy, Debug, Serialize, Type)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum TrackFormView {
-    /// Dialogue, which becomes a transcript and lines in the search index.
+    /// Dialogue, which is what the player draws and steps between.
     Text,
     /// Images of dialogue, as Blu-ray discs and DVDs carry. Naming them is as
     /// far as this goes: reading them would mean optical character
@@ -415,7 +415,7 @@ fn is_hex(colour: &str) -> bool {
     digits.len() == 6 && digits.bytes().all(|digit| digit.is_ascii_hexdigit())
 }
 
-/// One line of dialogue, as the player and the transcript want it.
+/// One line of dialogue, as the player wants it.
 ///
 /// Deliberately flat and deliberately small. A film of five thousand cues
 /// crosses the boundary in one go and is then searched sixty times a second, so
@@ -536,7 +536,7 @@ pub(crate) struct ScanSummary {
     /// Subtitle files belonging to no film, which the import sheet offers to
     /// attach by hand.
     pub(crate) unpaired_subtitles: Vec<String>,
-    /// Films with no subtitle, which get no transcript and no search.
+    /// Films with no subtitle, which the sheet marks as such.
     pub(crate) films_without_subtitles: Vec<String>,
     /// Files that could not be read at all.
     pub(crate) unreadable: Vec<String>,

@@ -61,7 +61,7 @@ pub struct ScanOutcome {
     /// Subtitle files that belong to no film, which the import sheet offers to
     /// attach by hand.
     pub unpaired_subtitles: Vec<PathBuf>,
-    /// Films with no subtitle at all, which get no transcript and no search.
+    /// Films with no subtitle at all, which the import sheet marks as such.
     pub films_without_subtitles: Vec<PathBuf>,
     /// Files and folders that could not be read.
     pub unreadable: Vec<PathBuf>,
@@ -81,9 +81,9 @@ pub struct TrackWarnings {
 /// than a pairing already in the library was made on takes that pairing away
 /// again, since a rescan is the library agreeing with the folder afresh.
 ///
-/// Only one of these may run at a time against a given database, since a bulk
-/// ingest stands the search index triggers down for the whole file. [`Scanner`]
-/// is what enforces that.
+/// Only one of these may run at a time against a given database, since two of
+/// them would be two sets of batches deciding what the same folder holds.
+/// [`Scanner`] is what enforces that.
 ///
 /// [`Scanner`]: crate::Scanner
 pub fn scan_folder(

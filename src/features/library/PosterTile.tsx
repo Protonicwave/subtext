@@ -106,7 +106,7 @@ export function PosterTile({ film, onOpen }: PosterTileProps) {
   );
 }
 
-/** What sits under the title: the year, and what there is to search. */
+/** What sits under the title: the year, and how much dialogue was read. */
 function describe(film: FilmView): string {
   const year = film.year === null ? null : String(film.year);
   const lines =

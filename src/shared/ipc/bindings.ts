@@ -181,9 +181,9 @@ export const commands = {
 	 * 
 	 *  The whole lot in one call rather than a call per control. There are a few
 	 *  dozen of them, they are read once when the window opens, and the settings
-	 *  screen is not the only thing that wants them: the player, the transcript and
-	 *  the window itself are all drawn from these before anybody has opened
-	 *  settings at all.
+	 *  screen is not the only thing that wants them: the player and the window
+	 *  itself are both drawn from these before anybody has opened settings at
+	 *  all.
 	 */
 	readPreferences: () => typedError<PreferenceView[], Failure>(__TAURI_INVOKE("read_preferences")),
 	/**
@@ -357,7 +357,7 @@ export type CorrectionView = {
 export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
 
 /**
- *  One line of dialogue, as the player and the transcript want it.
+ *  One line of dialogue, as the player wants it.
  * 
  *  Deliberately flat and deliberately small. A film of five thousand cues
  *  crosses the boundary in one go and is then searched sixty times a second, so
@@ -519,7 +519,7 @@ export type ScanSummary = {
 	 *  attach by hand.
 	 */
 	unpairedSubtitles: string[],
-	/**  Films with no subtitle, which get no transcript and no search. */
+	/**  Films with no subtitle, which the sheet marks as such. */
 	filmsWithoutSubtitles: string[],
 	/**  Files that could not be read at all. */
 	unreadable: string[],
@@ -538,7 +538,7 @@ export type StageView = "discovering" | "pairing" | "indexing" | "finished";
  *  would mean the front end keeping its own list of which codecs are which.
  */
 export type TrackFormView = 
-/**  Dialogue, which becomes a transcript and lines in the search index. */
+/**  Dialogue, which is what the player draws and steps between. */
 "text" | 
 /**
  *  Images of dialogue, as Blu-ray discs and DVDs carry. Naming them is as

@@ -14,11 +14,9 @@ use crate::progress::ProgressSink;
 
 /// Scans watched folders into the library.
 ///
-/// Scans are serialised. A large one stands the search index triggers down for
-/// the whole database and builds the index again at the end, which two scans
-/// running at once would tread on. Serialising them costs nothing worth having:
-/// the expensive part of a scan is already spread across every core, and two
-/// folders scanned at once would only contend for the same single writer.
+/// Scans are serialised, and it costs nothing worth having: the expensive part
+/// of a scan is already spread across every core, and two folders scanned at
+/// once would only contend for the same single writer.
 #[derive(Debug)]
 pub struct Scanner {
     database: Database,

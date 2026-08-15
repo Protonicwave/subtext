@@ -14,7 +14,7 @@ import { NONE, type Timeline, activeAt } from '@/shared/media/cues';
  * changes, which over a film is a few hundred times rather than a few hundred
  * thousand. Nothing in it allocates.
  *
- * What comes back is the index rather than the cue, because the transcript
+ * What comes back is the index rather than the cue, because stepping by line
  * needs to know which line this is among the others and not only what it says.
  */
 export function useActiveLine(

@@ -520,9 +520,9 @@ pub(crate) async fn set_film_track(
 ///
 /// The whole lot in one call rather than a call per control. There are a few
 /// dozen of them, they are read once when the window opens, and the settings
-/// screen is not the only thing that wants them: the player, the transcript and
-/// the window itself are all drawn from these before anybody has opened
-/// settings at all.
+/// screen is not the only thing that wants them: the player and the window
+/// itself are both drawn from these before anybody has opened settings at
+/// all.
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn read_preferences(state: State<'_, AppState>) -> Answer<Vec<PreferenceView>> {

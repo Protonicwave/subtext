@@ -259,8 +259,8 @@ mod tests {
     ///
     /// The release before this one opened each film, wrote down which tracks
     /// were inside it, and stopped there. Those films match what is on disk, so
-    /// nothing would ever open them again, and their tracks would keep an empty
-    /// transcript for ever.
+    /// nothing would ever open them again, and their tracks would stay empty
+    /// for ever.
     #[test]
     fn a_film_already_looked_inside_is_looked_inside_again() {
         let mut connection = Connection::open_in_memory().unwrap();

@@ -187,7 +187,7 @@ fn a_subtitle_file_that_has_been_edited_is_read_again() {
 }
 
 #[test]
-fn a_film_that_disappears_keeps_its_place_and_its_transcript() {
+fn a_film_that_disappears_keeps_its_place_and_its_dialogue() {
     let library = Fixture::new();
     library.film("Heat.1995.mkv");
     library.subtitle("Heat.1995.srt", &["A line"]);

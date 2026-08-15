@@ -28,8 +28,8 @@ const FASTEST: f64 = 2.0;
 ///
 /// This is a property of the data rather than of how it is shown, which is why
 /// it is stored beside the track and applied as cues are read. Everything
-/// downstream of that read, the player, the transcript and the search results
-/// alike, sees playback timings and never learns that a correction happened.
+/// downstream of that read sees playback timings and never learns that a
+/// correction happened.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Correction {
     offset_ms: i32,
@@ -90,9 +90,8 @@ impl Correction {
 
     /// Where in the film a timestamp written in the file actually falls.
     ///
-    /// The one place this arithmetic exists. Both the cue read path and the
-    /// path that turns a search result into a seek target call it, so a line
-    /// found by searching opens at the same moment the player would draw it at.
+    /// The one place this arithmetic exists. Every path that reads a cue calls
+    /// it, so a line is at the same moment wherever it is asked about.
     #[must_use]
     pub fn apply(self, at: Timestamp) -> Timestamp {
         // An untouched track comes back untouched, without going near a float.
