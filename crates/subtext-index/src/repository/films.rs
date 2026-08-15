@@ -1,6 +1,6 @@
 //! The films the library knows about.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use subtext_core::Timestamp;
@@ -12,12 +12,12 @@ use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored, TrackChoice};
 use crate::repository::{from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, folder_id, path, title, year, size_bytes, modified_at, \
-                       duration_ms, poster_path, accent, missing_since, \
+                       duration_ms, poster_path, cover_path, accent, missing_since, \
                        chosen_track_id, subtitles_off, added_at";
 
 /// How many columns [`COLUMNS`] names, for queries that read a film alongside
 /// something else and need to know where the film ends.
-pub(super) const COLUMN_COUNT: usize = 14;
+pub(super) const COLUMN_COUNT: usize = 15;
 
 /// The same columns, qualified with a table alias for use in a join.
 pub(super) fn qualified_columns(alias: &str) -> String {
@@ -140,6 +140,55 @@ impl<'a> Films<'a> {
                 .query_map([folder_id], |row| row.get(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(ids)
+        })
+    }
+
+    /// Where each film in a folder is drawing its cover from.
+    ///
+    /// A rescan needs this because deciding a cover is not only a question
+    /// about what is on disk now: a film that has not changed is not opened
+    /// again, so whether it carries its own artwork is something only the row
+    /// still remembers.
+    pub fn covers(&self, folder_id: i64) -> Result<Vec<(i64, Option<PathBuf>)>> {
+        self.database.with(|connection| {
+            let mut statement =
+                connection.prepare("SELECT id, cover_path FROM film WHERE folder_id = ?1")?;
+            let covers = statement
+                .query_map([folder_id], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get::<_, Option<String>>(1)?.map(Into::into),
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(covers)
+        })
+    }
+
+    /// Records where each film's cover comes from, in one transaction.
+    ///
+    /// Guarded the way the upsert is, so a rescan of a library nobody has
+    /// touched writes no rows. Passing nothing for a film says there is no
+    /// image for it anywhere and a frame is the only answer left.
+    pub fn set_covers(&self, covers: &[(i64, Option<&Path>)]) -> Result<usize> {
+        if covers.is_empty() {
+            return Ok(0);
+        }
+
+        self.database.with(|connection| {
+            let transaction = connection.transaction()?;
+            let mut written = 0;
+            {
+                let mut statement = transaction.prepare_cached(
+                    "UPDATE film SET cover_path = ?2 WHERE id = ?1 AND cover_path IS NOT ?2",
+                )?;
+                for (id, cover) in covers {
+                    let cover = cover.map(path_text).transpose()?;
+                    written += statement.execute(params![id, cover])?;
+                }
+            }
+            transaction.commit()?;
+            Ok(written)
         })
     }
 
@@ -308,10 +357,11 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
             .and_then(|millis| u32::try_from(millis).ok())
             .map(Timestamp::from_millis),
         poster_path: row.get::<_, Option<String>>(8)?.map(Into::into),
-        accent: row.get(9)?,
-        missing_since: row.get(10)?,
-        choice: TrackChoice::from_columns(row.get(11)?, row.get(12)?),
-        added_at: row.get(13)?,
+        cover_path: row.get::<_, Option<String>>(9)?.map(Into::into),
+        accent: row.get(10)?,
+        missing_since: row.get(11)?,
+        choice: TrackChoice::from_columns(row.get(12)?, row.get(13)?),
+        added_at: row.get(14)?,
     })
 }
 

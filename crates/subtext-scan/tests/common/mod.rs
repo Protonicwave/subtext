@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use subtext_container::fixture::{Container, Entry, Line};
+use subtext_container::fixture::{Attachment, Container, Entry, Line};
 use subtext_index::{Database, WatchedFolder};
 use subtext_scan::{ScanOutcome, Scanner, Silent};
 use tempfile::TempDir;
@@ -87,6 +87,24 @@ impl Fixture {
         )
     }
 
+    /// A film carrying its own artwork, attached under the given name.
+    pub(crate) fn matroska_carrying(
+        &self,
+        relative: &str,
+        entries: Vec<Entry>,
+        attached: &str,
+    ) -> PathBuf {
+        self.write(
+            relative,
+            &Container::new(entries)
+                .with_seek_head()
+                .with_attachments(vec![
+                    Attachment::new(attached, ARTWORK).of_type("image/jpeg"),
+                ])
+                .bytes(),
+        )
+    }
+
     /// Writes a subtitle file with one line of dialogue every ten seconds.
     pub(crate) fn subtitle(&self, relative: &str, lines: &[&str]) -> PathBuf {
         self.write(relative, srt(lines).as_bytes())
@@ -130,6 +148,10 @@ impl Fixture {
             .collect()
     }
 }
+
+/// The bytes a fixture stands a picture up with. Nothing here reads them as
+/// one, so a few are as good as an image.
+pub(crate) const ARTWORK: &[u8] = b"a picture, near enough";
 
 /// An SRT file with one cue every ten seconds.
 pub(crate) fn srt(lines: &[&str]) -> String {

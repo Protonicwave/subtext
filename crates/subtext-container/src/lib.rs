@@ -22,6 +22,9 @@
 //! as well, which means stepping over every frame between one line and the
 //! next.
 //!
+//! A film may also carry its own artwork, which [`cover`] finds and
+//! [`cover_image`] reads. Neither of them touches the picture either.
+//!
 //! ```
 //! use subtext_container::{SubtitleCodec, fixture, subtitles_of};
 //! use std::io::Cursor;
@@ -41,6 +44,7 @@
 
 mod buffer;
 mod codec;
+mod cover;
 mod ebml;
 mod extract;
 pub mod fixture;
@@ -49,5 +53,6 @@ mod probe;
 mod segment;
 
 pub use crate::codec::SubtitleCodec;
+pub use crate::cover::{AttachedCover, cover, cover_image, cover_image_in, cover_in};
 pub use crate::extract::{EmbeddedTrack, extract, subtitles_of};
 pub use crate::probe::{StreamTrack, probe, subtitle_tracks};

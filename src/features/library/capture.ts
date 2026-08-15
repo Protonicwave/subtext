@@ -8,6 +8,10 @@ import type { PosterReply, PosterRequest } from './poster.worker';
  * element is the only thing that can decode a film and only a document has one.
  * It does as little as possible: open the file, seek, hand the decoded frame to
  * the worker, and get out of the way.
+ *
+ * Taking a frame is the last answer rather than the first. A film that carries
+ * its own artwork, or has a picture beside it, is drawn from that image
+ * instead, which is the same work without the decoder.
  */
 
 /**
@@ -43,6 +47,25 @@ export interface Captured {
  * is a number of seconds and not a proportion of anything.
  */
 export type Moment = { fraction: number } | { seconds: number };
+
+/**
+ * The poster drawn from an image that is already on the disk.
+ *
+ * The bytes are whatever was attached to the film or put beside it, and they go
+ * through the same worker a frame does: the same crop to two by three, the same
+ * WebP, the same colours read off the pixels. Nothing here opens the film, so
+ * this costs a decode of one picture rather than a seek into a four gigabyte
+ * file, and it says nothing about how long the film runs because nothing asked.
+ */
+export async function posterFrom(
+  image: Uint8Array<ArrayBuffer>,
+  worker: Worker,
+): Promise<Captured> {
+  const bitmap = await createImageBitmap(new Blob([image]));
+  const encoded = await encode(worker, bitmap);
+
+  return { image: encoded.image, accent: encoded.accent, durationMs: null };
+}
 
 export async function captureFrom(
   source: string,

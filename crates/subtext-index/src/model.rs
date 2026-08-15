@@ -49,6 +49,10 @@ pub struct FilmRecord {
     /// How long the film runs, once the player has opened it and found out.
     pub duration: Option<Timestamp>,
     pub poster_path: Option<PathBuf>,
+    /// Where the poster was drawn from: the film itself where it carries its
+    /// own artwork, a picture beside it where there is one, and nothing where a
+    /// frame from the film is all there is.
+    pub cover_path: Option<PathBuf>,
     /// The colour pair taken from the poster, as the front end wrote it.
     pub accent: Option<String>,
     /// When the file stopped being there, or `None` while it is present.

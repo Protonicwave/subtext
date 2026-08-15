@@ -18,6 +18,13 @@ pub(crate) const INFO: u32 = 0x1549_A966;
 /// How many nanoseconds one unit of every timestamp in the file is.
 pub(crate) const TIMESTAMP_SCALE: u32 = 0x002A_D7B1;
 
+/// The files carried alongside the picture, of which the cover art is one.
+pub(crate) const ATTACHMENTS: u32 = 0x1941_A469;
+pub(crate) const ATTACHED_FILE: u32 = 0x61A7;
+pub(crate) const FILE_NAME: u32 = 0x466E;
+pub(crate) const FILE_MIME_TYPE: u32 = 0x4660;
+pub(crate) const FILE_DATA: u32 = 0x465C;
+
 /// The tracks, and what each of them says it is.
 pub(crate) const TRACKS: u32 = 0x1654_AE6B;
 pub(crate) const TRACK_ENTRY: u32 = 0xAE;

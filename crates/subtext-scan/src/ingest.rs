@@ -21,6 +21,7 @@ use subtext_index::{
     TrackPairing, WatchedFolder,
 };
 
+use crate::covers;
 use crate::error::{Error, Result};
 use crate::progress::{ProgressSink, ScanProgress, ScanStage};
 use crate::walk::{self, FoundFile};
@@ -157,6 +158,20 @@ pub fn scan_folder(
     sink.report(&progress);
 
     let written = read_and_write_all(database, &plan.jobs, &films_to_open, sink, progress)?;
+
+    let chosen = chosen_covers(
+        &found,
+        &report.films,
+        &stored_films,
+        &films_to_open,
+        &written.carry_artwork,
+        &database.films().covers(folder.id)?,
+    );
+    let covers: Vec<(i64, Option<&Path>)> = chosen
+        .iter()
+        .map(|(id, cover)| (*id, cover.as_deref()))
+        .collect();
+    database.films().set_covers(&covers)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
@@ -377,6 +392,47 @@ fn file_label(file: &FoundFile) -> SubtitleLabel {
     subtext_core::ParsedName::from_file_name(&file.file_name).label
 }
 
+/// Where each film's cover comes from, once the scan knows everything it is
+/// going to know.
+///
+/// Three things have to meet for this: the pictures found beside the films,
+/// which is a question about names; what the films that were opened turned out
+/// to carry inside them; and what the row already said about the films that
+/// were not opened, since those have not changed and so neither has the answer.
+fn chosen_covers(
+    found: &walk::Discovery,
+    names: &[subtext_core::ParsedName],
+    stored: &[Stored],
+    opened: &[FilmJob],
+    carry_artwork: &HashSet<i64>,
+    recorded: &[(i64, Option<PathBuf>)],
+) -> Vec<(i64, Option<PathBuf>)> {
+    let beside = covers::beside(&found.films, names, &found.images);
+    let opened: HashSet<i64> = opened.iter().map(|job| job.film_id).collect();
+    let recorded: HashMap<i64, &Path> = recorded
+        .iter()
+        .filter_map(|(id, cover)| Some((*id, cover.as_deref()?)))
+        .collect();
+
+    found
+        .films
+        .iter()
+        .zip(stored)
+        .zip(beside)
+        .map(|((file, stored), beside)| {
+            let cover = covers::decide(
+                &file.path,
+                opened
+                    .contains(&stored.id)
+                    .then(|| carry_artwork.contains(&stored.id)),
+                recorded.get(&stored.id).copied(),
+                beside.as_deref(),
+            );
+            (stored.id, cover)
+        })
+        .collect()
+}
+
 fn films_without_subtitles(
     films: &[FoundFile],
     stored: &[Stored],
@@ -399,6 +455,8 @@ struct Written {
     films: usize,
     /// Tracks found inside those films rather than beside them.
     streams: usize,
+    /// Films that turned out to carry their own artwork.
+    carry_artwork: HashSet<i64>,
     unreadable: Vec<PathBuf>,
     warnings: Vec<TrackWarnings>,
 }
@@ -420,6 +478,9 @@ struct Parsed<'a> {
 struct Probed<'a> {
     job: &'a FilmJob,
     tracks: Vec<EmbeddedTrack>,
+    /// Whether the film carries its own artwork, which is a walk over the
+    /// attachment headers and none of the image.
+    carries_artwork: bool,
 }
 
 /// One piece of reading, of either kind.
@@ -514,7 +575,14 @@ fn parse_one(job: &TrackJob) -> Message<'_> {
 /// the same way.
 fn read_film(job: &FilmJob) -> Message<'_> {
     match subtext_container::extract(&job.path) {
-        Ok(tracks) => Message::Probed(Probed { job, tracks }),
+        Ok(tracks) => Message::Probed(Probed {
+            job,
+            tracks,
+            // Asked here because this is the one moment the film is open for
+            // anything else. The image itself is left where it is until
+            // something is going to draw it.
+            carries_artwork: subtext_container::cover(&job.path).is_ok_and(|found| found.is_some()),
+        }),
         Err(_) => Message::Unreadable(job.path.clone()),
     }
 }
@@ -590,6 +658,9 @@ fn flush_probed(
     written.streams += database.tracks().write_streams(&films)?;
     written.films += batch.len();
     for film in batch.drain(..) {
+        if film.carries_artwork {
+            written.carry_artwork.insert(film.job.film_id);
+        }
         written.cues += film
             .tracks
             .iter()

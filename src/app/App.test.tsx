@@ -91,7 +91,7 @@ describe('the application', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Heat')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Heat/ })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /choose your films folder/i }),
     ).not.toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('the application', () => {
     ipc.listFolders.mockResolvedValue([folder]);
     ipc.listLibrary.mockResolvedValue([film]);
     render(<App />);
-    await screen.findByText('Heat');
+    await screen.findByRole('button', { name: /Heat/ });
 
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(await screen.findByRole('heading', { name: /watched folders/i })).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe('the application', () => {
     ipc.listLibrary.mockResolvedValue([film]);
     render(<App />);
 
-    await userEvent.click(await screen.findByText('Heat'));
+    await userEvent.click(await screen.findByRole('button', { name: /Heat/ }));
 
     // Nothing decodes under test, so the film sits on its first frame with the
     // controls showing, which is the right answer to a file that has not

@@ -23,5 +23,9 @@ harness = false
 name = "extract"
 harness = false
 
+[[bench]]
+name = "cover"
+harness = false
+
 [lints]
 workspace = true

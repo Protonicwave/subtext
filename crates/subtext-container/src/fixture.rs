@@ -30,6 +30,11 @@ const SIMPLE_BLOCK: u32 = 0xA3;
 const BLOCK_GROUP: u32 = 0xA0;
 const BLOCK: u32 = 0xA1;
 const BLOCK_DURATION: u32 = 0x9B;
+const ATTACHMENTS: u32 = 0x1941_A469;
+const ATTACHED_FILE: u32 = 0x61A7;
+const FILE_NAME: u32 = 0x466E;
+const FILE_MIME_TYPE: u32 = 0x4660;
+const FILE_DATA: u32 = 0x465C;
 const TRACKS: u32 = 0x1654_AE6B;
 const TRACK_ENTRY: u32 = 0xAE;
 const TRACK_NUMBER: u32 = 0xD7;
@@ -152,6 +157,47 @@ impl Entry {
     }
 }
 
+/// One file carried alongside the picture: a cover, or a font for the signs.
+#[derive(Clone, Debug)]
+pub struct Attachment {
+    name: String,
+    mime: Option<String>,
+    data: Vec<u8>,
+}
+
+impl Attachment {
+    /// An attachment under the given name, carrying the given bytes.
+    ///
+    /// The bytes are written as they stand and are never read as a picture by
+    /// anything here, so a fixture says what it is about with a few of them
+    /// rather than with a real image.
+    #[must_use]
+    pub fn new(name: &str, data: &[u8]) -> Self {
+        Self {
+            name: name.to_owned(),
+            mime: None,
+            data: data.to_vec(),
+        }
+    }
+
+    /// What the file says the attachment is, which a muxer may get wrong or
+    /// leave out.
+    #[must_use]
+    pub fn of_type(mut self, mime: &str) -> Self {
+        self.mime = Some(mime.to_owned());
+        self
+    }
+
+    fn bytes(&self) -> Vec<u8> {
+        let mut body = text(FILE_NAME, &self.name);
+        if let Some(mime) = &self.mime {
+            body.extend(text(FILE_MIME_TYPE, mime));
+        }
+        body.extend(element(FILE_DATA, &self.data));
+        element(ATTACHED_FILE, &body)
+    }
+}
+
 /// One line of dialogue in a fixture, and when it is on screen.
 #[derive(Clone, Debug)]
 pub struct Line {
@@ -199,6 +245,7 @@ pub struct Container {
     /// A track number, how many filler blocks each cluster carries, and how
     /// large each of them is.
     picture: Option<(u64, usize, usize)>,
+    attachments: Vec<Attachment>,
 }
 
 impl Default for Container {
@@ -214,6 +261,7 @@ impl Default for Container {
             unbounded_clusters: false,
             scale: DEFAULT_SCALE,
             picture: None,
+            attachments: Vec::new(),
         }
     }
 }
@@ -258,6 +306,13 @@ impl Container {
     #[must_use]
     pub fn with_tracks_after_the_cluster(mut self) -> Self {
         self.tracks_after_cluster = true;
+        self
+    }
+
+    /// The files the film carries alongside its picture.
+    #[must_use]
+    pub fn with_attachments(mut self, attachments: Vec<Attachment>) -> Self {
+        self.attachments = attachments;
         self
     }
 
@@ -341,6 +396,7 @@ impl Container {
 
         let tracks_at = head_length + body.len();
         body.extend(element(TRACKS, &self.tracks()));
+        body.extend(self.attached());
         body.extend(self.clusters());
         if let Some(size) = self.cluster {
             body.extend(header(CLUSTER, size));
@@ -356,6 +412,19 @@ impl Container {
 
     fn tracks(&self) -> Vec<u8> {
         self.entries.iter().flat_map(Entry::bytes).collect()
+    }
+
+    /// The attachments element, or nothing where a film carries no files.
+    fn attached(&self) -> Vec<u8> {
+        if self.attachments.is_empty() {
+            return Vec::new();
+        }
+        let body: Vec<u8> = self
+            .attachments
+            .iter()
+            .flat_map(Attachment::bytes)
+            .collect();
+        element(ATTACHMENTS, &body)
     }
 
     /// Writes the film out one cluster at a time.
@@ -374,6 +443,7 @@ impl Container {
         out.write_all(&[0xFF])?;
         out.write_all(&element(INFO, &uint(TIMESTAMP_SCALE, self.scale)))?;
         out.write_all(&element(TRACKS, &self.tracks()))?;
+        out.write_all(&self.attached())?;
 
         let (lines, groups) = self.cut();
         for (base, from, to) in groups {

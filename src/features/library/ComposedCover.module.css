@@ -1,0 +1,80 @@
+/*
+ * The cover composed for a film with no picture of its own.
+ *
+ * Drawn from the two custom properties the tile around it already sets, so a
+ * wall of these reads as a set of covers in different colours rather than as a
+ * row of placeholders. The title sits low and large, the way a poster sets a
+ * title, with the facts under it in the figures face.
+ */
+
+.cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  overflow: hidden;
+}
+
+/*
+ * The wash. Two lights in the film's own pair, one high and one low, which is
+ * what stops a flat gradient reading as a loading state.
+ */
+.cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 80% at 18% 8%,
+      color-mix(in oklab, var(--film-accent) 52%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      110% 70% at 88% 96%,
+      color-mix(in oklab, var(--film-pair) 46%, transparent),
+      transparent 66%
+    );
+}
+
+/* A scrim under the words, so the title reads whatever colour the film is. */
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklab, var(--colour-bg) 76%, transparent),
+    transparent 58%
+  );
+}
+
+.title {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--colour-text);
+  /* Four lines is enough for any title and keeps the facts on the tile. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.facts {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--colour-text-dim);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

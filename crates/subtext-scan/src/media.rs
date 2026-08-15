@@ -12,6 +12,10 @@ const FILM_EXTENSIONS: &[&str] = &["mp4", "m4v", "mkv", "mov", "webm", "avi"];
 /// Only SRT, because that is what the parser reads.
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt"];
 
+/// Picture formats a cover beside a film may be in, which is what the webview
+/// will draw.
+const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp"];
+
 /// Folders that hold no films and cost real time to walk.
 ///
 /// Recycle bins are the important ones: a deleted film still sits in there,
@@ -31,6 +35,8 @@ const SKIPPED_DIRECTORIES: &[&str] = &[
 pub(crate) enum FileKind {
     Film,
     Subtitle,
+    /// A picture, which may turn out to be the cover somebody put beside a film.
+    Image,
 }
 
 /// Whether a file is one of the two kinds a scan cares about.
@@ -55,6 +61,12 @@ pub(crate) fn classify(file_name: &str) -> Option<FileKind> {
         .any(|known| known.eq_ignore_ascii_case(extension))
     {
         return Some(FileKind::Subtitle);
+    }
+    if IMAGE_EXTENSIONS
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(extension))
+    {
+        return Some(FileKind::Image);
     }
     None
 }
@@ -97,7 +109,14 @@ mod tests {
         assert_eq!(classify("Heat.1995.en.srt"), Some(FileKind::Subtitle));
         assert_eq!(classify("Heat.1995.nfo"), None);
         assert_eq!(classify("Heat"), None);
-        assert_eq!(classify("poster.jpg"), None);
+    }
+
+    #[test]
+    fn recognises_the_pictures_a_cover_could_be() {
+        assert_eq!(classify("poster.jpg"), Some(FileKind::Image));
+        assert_eq!(classify("Heat.1995.PNG"), Some(FileKind::Image));
+        assert_eq!(classify("cover.webp"), Some(FileKind::Image));
+        assert_eq!(classify("fanart.bmp"), None);
     }
 
     #[test]
