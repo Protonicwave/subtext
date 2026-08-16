@@ -33,7 +33,7 @@ mod report;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use subtext_core::Correction;
+use subtext_core::{Correction, Timestamp};
 
 use crate::cases::Case;
 use crate::judge::{Bars, Figures};
@@ -64,6 +64,7 @@ fn run() -> Result<(), String> {
     }
 
     let mut rows = Vec::new();
+    let mut baselines = Vec::new();
     println!();
     for (at, film) in films.iter().enumerate() {
         let mut built = cases::manufacture(at, &film.truth);
@@ -83,16 +84,32 @@ fn run() -> Result<(), String> {
             ));
         }
 
-        println!("Measuring {} over {} cases", film.title, built.len());
+        // What the engine makes of this film's truth before anything has been
+        // done to it. Everything measured below is measured against this rather
+        // than against truth itself, for the reason given on `worst_error`.
+        let baseline = subtext_align::align(&film.truth, &film.speech).correction();
+        baselines.push(baseline);
+
+        println!(
+            "Measuring {} over {} cases, from a baseline of {:+}ms at {:.4}",
+            film.title,
+            built.len(),
+            baseline.offset_ms(),
+            baseline.rate()
+        );
         for case in &built {
             let speech = &films[case.film].speech;
-            rows.push(measure(&film.title, case, speech, arguments.bars));
+            rows.push(measure(&film.title, case, speech, baseline, arguments.bars));
         }
     }
 
     let report = Report {
         bars: arguments.bars,
-        films: films.iter().map(films::measured).collect(),
+        films: films
+            .iter()
+            .zip(&baselines)
+            .map(|(film, baseline)| films::measured(film, *baseline))
+            .collect(),
         skipped: gathered
             .skipped
             .into_iter()
@@ -112,7 +129,13 @@ fn run() -> Result<(), String> {
 }
 
 /// One case, measured and judged.
-fn measure(film: &str, case: &Case, speech: &subtext_align::Signal, bars: Bars) -> Row {
+fn measure(
+    film: &str,
+    case: &Case,
+    speech: &subtext_align::Signal,
+    baseline: Correction,
+    bars: Bars,
+) -> Row {
     let found = subtext_align::align(&case.authored, speech);
     let figures = Figures::of(&found);
     let outcome = judge::outcome(figures, bars);
@@ -120,7 +143,7 @@ fn measure(film: &str, case: &Case, speech: &subtext_align::Signal, bars: Bars) 
     // Measured whatever the outcome was, so that a report can be judged again
     // at a threshold that would have accepted this and the error is already
     // there to judge it by.
-    let worst_error_ms = worst_error(case, found.correction());
+    let worst_error_ms = worst_error(case, found.correction(), baseline);
     let verdict = judge::verdict(outcome, case.wanted, worst_error_ms);
 
     Row {
@@ -137,20 +160,40 @@ fn measure(film: &str, case: &Case, speech: &subtext_align::Signal, bars: Bars) 
     }
 }
 
-/// How far a correction leaves the lines from where the film speaks them, at
-/// the worst line in it.
+/// How far a correction leaves the lines from where the perturbation says they
+/// belong, at the worst line in the film.
 ///
 /// The worst rather than the middle. A correction that is right for an hour and
 /// wrong for the rest is the shape of failure this whole measurement exists to
 /// catch, and an average would report it as mostly fine.
-fn worst_error(case: &Case, correction: Correction) -> Option<i64> {
+///
+/// Measured against `baseline`, which is what the engine made of this film's
+/// truth before anything was done to it, rather than against truth itself. What
+/// a case asks is whether a perturbation applied on purpose was recovered, and
+/// truth disagreeing with the film by some amount of its own is not part of that
+/// question. Comparing straight against truth would add that disagreement to
+/// every case equally: on the first run over a real library it put a constant
+/// 80ms into all eight of one film's shift cases and 170ms into all eight of
+/// another's, which is the sidecar being that far from the talking and not the
+/// engine missing by it. Cancelling it here is what makes a slack of fifty
+/// milliseconds a statement about the engine.
+///
+/// One case per film is the baseline itself, being the one where nothing was
+/// perturbed, and its error is therefore zero by construction. It is kept
+/// because its outcome still says whether the engine would have written to a
+/// film that needed nothing, which is worth knowing.
+fn worst_error(case: &Case, correction: Correction, baseline: Correction) -> Option<i64> {
     if case.belongs_ms.is_empty() {
         return None;
     }
     case.authored
         .iter()
         .zip(&case.belongs_ms)
-        .map(|(cue, belongs)| i64::from(correction.apply(cue.start).millis()) - i64::from(*belongs))
+        .map(|(cue, belongs)| {
+            let put = correction.apply(cue.start).millis();
+            let belongs = baseline.apply(Timestamp::from_millis(*belongs)).millis();
+            i64::from(put) - i64::from(belongs)
+        })
         .map(i64::abs)
         .max()
 }
@@ -278,14 +321,38 @@ mod tests {
     #[test]
     fn the_error_reported_is_the_one_at_the_worst_line() {
         let case = case(&[10_000, 20_000, 30_000], &[12_000, 22_000, 35_000]);
-        let found = worst_error(&case, Correction::of_offset(2_000));
+        let found = worst_error(&case, Correction::of_offset(2_000), Correction::IDENTITY);
         assert_eq!(found, Some(3_000));
+    }
+
+    /// Truth disagreeing with the film by an amount of its own is cancelled,
+    /// so that what is reported is whether the perturbation was recovered. Here
+    /// the engine and truth are a second apart everywhere, and a case that
+    /// recovered its shift exactly is reported as having done so.
+    #[test]
+    fn the_films_own_disagreement_with_its_truth_is_not_counted_against_it() {
+        let case = case(&[10_000, 20_000, 30_000], &[12_000, 22_000, 32_000]);
+        let baseline = Correction::of_offset(1_000);
+
+        assert_eq!(
+            worst_error(&case, Correction::of_offset(3_000), baseline),
+            Some(0)
+        );
+        // And a case that missed by a hundred milliseconds on top of that still
+        // reports a hundred.
+        assert_eq!(
+            worst_error(&case, Correction::of_offset(3_100), baseline),
+            Some(100)
+        );
     }
 
     #[test]
     fn a_case_with_no_right_answer_has_no_error_to_report() {
         let case = case(&[10_000], &[]);
-        assert_eq!(worst_error(&case, Correction::of_offset(2_000)), None);
+        assert_eq!(
+            worst_error(&case, Correction::of_offset(2_000), Correction::IDENTITY),
+            None
+        );
     }
 
     /// Nothing the application builds may depend on this, and nothing it needs

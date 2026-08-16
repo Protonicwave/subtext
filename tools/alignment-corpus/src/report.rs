@@ -95,6 +95,12 @@ pub(crate) struct Measured {
     pub(crate) truth_from: &'static str,
     /// How much of that truth lands on the film's own speech untouched.
     pub(crate) truth_lands: f32,
+    /// What the engine made of this film's truth before anything was perturbed,
+    /// which every error in the table is measured against rather than against
+    /// truth itself. A large value here is truth disagreeing with the film, not
+    /// the engine failing.
+    pub(crate) baseline_offset_ms: i32,
+    pub(crate) baseline_rate: f64,
     /// How many lines its own track holds, which is the size of the truth every
     /// case built from it rests on.
     pub(crate) lines: usize,
