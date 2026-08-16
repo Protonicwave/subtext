@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AlignmentView } from '@/shared/ipc/bindings';
+import { landing, nothingMeasured } from '@/test/alignment';
 import { SyncPanel } from './SyncPanel';
 import type { Alignment, AlignState } from './useAlignment';
 import { RATES, STEP_MS, type Sync } from './useSync';
@@ -164,10 +165,57 @@ describe('lining a subtitle up by listening to the film', () => {
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
       confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
     });
 
     expect(screen.getByText('Lined up')).toBeInTheDocument();
     expect(screen.getByText(/now run \+3.50s/)).toBeInTheDocument();
+  });
+
+  /*
+   * The one thing an alignment reports that did not come out of the correlation
+   * that produced it, and so the only reason anybody has to believe the answer
+   * rather than take it on trust. It is quoted against the file as it stands,
+   * since a share of lines landing means nothing without something to compare
+   * it with.
+   */
+  it('says how many lines land now, against how many landed before', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 3_500, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /94 lines in a hundred land on the talking, against 14 before/,
+    );
+  });
+
+  /*
+   * A correlation can be perfectly clear about a lag and still be answering the
+   * wrong question, since the confidence beside it is read off the same peak.
+   * This is the ending where the answer was put to the film and did not help,
+   * and nothing was written.
+   */
+  it('says when a measurement it believed would not have helped', () => {
+    ended({
+      outcome: 'no-better',
+      correction: { offsetMs: -2_400, rate: 1 },
+      landing: landing(0.21),
+      asWritten: landing(0.33),
+      wanted: 0.4,
+    });
+
+    expect(screen.getByText('No better than it is')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /21 lines in a hundred would land on the talking, against 33 as the file stands/,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(/Nothing has been changed/);
+    expect(screen.queryByRole('button', { name: /put it back/i })).not.toBeInTheDocument();
   });
 
   it('names a stretch as the list of framerates names it', () => {
@@ -176,6 +224,8 @@ describe('lining a subtitle up by listening to the film', () => {
       correction: { offsetMs: 0, rate: RATES[1]?.value ?? 1 },
       previous: { offsetMs: 0, rate: 1 },
       confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
     });
 
     expect(screen.getByText(/stretched 23.976 to 25 fps/)).toBeInTheDocument();
@@ -187,6 +237,8 @@ describe('lining a subtitle up by listening to the film', () => {
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: -800, rate: 1 },
       confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
     });
 
     await userEvent.click(screen.getByRole('button', { name: /put it back to −0.80s/i }));
@@ -204,6 +256,8 @@ describe('lining a subtitle up by listening to the film', () => {
           correction: { offsetMs: 3_500, rate: 1 },
           previous: { offsetMs: -800, rate: 1 },
           confidence: 0.6,
+          landing: landing(0.94),
+          asWritten: landing(0.14),
         },
       },
     );
@@ -217,6 +271,8 @@ describe('lining a subtitle up by listening to the film', () => {
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
       confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
     });
 
     expect(screen.getByRole('button', { name: 'Put it back as written' })).toBeInTheDocument();
@@ -257,13 +313,36 @@ describe('lining a subtitle up by listening to the film', () => {
       correction: { offsetMs: 12_000, rate: 1 },
       confidence: 0.01,
       wanted: 0.25,
+      landing: landing(0.09),
+      asWritten: landing(0.08),
     });
 
     expect(screen.getByText('Not sure enough to say')).toBeInTheDocument();
-    expect(screen.getByText(/Nothing has been changed/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /As the file stands, 8 lines in a hundred land on the talking/,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(/Nothing has been changed/);
     // The value it would have written is not offered as a number to try, since
     // a measurement nobody believes is not a suggestion.
     expect(screen.queryByRole('button', { name: /put it back/i })).not.toBeInTheDocument();
+  });
+
+  /*
+   * A film with no speech found in it, and a subtitle whose lines all fall past
+   * the end of it, both measure nothing at all. None out of none is not a figure
+   * and reads as a track landing nowhere, so it is left unsaid.
+   */
+  it('quotes no figure where there was nothing to measure', () => {
+    ended({
+      outcome: 'uncertain',
+      correction: { offsetMs: 0, rate: 1 },
+      confidence: 0,
+      wanted: 0.25,
+      landing: nothingMeasured,
+      asWritten: nothingMeasured,
+    });
+
+    expect(screen.getByRole('status')).not.toHaveTextContent(/lines in a hundred/);
   });
 
   it('passes on what could not be read', () => {

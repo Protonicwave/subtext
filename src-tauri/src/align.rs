@@ -7,11 +7,15 @@
 //! is the only judgement here, and it is to refuse cheaply: a track nothing
 //! could be made of is turned away before a byte of audio is read.
 //!
-//! What is not coordination is the threshold. Deciding when a measurement is
-//! worth writing to somebody's library is a judgement about the product rather
-//! than a property of the correlation, which is why the engine reports a number
-//! and this decides what to do about it.
+//! What is not coordination is deciding. Whether a measurement is worth writing
+//! to somebody's library is a judgement about the product rather than a property
+//! of the correlation, so the engine reports its figures and this weighs them.
+//! There are two of those judgements and they ask different questions. The
+//! threshold asks how clearly the correlation chose its answer. The bar asks
+//! whether the answer it chose actually puts the lines on the talking, which is
+//! the only question the correlation cannot mark its own work on.
 
+use subtext_align::Landing;
 use subtext_index::Database;
 use subtext_speech::{Progress, Refusal};
 
@@ -54,6 +58,39 @@ use crate::dto::{AlignmentView, Answer, Failure};
 /// already had and a sentence saying why. Accepting one that could not leaves
 /// them watching a film that is wrong from beginning to end.
 const THRESHOLD: f32 = 0.015;
+
+/// How much of a track has to land on the talking before anything is written.
+///
+/// The confidence above is read off the same peak the correction is, so a
+/// measurement that is confidently wrong has nothing left to catch it. This is
+/// what catches it: with the correction applied, the share of lines that arrive
+/// within a quarter of a second of somebody starting to speak. It is arrived at
+/// independently of the estimator, so the trade a rate and an offset make
+/// against each other cannot flatter it.
+///
+/// Two conditions rather than one, because the figure is worth more as a
+/// comparison than as a level. A measurement that would put fewer lines on the
+/// talking than the file already does is refused whatever it scores, since
+/// making a film worse is the one outcome there is no argument for. And a
+/// measurement that clears that and still lands under this bar is refused as
+/// well, because both readings being poor means the pairing is wrong rather than
+/// the timing.
+///
+/// Four tenths is set from what chance gives. A track measured against a film it
+/// has nothing to do with lands wherever an utterance happens to fall inside the
+/// half second either side of a line, which on dialogue starting every four
+/// seconds or so is about an eighth of it. This sits at more than three times
+/// that, and well under what a correct answer reaches, since a track written for
+/// its own film lands nearly everywhere the reading found a voice. The room
+/// between those two is wide, and it has to be: no film scores one, because
+/// whispers, lines away from the microphone and dialogue under a loud mix are
+/// speech that the reading misses on every film there is.
+///
+/// It errs the same way the threshold does, and for the same reason. Refusing a
+/// file that could have been helped leaves somebody where they were, with the
+/// keys they already had and a sentence saying why. This number should be
+/// settled against a run of real films rather than moved on the strength of one.
+const BAR: f32 = 0.4;
 
 /// How many lines a track needs before it is worth measuring at all.
 ///
@@ -118,11 +155,13 @@ pub(crate) fn run(
     let found = subtext_align::align(&cues, &speech);
     let confidence = found.confidence().score();
     if confidence < THRESHOLD {
-        return Ok(AlignmentView::uncertain(
-            found.correction(),
-            confidence,
-            THRESHOLD,
-        ));
+        return Ok(AlignmentView::uncertain(&found, confidence, THRESHOLD));
+    }
+
+    // The answer is clear. Whether it is any good is a different question, and
+    // it is asked of the film rather than of the correlation that produced it.
+    if !worth_writing(found.landing(), found.as_written()) {
+        return Ok(AlignmentView::no_better(&found, BAR));
     }
 
     database
@@ -130,11 +169,24 @@ pub(crate) fn run(
         .set_correction(track.id, found.correction())
         .map_err(Failure::of)?;
 
-    Ok(AlignmentView::aligned(
-        found.correction(),
-        track.correction,
-        confidence,
-    ))
+    Ok(AlignmentView::aligned(&found, track.correction, confidence))
+}
+
+/// Whether a measurement earns the right to be written over what is there.
+///
+/// Separated out because it is the whole of the judgement in [`BAR`] and it can
+/// then be checked at its edges without a film, a database or a decoder.
+fn worth_writing(found: Landing, as_written: Landing) -> bool {
+    // Nothing was measured, so there is no evidence either way, and evidence is
+    // what this is for. A film with no speech in it and a track with no lines
+    // inside the film both arrive here.
+    if !found.is_measured() {
+        return false;
+    }
+    // Equal rather than better, because a track that already lands is answered
+    // with the identity, and refusing to write nothing over nothing would report
+    // a failure to somebody whose file was right all along.
+    found.fraction() >= as_written.fraction() && found.fraction() >= BAR
 }
 
 /// A refusal from the reading, as an ending the front end can put words to.
@@ -157,13 +209,14 @@ mod tests {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use subtext_align::{Landing, Signal, landing_of};
     use subtext_core::{Correction, Cue, SubtitleLabel, Timestamp};
     use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
     use subtext_speech::fixture::Film;
     use subtext_speech::{Reading, Unwatched};
     use tempfile::TempDir;
 
-    use super::{FEWEST_CUES, THRESHOLD, run};
+    use super::{BAR, FEWEST_CUES, THRESHOLD, run, worth_writing};
     use crate::dto::AlignmentView;
 
     /// How long the film the measurements are made against runs for.
@@ -328,6 +381,20 @@ mod tests {
             Self::written(soundtrack(&spoken), &cues)
         }
 
+        /// A film that speaks only the first third of what its subtitle claims,
+        /// and is quiet through the rest. What a subtitle for a different cut
+        /// looks like, and the shape a correlation can be perfectly clear about
+        /// while being no use at all.
+        fn mostly_unspoken() -> Self {
+            let cues = dialogue();
+            let late = Correction::of_offset(TRUTH);
+            let mut film = Film::new(LENGTH_MS).recorded(8_000, 1);
+            for cue in cues.iter().take(cues.len() / 3) {
+                film = film.speaking(late.apply(cue.start).millis(), late.apply(cue.end).millis());
+            }
+            Self::written(&film.matroska(), &cues)
+        }
+
         fn align(&self) -> AlignmentView {
             run(&self.database, self.track_id, &Unwatched).unwrap()
         }
@@ -362,6 +429,37 @@ mod tests {
             .unwrap_or(0)
     }
 
+    /// A track of ten lines, `landed` of which arrive as somebody starts
+    /// talking, measured through the same code an alignment measures with.
+    ///
+    /// Built rather than described, because a figure is only worth deciding on
+    /// if it came from a film, and the decision below is what these tests are
+    /// about.
+    fn measured(landed: u32) -> Landing {
+        // A film that says a second's worth of something every ten seconds.
+        let mut bins = vec![false; 10 * 10 * 100];
+        for at in 0..10 {
+            bins[at * 1_000..at * 1_000 + 100].fill(true);
+        }
+        let speech = Signal::from_bins(bins);
+
+        // Lines on those moments, and the rest of them in the quiet between.
+        let cues: Vec<Cue> = (0..10_u32)
+            .map(|at| {
+                let start = at * 10_000 + if at < landed { 0 } else { 5_000 };
+                Cue {
+                    index: at + 1,
+                    start: Timestamp::from_millis(start),
+                    end: Timestamp::from_millis(start + 900),
+                    text: "line".to_owned(),
+                    position: None,
+                }
+            })
+            .collect();
+
+        landing_of(&cues, &speech, Correction::IDENTITY)
+    }
+
     #[test]
     fn a_film_that_is_out_by_a_known_amount_is_put_right() {
         let fixture = Fixture::mistimed();
@@ -369,6 +467,8 @@ mod tests {
         let AlignmentView::Aligned {
             previous,
             confidence,
+            landing,
+            as_written,
             ..
         } = fixture.align()
         else {
@@ -378,8 +478,38 @@ mod tests {
         assert_eq!(previous.offset_ms, 0);
         assert!(confidence >= THRESHOLD, "only {confidence} sure");
 
+        // And the evidence for it, which is the part that did not come out of
+        // the correlation that produced the answer.
+        assert!(landing.fraction > as_written.fraction);
+        assert!(landing.fraction >= BAR, "only {} landed", landing.fraction);
+        assert!(landing.examined > 0);
+
         let error = residual(fixture.correction());
         assert!(error <= SLACK, "out by {error}ms");
+    }
+
+    /// The judgement the figure exists for, checked where it turns over. A
+    /// measurement that would make a film worse is refused however sure the
+    /// correlation was, and one that would improve a film and still leave most
+    /// of it missing the talking is refused as well.
+    #[test]
+    fn a_measurement_is_written_only_where_it_helps_and_lands() {
+        assert!(worth_writing(measured(7), measured(5)));
+        assert!(!worth_writing(measured(5), measured(7)));
+        assert!(!worth_writing(measured(3), measured(1)));
+    }
+
+    /// A track that already lands is answered with the identity, and writing
+    /// nothing over nothing is not a failure to report to somebody whose file
+    /// was right all along.
+    #[test]
+    fn a_track_that_is_already_right_is_not_reported_as_a_refusal() {
+        assert!(worth_writing(measured(9), measured(9)));
+    }
+
+    #[test]
+    fn a_measurement_of_nothing_is_never_written() {
+        assert!(!worth_writing(Landing::NONE, measured(1)));
     }
 
     #[test]
@@ -452,6 +582,30 @@ mod tests {
 
         assert!((wanted - THRESHOLD).abs() < f32::EPSILON);
         assert!(confidence < THRESHOLD, "believed at {confidence}");
+        assert!(fixture.correction().is_identity());
+    }
+
+    /// The case the landing figure exists for, end to end. The correlation
+    /// finds the shift and is sure about it, because the third of the film that
+    /// does speak lines up exactly; the answer is still not one to write,
+    /// because most of the track lands on a film that says nothing there.
+    #[test]
+    fn a_measurement_that_leaves_most_of_the_film_unspoken_is_not_written() {
+        let fixture = Fixture::mostly_unspoken();
+
+        let outcome = fixture.align();
+        let AlignmentView::NoBetter {
+            landing,
+            as_written,
+            wanted,
+            ..
+        } = outcome
+        else {
+            panic!("a film that says a third of its subtitle should not be written: {outcome:?}");
+        };
+
+        assert!(landing.fraction > as_written.fraction, "no better either");
+        assert!(landing.fraction < wanted, "{} landed", landing.fraction);
         assert!(fixture.correction().is_identity());
     }
 

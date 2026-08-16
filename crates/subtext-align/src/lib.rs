@@ -15,10 +15,18 @@
 //! knows nothing about where either signal came from, which is what lets it be
 //! tested on signals made up on the spot.
 //!
+//! The answer comes with a second figure beside it, and the two say different
+//! things. The confidence is read off the same peak the correction is, so it
+//! describes how clearly the correlation chose rather than whether what it chose
+//! is any good. The [`Landing`] figure is the other question, put to the film
+//! rather than to the arithmetic: with this correction applied, how many lines
+//! arrive when somebody starts speaking, against how many do already? Nothing
+//! else here can tell a right answer from a well-correlated wrong one.
+//!
 //! What it will not do is decide. An answer applied to a film nobody has watched
 //! yet is wrong for the whole film if it is wrong at all, with no reason to
-//! suspect the tool rather than the file, so the confidence is reported and the
-//! caller holds the threshold.
+//! suspect the tool rather than the file, so both figures are reported and the
+//! caller holds the bar.
 //!
 //! ```
 //! use subtext_align::{Signal, align};
@@ -53,13 +61,18 @@
 //! let found = align(&cues, &Signal::from_cues(&spoken));
 //! assert_eq!(found.correction().offset_ms(), 2_500);
 //! assert!(found.confidence().score() > 0.25);
+//!
+//! // And the lines land where the film talks, which they did not before.
+//! assert!(found.landing().fraction() > found.as_written().fraction());
 //! ```
 
 mod align;
 mod correlate;
+mod landing;
 mod rate;
 mod signal;
 
 pub use crate::align::{Alignment, Confidence, align};
+pub use crate::landing::{Landing, TOLERANCE_MS, landing_of};
 pub use crate::rate::RATES;
 pub use crate::signal::{BIN_MS, Signal};

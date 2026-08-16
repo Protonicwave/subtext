@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BindingsModule from '@/shared/ipc/bindings';
 import type * as ClientModule from '@/shared/ipc/client';
 import type { AlignmentView, FilmView, MediaView, TrackView } from '@/shared/ipc/bindings';
+import { landing } from '@/test/alignment';
 
 const { ipc } = vi.hoisted(() => ({
   ipc: {
@@ -356,6 +357,8 @@ describe('the film sheet', () => {
           correction: { offsetMs: -1_250, rate: 1 },
           previous: { offsetMs: 0, rate: 1 },
           confidence: 0.9,
+          landing: landing(0.94),
+          asWritten: landing(0.14),
         }),
       );
       open();
@@ -365,7 +368,12 @@ describe('the film sheet', () => {
       await waitFor(() => {
         expect(screen.getByText('Lined up')).toBeInTheDocument();
       });
-      expect(screen.getByText('The subtitles now run −1.25s.')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(/The subtitles now run −1.25s\./);
+      // The evidence for it, in the same sentence and the same words the timing
+      // panel uses, since the two are read from one file.
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /94 lines in a hundred land on the talking, against 14 before/,
+      );
       expect(screen.getByRole('button', { name: 'Put it back as written' })).toBeInTheDocument();
     });
 
