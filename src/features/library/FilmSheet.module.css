@@ -277,6 +277,20 @@
   direction: rtl;
 }
 
+/*
+ * A left to right mark in front of the path.
+ *
+ * Reading the line right to left is what puts the ellipsis at the far end of
+ * it, and it also leaves a leading separator as a neutral character at the
+ * start of a right to left line, which is drawn at the other end: /films/Heat
+ * becomes films/Heat/. The mark is a strong character for the separator to
+ * lean on, and it is generated rather than written into the value so that the
+ * path stays a path to anything that reads it.
+ */
+.path::before {
+  content: '\200e';
+}
+
 .track {
   display: flex;
   align-items: center;
