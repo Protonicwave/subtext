@@ -39,3 +39,7 @@ pnpm-debug.log*
 
 # Test and coverage output
 coverage/
+
+# A measurement over somebody's own films, which is a working note rather than
+# part of the project.
+alignment-corpus.json

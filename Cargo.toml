@@ -7,6 +7,10 @@ members = [
     "crates/subtext-scan",
     "crates/subtext-speech",
     "src-tauri",
+    # A measuring instrument rather than a part of the application. It is a
+    # binary with no library in it, so nothing here can depend on it, and it is
+    # kept out of `crates` for the same reason.
+    "tools/alignment-corpus",
 ]
 resolver = "3"
 

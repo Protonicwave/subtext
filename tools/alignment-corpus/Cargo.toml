@@ -1,0 +1,24 @@
+[package]
+name = "alignment-corpus"
+description = "Measuring the subtitle alignment engine against a directory of real films"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+subtext-align.workspace = true
+subtext-container.workspace = true
+subtext-core.workspace = true
+subtext-speech.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
