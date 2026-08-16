@@ -14,6 +14,7 @@ import { DropZone } from '@/features/onboarding/DropZone';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { ImportFlow } from '@/features/onboarding/ImportFlow';
 import { useImport } from '@/features/onboarding/useImport';
+import { Palette } from '@/features/palette/Palette';
 import { ShortcutSheet } from '@/features/settings/ShortcutSheet';
 import { TitleBar } from './TitleBar';
 import { useNavigation } from './routes';
@@ -100,6 +101,7 @@ export function App() {
       )}
 
       <FilmSheet />
+      <Palette />
       <ShortcutSheet />
       <ImportFlow />
       <DropZone />
