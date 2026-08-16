@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, FIELDS, comfortOf, settingsFrom, storedAs } from './schema';
+import { DEFAULTS, FIELDS, comfortOf, deadKeysIn, settingsFrom, storedAs } from './schema';
 
 describe('the settings a library file holds', () => {
   it('reads back what was written, whatever kind of setting it is', () => {
@@ -63,6 +63,80 @@ describe('the settings a library file holds', () => {
 
   it('reads an empty value as no value rather than as nothing at all', () => {
     expect(settingsFrom([{ key: FIELDS.glow.key, value: '' }]).glow).toBe(DEFAULTS.glow);
+  });
+
+  /*
+   * Every key a 0.4.0 library file could hold. Two of them described the
+   * transcript panel, and five more were intervals the player is now told
+   * rather than asked about, so a file written by that release is the case this
+   * one has to open without complaint.
+   */
+  const FROM_0_4_0 = [
+    { key: 'appearance.accent', value: 'fixed' },
+    { key: 'appearance.glow', value: '0.4' },
+    { key: 'appearance.grain', value: '0' },
+    { key: 'appearance.motion', value: 'reduced' },
+    { key: 'library.matching', value: 'exact' },
+    { key: 'library.missing', value: 'hide' },
+    { key: 'playback.arrows', value: 'false' },
+    { key: 'playback.hardware', value: 'false' },
+    { key: 'playback.hide', value: '4000' },
+    { key: 'playback.resume', value: 'beginning' },
+    { key: 'playback.rewind', value: '12000' },
+    { key: 'playback.skip', value: '30000' },
+    { key: 'playback.watched', value: '0.9' },
+    { key: 'subtitles.background', value: 'panel' },
+    { key: 'subtitles.colour', value: '#ffd98a' },
+    { key: 'subtitles.language', value: 'fr' },
+    { key: 'subtitles.lead', value: '150' },
+    { key: 'subtitles.minimum', value: '1200' },
+    { key: 'subtitles.position', value: '10' },
+    { key: 'subtitles.size', value: '5.5' },
+    { key: 'subtitles.typeface', value: 'serif' },
+    { key: 'subtitles.weight', value: '600' },
+    { key: 'transcript.follow', value: 'false' },
+    { key: 'transcript.typeface', value: 'serif' },
+  ];
+
+  it('keeps everything a 0.4.0 file said that still means something', () => {
+    const settings = settingsFrom(FROM_0_4_0);
+
+    expect(settings.accent).toBe('fixed');
+    expect(settings.motion).toBe('reduced');
+    expect(settings.matching).toBe('exact');
+    expect(settings.missingFilms).toBe('hide');
+    expect(settings.resume).toBe('beginning');
+    expect(settings.hardwareDecoding).toBe(false);
+    expect(settings.subtitleLanguage).toBe('fr');
+    expect(settings.subtitleSize).toBe(5.5);
+    expect(settings.subtitleLeadInMs).toBe(150);
+    expect(settings.subtitleMinimumMs).toBe(1_200);
+  });
+
+  it('stands the default in for a setting that release had never heard of', () => {
+    // Nothing wrote the cover size before this one, and a library opened for
+    // the first time by this build has to be drawn at some size.
+    expect(settingsFrom(FROM_0_4_0).tileSize).toBe(DEFAULTS.tileSize);
+  });
+
+  it('names the keys from a 0.4.0 file that nothing reads any more', () => {
+    expect(deadKeysIn(FROM_0_4_0).sort()).toStrictEqual([
+      'playback.arrows',
+      'playback.hide',
+      'playback.rewind',
+      'playback.skip',
+      'playback.watched',
+      'transcript.follow',
+      'transcript.typeface',
+    ]);
+  });
+
+  it('finds nothing to forget in a file this release wrote', () => {
+    const written = Object.keys(FIELDS).map((name) =>
+      storedAs(name as keyof typeof FIELDS, DEFAULTS[name as keyof typeof FIELDS]),
+    );
+
+    expect(deadKeysIn(written)).toStrictEqual([]);
   });
 
   it('hands the timeline the two settings it is built from', () => {

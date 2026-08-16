@@ -230,6 +230,24 @@ export function settingsFrom(stored: readonly PreferenceView[]): Settings {
   ) as Settings;
 }
 
+/**
+ * The keys in a library file that nothing here reads any more.
+ *
+ * A build that offered a setting this one does not leaves its row behind, and a
+ * row nothing reads is a row that accumulates: the preferences a version from
+ * two releases ago wrote would still be there in ten years' time.
+ *
+ * They are dropped rather than kept, which does mean that opening a library
+ * with an older build after a newer one loses whatever the newer one had been
+ * told. That is the price of not carrying dead keys forward, and it is the
+ * cheaper of the two: a setting is one control away from being set again.
+ */
+export function deadKeysIn(stored: readonly PreferenceView[]): string[] {
+  const known = new Set(Object.values(FIELDS).map((field) => field.key));
+
+  return stored.map((preference) => preference.key).filter((key) => !known.has(key));
+}
+
 /** One setting as the preference table takes it. */
 export function storedAs<Name extends SettingName>(
   name: Name,

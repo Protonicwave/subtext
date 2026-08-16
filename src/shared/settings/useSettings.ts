@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { ipc, reasonFor } from '@/shared/ipc/client';
-import { DEFAULTS, type SettingName, type Settings, settingsFrom, storedAs } from './schema';
+import {
+  DEFAULTS,
+  deadKeysIn,
+  type SettingName,
+  type Settings,
+  settingsFrom,
+  storedAs,
+} from './schema';
 
 /**
  * What the application has been told to prefer.
@@ -30,7 +37,14 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
   load: async () => {
     try {
-      set({ settings: settingsFrom(await ipc.readPreferences()), problem: null });
+      const stored = await ipc.readPreferences();
+      set({ settings: settingsFrom(stored), problem: null });
+
+      // Behind the read rather than before it. Nothing on any screen waits on
+      // this, and a library that would not let go of a row nothing reads is
+      // still a library everything else can be drawn from.
+      const dead = deadKeysIn(stored);
+      if (dead.length > 0) void ipc.forgetPreferences(dead).catch(() => undefined);
     } catch (failure) {
       // The defaults are a working application, so this is worth saying and
       // not worth stopping for. Nothing waits on the read for the same reason:

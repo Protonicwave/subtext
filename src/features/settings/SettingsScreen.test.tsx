@@ -9,6 +9,7 @@ const { ipc } = vi.hoisted(() => ({
     windowChrome: vi.fn(() => Promise.resolve({ backdrop: false, switchableDecoding: true })),
     writePreference: vi.fn(() => Promise.resolve(null)),
     readPreferences: vi.fn(() => Promise.resolve([])),
+    forgetPreferences: vi.fn(() => Promise.resolve(null)),
     rescan: vi.fn(() => Promise.resolve(null)),
     removeFolder: vi.fn(() => Promise.resolve(true)),
   },
