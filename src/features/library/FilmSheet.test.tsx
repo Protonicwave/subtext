@@ -138,6 +138,32 @@ describe('the film sheet', () => {
     for (const command of Object.values(ipc)) expect(command).not.toHaveBeenCalled();
   });
 
+  /*
+   * The only part of opening the page that could grow with the library is
+   * finding the film in it, and that is a lookup. Two thousand films behind the
+   * page cost what one does, which is what the figure it has to open in rests
+   * on as much as the absence of a read does.
+   */
+  it('opens as quickly over two thousand films as over one', () => {
+    const many = Array.from({ length: 2_000 }, (_, at) => ({
+      ...film,
+      id: at + 1,
+      title: `Film ${String(at + 1).padStart(4, '0')}`,
+    }));
+    useLibrary.setState({ films: many, resumable: [], loaded: true });
+    useSheet.setState({ filmId: 2_000 });
+
+    const at = performance.now();
+    render(<FilmSheet />);
+    const took = performance.now() - at;
+
+    expect(screen.getByRole('dialog', { name: 'Film 2000' })).toBeInTheDocument();
+
+    // Loose enough not to fail on a busy machine, and tight enough to catch the
+    // page starting to walk the library or read something as it opens.
+    expect(took).toBeLessThan(500);
+  });
+
   it('describes the file rather than the folder it is in', () => {
     open();
 
