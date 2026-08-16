@@ -23,6 +23,13 @@
 //! arrive when somebody starts speaking, against how many do already? Nothing
 //! else here can tell a right answer from a well-correlated wrong one.
 //!
+//! Both figures are measured against speech, so what goes into a cue signal is
+//! the lines somebody speaks in. A cue captioning a door slamming marks a moment
+//! of no speech, and a track full of them would be measured against a reading
+//! that was never going to find any. Those cues are left out of the signal here
+//! and out of nothing else: what is drawn and what is stored are the file's own
+//! cues.
+//!
 //! What it will not do is decide. An answer applied to a film nobody has watched
 //! yet is wrong for the whole film if it is wrong at all, with no reason to
 //! suspect the tool rather than the file, so both figures are reported and the
@@ -71,6 +78,7 @@ mod correlate;
 mod landing;
 mod rate;
 mod signal;
+mod spoken;
 
 pub use crate::align::{Alignment, Confidence, align};
 pub use crate::landing::{Landing, TOLERANCE_MS, landing_of};
