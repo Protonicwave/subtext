@@ -11,6 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
+use subtext_align::{Alignment, Landing};
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
@@ -401,6 +402,36 @@ impl CorrectionView {
     }
 }
 
+/// How many of a track's lines arrive when somebody starts talking.
+///
+/// The one figure in an alignment that was not read off the correlation that
+/// produced the answer, which is what makes it worth showing. It is quoted
+/// twice, once for the file as it stands and once for what a measurement would
+/// make of it, because neither number means much alone: no film puts every line
+/// on a voice, and what a person wants to know is whether this would be better.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LandingView {
+    /// The share of lines landing on the start of an utterance, none to all.
+    #[specta(type = Number)]
+    pub(crate) fraction: f32,
+    /// How far the middle line falls from the nearest one, in milliseconds.
+    pub(crate) median_ms: u32,
+    /// How many lines were measured. Nought where there was nothing to measure,
+    /// which is what tells an empty answer from a bad one.
+    pub(crate) examined: u32,
+}
+
+impl LandingView {
+    fn of(landing: Landing) -> Self {
+        Self {
+            fraction: landing.fraction(),
+            median_ms: landing.median_ms(),
+            examined: landing.examined(),
+        }
+    }
+}
+
 /// How an attempt to line a subtitle track up with its film ended.
 ///
 /// One shape covering every ending, so that the front end matches on this and
@@ -409,7 +440,11 @@ impl CorrectionView {
 /// they were, which is the point: an answer nobody can check is worse than no
 /// answer, and each of these says plainly which it is.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(tag = "outcome", rename_all = "kebab-case")]
+#[serde(
+    tag = "outcome",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub(crate) enum AlignmentView {
     /// The track has been moved to where the speech in the film actually is.
     Aligned {
@@ -419,6 +454,11 @@ pub(crate) enum AlignmentView {
         /// How sure the measurement was, from nothing to certain.
         #[specta(type = Number)]
         confidence: f32,
+        /// How the lines land now.
+        landing: LandingView,
+        /// How they landed before, which is what makes the figure above mean
+        /// something.
+        as_written: LandingView,
     },
     /// The track carries too few lines to be correlated with anything.
     ///
@@ -451,6 +491,24 @@ pub(crate) enum AlignmentView {
         /// How sure it would have had to be.
         #[specta(type = Number)]
         wanted: f32,
+        landing: LandingView,
+        as_written: LandingView,
+    },
+    /// A measurement was made, believed, and would not have helped.
+    ///
+    /// The correlation can be perfectly clear about a lag and still be answering
+    /// the wrong question, since the confidence beside it is read off the same
+    /// peak and cannot see past it. This is the outcome where the answer was put
+    /// to the film itself and did not put more lines on the talking than the
+    /// file already does, or did not put enough of them there to be worth
+    /// writing over somebody's library.
+    NoBetter {
+        correction: CorrectionView,
+        landing: LandingView,
+        as_written: LandingView,
+        /// The share of lines a measurement has to land to be written.
+        #[specta(type = Number)]
+        wanted: f32,
     },
     /// The film could not be opened, or nothing in it could be made sense of.
     Unreadable { message: String },
@@ -459,18 +517,31 @@ pub(crate) enum AlignmentView {
 }
 
 impl AlignmentView {
-    pub(crate) fn aligned(correction: Correction, previous: Correction, confidence: f32) -> Self {
+    pub(crate) fn aligned(found: &Alignment, previous: Correction, confidence: f32) -> Self {
         Self::Aligned {
-            correction: CorrectionView::of(correction),
+            correction: CorrectionView::of(found.correction()),
             previous: CorrectionView::of(previous),
             confidence,
+            landing: LandingView::of(found.landing()),
+            as_written: LandingView::of(found.as_written()),
         }
     }
 
-    pub(crate) fn uncertain(correction: Correction, confidence: f32, wanted: f32) -> Self {
+    pub(crate) fn uncertain(found: &Alignment, confidence: f32, wanted: f32) -> Self {
         Self::Uncertain {
-            correction: CorrectionView::of(correction),
+            correction: CorrectionView::of(found.correction()),
             confidence,
+            wanted,
+            landing: LandingView::of(found.landing()),
+            as_written: LandingView::of(found.as_written()),
+        }
+    }
+
+    pub(crate) fn no_better(found: &Alignment, wanted: f32) -> Self {
+        Self::NoBetter {
+            correction: CorrectionView::of(found.correction()),
+            landing: LandingView::of(found.landing()),
+            as_written: LandingView::of(found.as_written()),
             wanted,
         }
     }

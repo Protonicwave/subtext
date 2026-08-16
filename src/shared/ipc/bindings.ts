@@ -318,7 +318,14 @@ export type AlignmentView =
 /**  What was in force beforehand, so that it can be put back. */
 previous: CorrectionView; 
 /**  How sure the measurement was, from nothing to certain. */
-confidence: number } | 
+confidence: number; 
+/**  How the lines land now. */
+landing: LandingView; 
+/**
+ *  How they landed before, which is what makes the figure above mean
+ *  something.
+ */
+asWritten: LandingView } | 
 /**
  *  The track carries too few lines to be correlated with anything.
  * 
@@ -348,6 +355,19 @@ codec: string | null } |
  */
 { outcome: "uncertain"; correction: CorrectionView; confidence: number; 
 /**  How sure it would have had to be. */
+wanted: number; landing: LandingView; asWritten: LandingView } | 
+/**
+ *  A measurement was made, believed, and would not have helped.
+ * 
+ *  The correlation can be perfectly clear about a lag and still be answering
+ *  the wrong question, since the confidence beside it is read off the same
+ *  peak and cannot see past it. This is the outcome where the answer was put
+ *  to the film itself and did not put more lines on the talking than the
+ *  file already does, or did not put enough of them there to be worth
+ *  writing over somebody's library.
+ */
+{ outcome: "no-better"; correction: CorrectionView; landing: LandingView; asWritten: LandingView; 
+/**  The share of lines a measurement has to land to be written. */
 wanted: number } | 
 /**  The film could not be opened, or nothing in it could be made sense of. */
 { outcome: "unreadable"; message: string } | 
@@ -506,6 +526,27 @@ export type FolderView = {
  *  nobody will meet.
  */
 export type Id = number;
+
+/**
+ *  How many of a track's lines arrive when somebody starts talking.
+ * 
+ *  The one figure in an alignment that was not read off the correlation that
+ *  produced the answer, which is what makes it worth showing. It is quoted
+ *  twice, once for the file as it stands and once for what a measurement would
+ *  make of it, because neither number means much alone: no film puts every line
+ *  on a voice, and what a person wants to know is whether this would be better.
+ */
+export type LandingView = {
+	/**  The share of lines landing on the start of an utterance, none to all. */
+	fraction: number,
+	/**  How far the middle line falls from the nearest one, in milliseconds. */
+	medianMs: number,
+	/**
+	 *  How many lines were measured. Nought where there was nothing to measure,
+	 *  which is what tells an empty answer from a bad one.
+	 */
+	examined: number,
+};
 
 /**  How sure the pairing between a film and a subtitle file is. */
 export type MatchKindView = "exact" | "approximate" | "by-hand";
