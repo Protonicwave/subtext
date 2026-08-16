@@ -299,6 +299,44 @@ mod tests {
         assert!(found.confidence().score() > DEFENSIBLE);
     }
 
+    /// The same film captioned twice, once for somebody who can hear it and
+    /// once for somebody who cannot. The second carries the first's lines and a
+    /// description of every sound between them, and the two have to be measured
+    /// to the same answer, because they describe the same film.
+    ///
+    /// The descriptions sit in the quiet, which is where the sounds they caption
+    /// happen and where a detector looking for voices finds nothing. Fed in,
+    /// they pull the answer towards a film that talks in its own gaps.
+    #[test]
+    fn a_track_written_for_the_hearing_impaired_is_measured_like_the_plain_one() {
+        let plain = dialogue(800);
+        let speech = speech_of(&plain, Correction::of_offset(2_500));
+
+        let mut captioned = plain.clone();
+        for pair in plain.windows(2) {
+            let (before, after) = (&pair[0], &pair[1]);
+            let quiet = after.start.millis().saturating_sub(before.end.millis());
+            if quiet < 1_200 {
+                continue;
+            }
+            let at = before.end.millis() + quiet / 3;
+            captioned.push(Cue {
+                index: 0,
+                start: Timestamp::from_millis(at),
+                end: Timestamp::from_millis(at + 900),
+                text: "[DOOR SLAMS]".to_owned(),
+                position: None,
+            });
+        }
+        captioned.sort_by_key(|cue| cue.start);
+
+        let one = align(&plain, &speech).correction();
+        let other = align(&captioned, &speech).correction();
+        let apart = (one.offset_ms() - other.offset_ms()).abs();
+        assert!(apart <= 50, "the two tracks were {apart}ms apart");
+        assert!((one.rate() - other.rate()).abs() < f64::EPSILON);
+    }
+
     #[test]
     fn a_known_rate_is_chosen_from_the_candidates() {
         let cues = dialogue(1_500);

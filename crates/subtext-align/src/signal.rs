@@ -4,6 +4,8 @@ use core::fmt;
 
 use subtext_core::Cue;
 
+use crate::spoken::is_spoken;
+
 /// How much of a film one bin covers, in milliseconds.
 ///
 /// Ten milliseconds sits below the resolution anybody can perceive in subtitle
@@ -35,7 +37,11 @@ pub struct Signal {
 }
 
 impl Signal {
-    /// The bins a subtitle track covers, taken as written.
+    /// The bins the spoken lines of a subtitle track cover, taken as written.
+    ///
+    /// Spoken lines rather than every line: what a cue captioning a door
+    /// slamming marks is a moment of no speech at all, and the rule that leaves
+    /// those out is in [`crate::spoken`].
     #[must_use]
     pub fn from_cues(cues: &[Cue]) -> Self {
         let mut signal = Self {
@@ -109,7 +115,10 @@ impl Signal {
         self.bins.clear();
         self.bins.resize(length, false);
 
-        for cue in cues {
+        // The rule costs no pass of its own: a cue is asked whether anybody
+        // speaks in it as it is reached, and one that nobody speaks in is simply
+        // not marked.
+        for cue in cues.iter().filter(|cue| is_spoken(cue)) {
             let from = bin_of(cue.start.millis(), rate).min(length);
             let to = bin_of(cue.end.millis(), rate).min(length);
             // Out of order and overlapping cues both fall out of this without a
@@ -138,9 +147,14 @@ impl fmt::Debug for Signal {
     }
 }
 
-/// How many bins the cues reach at `rate`.
+/// How many bins the spoken cues reach at `rate`.
+///
+/// The same cues [`Signal::rebuild`] marks and no others, so that the buffers
+/// sized from this and the signal built into them agree about how far a track
+/// runs. A track whose last cue is a description ends where somebody last spoke.
 pub(crate) fn span(cues: &[Cue], rate: f64) -> usize {
     cues.iter()
+        .filter(|cue| is_spoken(cue))
         .map(|cue| bin_of(cue.end.millis(), rate))
         .max()
         .unwrap_or(0)
@@ -184,6 +198,13 @@ mod tests {
         }
     }
 
+    fn described(start: u32, end: u32) -> Cue {
+        Cue {
+            text: "[DOOR SLAMS]".to_owned(),
+            ..cue(start, end)
+        }
+    }
+
     #[test]
     fn a_cue_covers_the_bins_it_spans() {
         let signal = Signal::from_cues(&[cue(1_000, 3_000)]);
@@ -219,6 +240,38 @@ mod tests {
         let signal = Signal::from_cues(&[]);
         assert!(signal.is_empty());
         assert!(signal.is_flat());
+    }
+
+    /// The cue is still in the slice the caller holds. It is left out of the
+    /// bins and out of nothing else, which is what keeps this crate's opinion
+    /// about speech away from what anybody sees.
+    #[test]
+    fn a_cue_nobody_speaks_in_marks_no_bins() {
+        let cues = [cue(1_000, 3_000), described(5_000, 7_000)];
+        let signal = Signal::from_cues(&cues);
+
+        assert_eq!(signal.active(), 200);
+        assert!(!signal.is_active(500));
+        assert_eq!(cues.len(), 2);
+    }
+
+    /// A track that captions the sounds of a film and none of its words has
+    /// nothing to line up against speech, and says so by being flat rather than
+    /// by describing the doors.
+    #[test]
+    fn a_track_of_nothing_but_descriptions_marks_nothing_at_all() {
+        let signal = Signal::from_cues(&[described(1_000, 3_000), described(9_000, 11_000)]);
+
+        assert_eq!(signal.active(), 0);
+        assert!(signal.is_flat());
+    }
+
+    /// The buffers are sized from [`span`] and filled by [`Signal::rebuild`],
+    /// so the two have to agree about which cues count.
+    #[test]
+    fn a_description_at_the_end_does_not_stretch_the_signal() {
+        let signal = Signal::from_cues(&[cue(1_000, 3_000), described(40_000, 44_000)]);
+        assert_eq!(signal.len(), 300);
     }
 
     #[test]
