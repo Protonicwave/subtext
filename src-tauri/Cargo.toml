@@ -1,6 +1,6 @@
 [package]
 name = "subtext"
-description = "A film player that treats subtitles as data"
+description = "A player for the films already on your disk"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

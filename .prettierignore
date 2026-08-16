@@ -8,4 +8,4 @@ src/shared/ipc/bindings.ts
 node_modules/
 package-lock.json
 PLAN.md
-mockup.html
+mockup*.html
