@@ -8,6 +8,8 @@
  * that had to be consulted before any of them worked.
  */
 
+import { COMMANDS } from '@/features/palette/commands';
+
 export interface Shortcut {
   /** The keys, in the order they are pressed. Drawn one to a box. */
   readonly keys: readonly string[];
@@ -23,6 +25,10 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
   {
     title: 'Anywhere',
     shortcuts: [
+      // Taken from the commands themselves rather than written out again, since
+      // the palette lists the same keys beside the same names and the two
+      // drifting apart would leave one of them lying.
+      ...COMMANDS.map((command) => ({ keys: command.keys, does: command.name })),
       { keys: ['?'], does: 'Show this list' },
       { keys: ['Esc'], does: 'Close what is open, or go back a screen' },
     ],
