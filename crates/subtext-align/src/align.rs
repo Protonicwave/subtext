@@ -3,6 +3,7 @@
 use subtext_core::{Correction, Cue};
 
 use crate::correlate::{Correlator, Peak};
+use crate::landing::{Landing, landing_of};
 use crate::rate::RATES;
 use crate::signal::{self, BIN_MS, Signal};
 
@@ -68,6 +69,8 @@ impl Confidence {
 pub struct Alignment {
     correction: Correction,
     confidence: Confidence,
+    landing: Landing,
+    as_written: Landing,
 }
 
 impl Alignment {
@@ -79,6 +82,28 @@ impl Alignment {
     #[must_use]
     pub fn confidence(self) -> Confidence {
         self.confidence
+    }
+
+    /// How the lines would sit against the talking with this correction
+    /// applied.
+    ///
+    /// The confidence above comes out of the same peak the correction does, so
+    /// it says how clearly the correlation chose, and nothing about whether the
+    /// answer it chose is any good. This says the second thing, and it says it
+    /// in the units somebody watching would use.
+    #[must_use]
+    pub fn landing(self) -> Landing {
+        self.landing
+    }
+
+    /// How the lines sit against the talking with the file left as it is.
+    ///
+    /// The figure above means very little on its own, because no film scores
+    /// well on it and none was ever going to. It means a great deal beside this
+    /// one, which is why the two always travel together.
+    #[must_use]
+    pub fn as_written(self) -> Landing {
+        self.as_written
     }
 }
 
@@ -97,9 +122,15 @@ impl Alignment {
 /// threshold worth having will accept.
 #[must_use]
 pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
+    // Nothing measured, in every part of the answer. Where there is no shape to
+    // correlate there is no shape to land on either, so reporting how the lines
+    // sit would be reporting the same absence twice in a form that looks like a
+    // figure.
     let nothing = Alignment {
         correction: Correction::IDENTITY,
         confidence: Confidence::NONE,
+        landing: Landing::NONE,
+        as_written: Landing::NONE,
     };
 
     let window = (LAG_WINDOW_MS / BIN_MS) as usize;
@@ -136,9 +167,12 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
     let offset_ms = peak
         .lag
         .saturating_mul(isize::try_from(BIN_MS).unwrap_or(1));
+    let correction = Correction::new(i32::try_from(offset_ms).unwrap_or(0), rate);
     Alignment {
-        correction: Correction::new(i32::try_from(offset_ms).unwrap_or(0), rate),
+        correction,
         confidence: confidence_of(&peak),
+        landing: landing_of(cues, speech, correction),
+        as_written: landing_of(cues, speech, Correction::IDENTITY),
     }
 }
 
@@ -376,6 +410,38 @@ mod tests {
         assert!(found.confidence().score() < DEFENSIBLE);
     }
 
+    /// The figure the caller decides on, alongside the one it has to be
+    /// compared against. Neither is any use without the other: no film scores
+    /// well against the second, and the first is only ever read as a difference.
+    ///
+    /// Three quarters rather than all of it, because the transcript above
+    /// overlaps its own lines and a line beginning while the last one is still
+    /// running has nobody starting to speak under it. That is a property of
+    /// every real transcript as well, and it is why the figure is compared with
+    /// itself rather than against one.
+    #[test]
+    fn the_answer_says_how_the_lines_would_land_and_how_they_land_already() {
+        let cues = dialogue(800);
+        let found = align(&cues, &speech_of(&cues, Correction::of_offset(2_500)));
+
+        assert!(found.landing().fraction() > 0.7);
+        assert!(found.as_written().fraction() < 0.1);
+        assert_eq!(found.landing().examined(), 800);
+        assert_eq!(found.landing().median_ms(), 0);
+    }
+
+    /// A track that needs nothing already lands, so the two figures agree and
+    /// there is no improvement to be had. This is what stops a correction being
+    /// written to a file that was right to begin with.
+    #[test]
+    fn a_track_that_needs_nothing_lands_the_same_either_way() {
+        let cues = dialogue(800);
+        let found = align(&cues, &speech_of(&cues, Correction::IDENTITY));
+
+        assert_eq!(found.landing(), found.as_written());
+        assert!(found.landing().fraction() > 0.7);
+    }
+
     #[test]
     fn nothing_to_measure_comes_back_as_nothing_measured() {
         let cues = dialogue(200);
@@ -390,6 +456,8 @@ mod tests {
             assert!(found.correction().is_identity());
             assert_eq!(found.confidence(), Confidence::NONE);
             assert!(found.confidence().score() < f32::EPSILON);
+            assert!(!found.landing().is_measured());
+            assert!(!found.as_written().is_measured());
         }
     }
 
