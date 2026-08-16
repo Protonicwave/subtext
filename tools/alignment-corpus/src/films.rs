@@ -186,11 +186,12 @@ pub(crate) fn gather(
         match read(&path, truth_lands) {
             Ok(film) => {
                 println!(
-                    "  {title}: {} lines from {}, landing on {:.0}% of {} minutes of talking",
+                    "  {title}: {} lines from {}, {} utterances in {} minutes, landing on {:.0}%",
                     film.truth.len(),
                     film.origin.name(),
-                    f64::from(film.lands) * 100.0,
-                    minutes(&film.speech)
+                    utterances(&film.speech),
+                    minutes(&film.speech),
+                    f64::from(film.lands) * 100.0
                 );
                 films.push(film);
             }
@@ -375,8 +376,23 @@ pub(crate) fn measured(film: &Film) -> Measured {
         truth_from: film.origin.name(),
         truth_lands: film.lands,
         lines: film.truth.len(),
+        utterances: utterances(&film.speech),
         minutes: minutes(&film.speech),
     }
+}
+
+/// How many separate times somebody starts talking in a film.
+///
+/// Worth recording beside the number of lines, because a line lands by arriving
+/// as an utterance starts, so a reading that found far fewer utterances than the
+/// track has lines puts a ceiling on the landing figure that no correction can
+/// lift. Without this in the report, a film that cannot score well and a
+/// correction that is wrong look the same afterwards.
+fn utterances(speech: &Signal) -> u32 {
+    let starts = (0..speech.len())
+        .filter(|bin| speech.is_active(*bin) && (*bin == 0 || !speech.is_active(bin - 1)))
+        .count();
+    u32::try_from(starts).unwrap_or(u32::MAX)
 }
 
 /// How long a film runs, from how much of it was read.

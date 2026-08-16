@@ -98,6 +98,9 @@ pub(crate) struct Measured {
     /// How many lines its own track holds, which is the size of the truth every
     /// case built from it rests on.
     pub(crate) lines: usize,
+    /// How many separate times somebody starts talking, which is the number of
+    /// places a line has to land on.
+    pub(crate) utterances: u32,
     pub(crate) minutes: u32,
 }
 
