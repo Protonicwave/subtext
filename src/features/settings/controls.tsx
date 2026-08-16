@@ -175,6 +175,17 @@ export function Slider({ name, label, hint, format }: SliderProps) {
   );
 }
 
+/**
+ * A heading partway down a panel.
+ *
+ * For a section with two kinds of thing in it, where a run of a dozen rows
+ * would otherwise read as one list of everything. It is a heading and not a
+ * second panel because both kinds belong under the same word in the rail.
+ */
+export function Group({ title }: { title: string }) {
+  return <h3 className={styles.group}>{title}</h3>;
+}
+
 /** A row that is an action rather than a preference. */
 export function Action({ label, hint, children }: Described & { children: ReactNode }): ReactNode {
   return (

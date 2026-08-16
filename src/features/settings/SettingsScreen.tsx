@@ -2,19 +2,26 @@ import { type ReactNode, useState } from 'react';
 import { classes } from '@/shared/ui/classes';
 import { AppearanceSection } from './AppearanceSection';
 import { LibrarySection } from './LibrarySection';
+import { LibraryViewSection } from './LibraryViewSection';
 import { PlaybackSection } from './PlaybackSection';
 import { ShortcutTable } from './ShortcutTable';
-import { SubtitleSection } from './SubtitleSection';
 import styles from './SettingsScreen.module.css';
 
 /**
- * Everything the application has an opinion about, made adjustable.
+ * Everything the application has an opinion about that is worth asking about.
  *
  * A rail of five rather than one long page, because the five have nothing to do
  * with each other: somebody changing how a subtitle looks is not on their way
  * to the folder list. Which one is showing is this component's own state and
  * nothing else's, since it is not worth keeping between visits and there is no
  * address bar to put it in.
+ *
+ * Five sections and not everything that could be one. A screen that offered a
+ * number for every interval the player works to would be longer without being
+ * more useful: almost nobody has a view about how long a control bar waits
+ * before it hides, and the ones who do are better served by a value chosen
+ * carefully than by being asked. What remains is what somebody would go looking
+ * for, and what nothing else could answer for them.
  *
  * Every control writes through to the library file as it is used, so there is
  * nothing here to save and nothing to undo. That is why there is no footer.
@@ -33,13 +40,13 @@ const PANELS: readonly Panel[] = [
     content: () => <LibrarySection />,
   },
   {
-    name: 'Subtitles',
-    says: 'How a line is drawn over the picture.',
-    content: () => <SubtitleSection />,
+    name: 'Library view',
+    says: 'How the films you have are laid out on the screen you land on.',
+    content: () => <LibraryViewSection />,
   },
   {
     name: 'Playback',
-    says: 'How a film behaves once it is open.',
+    says: 'How a film behaves once it is open, and how its subtitles read.',
     content: () => <PlaybackSection />,
   },
   {

@@ -50,6 +50,17 @@ legend.text + * {
   color: var(--colour-text-faint);
 }
 
+/*
+ * The heading between two kinds of setting in one panel. The rows either side
+ * of it draw their own hairlines, so all it needs is the room to sit in.
+ */
+.group {
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
 /* The strip of alternatives, drawn as one control rather than as buttons. */
 .strip {
   display: flex;

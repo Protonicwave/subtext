@@ -130,7 +130,7 @@ describe('the settings screen', () => {
 
   it('draws the subtitle preview with the renderer the player uses', async () => {
     render(<SettingsScreen />);
-    const subtitles = await open('Subtitles');
+    const subtitles = await open('Playback');
 
     expect(within(subtitles).getByText(/the light was quite like this/)).toBeInTheDocument();
 
@@ -141,7 +141,7 @@ describe('the settings screen', () => {
 
   it('shows what the timing preferences do to a line rather than describing it', async () => {
     render(<SettingsScreen />);
-    const subtitles = await open('Subtitles');
+    const subtitles = await open('Playback');
 
     // The two rows are the file as written against what the player would be
     // handed, and the difference between them is what these two settings are.
@@ -183,6 +183,40 @@ describe('the settings screen', () => {
     });
 
     expect(screen.queryByRole('switch', { name: /graphics card/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps how the library is laid out apart from where it is read from', async () => {
+    render(<SettingsScreen />);
+    const view = await open('Library view');
+
+    await userEvent.click(within(view).getByRole('radio', { name: 'Large' }));
+
+    expect(useSettings.getState().settings.tileSize).toBe('large');
+    expect(ipc.writePreference).toHaveBeenCalledWith('library.tiles', 'large');
+    expect(screen.queryByText('Watched folders')).not.toBeInTheDocument();
+  });
+
+  /*
+   * The five sections are the settings worth asking about rather than
+   * everything that could be one. These four were intervals the player is now
+   * simply told, and a control that came back by accident would be a control
+   * nothing writes.
+   */
+  it('asks about nothing the player is now told', async () => {
+    render(<SettingsScreen />);
+
+    for (const name of ['Library', 'Library view', 'Playback', 'Appearance']) {
+      await open(name);
+
+      for (const gone of [
+        /skip interval/i,
+        /controls hide after/i,
+        /counted as watched/i,
+        /run-up/i,
+      ]) {
+        expect(screen.queryByText(gone)).not.toBeInTheDocument();
+      }
+    }
   });
 
   it('lists the keys without anybody having to find them first', async () => {
