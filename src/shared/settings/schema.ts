@@ -142,6 +142,13 @@ export const FIELDS = {
     'title',
   ),
   libraryDescending: toggle('library.descending', false),
+  /*
+   * How large a cover is drawn, on the wall and on the rails alike. Three named
+   * sizes rather than a slider: what is being chosen is how many films fit
+   * across the window against how well each one can be read, and three answers
+   * cover that where a hundred would only make it harder to choose.
+   */
+  tileSize: choice('library.tiles', ['small', 'medium', 'large'], 'medium'),
   // The value Rust reads under this key is the name of the strict one, so these
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),

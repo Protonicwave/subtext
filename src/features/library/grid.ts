@@ -1,3 +1,5 @@
+import type { Settings } from '@/shared/settings/schema';
+
 /**
  * How the poster grid lays out at a given width.
  *
@@ -45,6 +47,29 @@ export const RAIL_CAPTION = 58;
  * down both sides is worse than losing the edges of each frame.
  */
 export const TILE_RATIO = 3 / 2;
+
+/**
+ * What each of the three tile sizes does to the two widths above.
+ *
+ * Applied to the widths rather than drawn as three sets of numbers, so that the
+ * shape of a tile, the gap beside it and the room under it all follow from one
+ * place. Small is about a fifth off and large about a quarter on, which is the
+ * range over which a wall still reads as a wall: less than that is a difference
+ * nobody would notice, and more is a different screen.
+ */
+const SCALES = { small: 0.8, medium: 1, large: 1.25 } as const;
+
+export type TileSize = Settings['tileSize'];
+
+/** How wide a tile on the wall is at least, at the size that was chosen. */
+export function wallTileFor(size: TileSize): number {
+  return Math.round(MIN_TILE * SCALES[size]);
+}
+
+/** How wide a tile on a rail is, at the size that was chosen. */
+export function railTileFor(size: TileSize): number {
+  return Math.round(RAIL_TILE * SCALES[size]);
+}
 
 /** How many tiles fit across a given width, never fewer than one. */
 export function columnsFor(width: number, minimum = MIN_TILE, gap = TILE_GAP): number {

@@ -1,10 +1,11 @@
-import { useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { PosterTile } from './PosterTile';
-import { RAIL_CAPTION, RAIL_GAP, RAIL_TILE, TILE_RATIO } from './grid';
+import { RAIL_CAPTION, RAIL_GAP, railTileFor, TILE_RATIO } from './grid';
 import { CARRYING_ON, type Shelf as ShelfRow } from './shelves';
 import { useNearby } from './useNearby';
+import { useSetting } from '@/shared/settings/useSettings';
 import styles from './Shelf.module.css';
 
 /**
@@ -30,6 +31,10 @@ export function Shelf({ shelf, onOpen }: ShelfProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const [section, nearby] = useNearby();
 
+  // A rail is scrolled rather than wrapped, so the size that was chosen is the
+  // width of the tile itself here rather than the number that fit across.
+  const tile = railTileFor(useSetting('tileSize'));
+
   // As above the wall: the virtualiser hands back answers that change as the
   // rail is scrolled, and a remembered one would be wrong.
   // eslint-disable-next-line react-hooks/incompatible-library -- see above
@@ -37,10 +42,16 @@ export function Shelf({ shelf, onOpen }: ShelfProps) {
     horizontal: true,
     count: shelf.films.length,
     getScrollElement: () => scroller.current,
-    estimateSize: () => RAIL_TILE + RAIL_GAP,
+    estimateSize: () => tile + RAIL_GAP,
     overscan: OVERSCAN,
     initialRect: { width: window.innerWidth, height: window.innerHeight },
   });
+
+  // A rail whose tiles changed width has slots in the wrong places until the
+  // virtualiser is told to look at them again.
+  useEffect(() => {
+    virtualiser.measure();
+  }, [virtualiser, tile]);
 
   const heading = `shelf-${shelf.key}`;
 
@@ -51,7 +62,7 @@ export function Shelf({ shelf, onOpen }: ShelfProps) {
       aria-labelledby={heading}
       style={
         {
-          '--rail-tile': `${String(RAIL_TILE)}px`,
+          '--rail-tile': `${String(tile)}px`,
           '--rail-gap': `${String(RAIL_GAP)}px`,
           '--rail-ratio': String(TILE_RATIO),
           '--caption-height': `${String(RAIL_CAPTION)}px`,
