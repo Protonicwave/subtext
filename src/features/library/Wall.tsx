@@ -2,8 +2,9 @@ import { useEffect, useMemo, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { useWidth } from '@/shared/ui/useWidth';
+import { useSetting } from '@/shared/settings/useSettings';
 import { PosterTile } from './PosterTile';
-import { CAPTION, columnsFor, rowHeight, rowsOf, TILE_GAP } from './grid';
+import { CAPTION, columnsFor, rowHeight, rowsOf, TILE_GAP, wallTileFor } from './grid';
 import { useOffsetTop } from './useOffsetTop';
 import styles from './Wall.module.css';
 
@@ -32,7 +33,11 @@ export function Wall({ films, scroller, onOpen }: WallProps) {
   const [grid, width, node] = useWidth();
   const above = useOffsetTop(scroller, node);
 
-  const columns = columnsFor(width);
+  // The tiles are as wide as the width divided between them, so the size that
+  // was chosen decides how many go in a row rather than how wide each one is
+  // drawn. A window is a fixed thing to fill either way.
+  const least = wallTileFor(useSetting('tileSize'));
+  const columns = columnsFor(width, least);
   const rows = useMemo(() => rowsOf(films, columns), [films, columns]);
   const size = rowHeight(width, columns, TILE_GAP, CAPTION);
 

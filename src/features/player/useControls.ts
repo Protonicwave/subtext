@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSettings } from '@/shared/settings/useSettings';
+import { HIDE_AFTER_MS } from './intervals';
 
 /**
  * When the controls are on screen.
@@ -37,11 +37,9 @@ export function useControls(playing: boolean): Controls {
     setAwake(true);
     if (timer.current !== null) clearTimeout(timer.current);
 
-    // Read as the timer is set rather than subscribed to, so that a preference
-    // nobody has touched does not rebuild this on every pointer move.
     timer.current = setTimeout(() => {
       setAwake(false);
-    }, useSettings.getState().settings.hideAfterMs);
+    }, HIDE_AFTER_MS);
   }, []);
 
   useEffect(

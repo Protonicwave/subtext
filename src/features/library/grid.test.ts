@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { columnsFor, rowHeight, rowsOf } from './grid';
+import {
+  columnsFor,
+  MIN_TILE,
+  RAIL_TILE,
+  railTileFor,
+  rowHeight,
+  rowsOf,
+  wallTileFor,
+} from './grid';
 
 describe('the grid', () => {
   it('fits as many tiles across as the width allows', () => {
@@ -34,5 +42,26 @@ describe('the grid', () => {
 
   it('deals into one column rather than none when asked for nothing', () => {
     expect(rowsOf([1, 2], 0)).toEqual([[1], [2]]);
+  });
+
+  it('leaves the tiles where they were for the size nobody has changed', () => {
+    // The size a library that has never been told otherwise is drawn at, and
+    // therefore the one that has to match what was there before it was a
+    // choice at all.
+    expect(wallTileFor('medium')).toBe(MIN_TILE);
+    expect(railTileFor('medium')).toBe(RAIL_TILE);
+  });
+
+  it('puts more films across the window at the small size and fewer at the large', () => {
+    expect(wallTileFor('small')).toBeLessThan(wallTileFor('medium'));
+    expect(wallTileFor('large')).toBeGreaterThan(wallTileFor('medium'));
+    expect(railTileFor('small')).toBeLessThan(railTileFor('large'));
+
+    // A window that takes eight tiles at the middle size takes ten of the
+    // small ones and six of the large, which is the difference this setting is
+    // for.
+    expect(columnsFor(1_600, wallTileFor('small'))).toBe(10);
+    expect(columnsFor(1_600, wallTileFor('medium'))).toBe(8);
+    expect(columnsFor(1_600, wallTileFor('large'))).toBe(6);
   });
 });

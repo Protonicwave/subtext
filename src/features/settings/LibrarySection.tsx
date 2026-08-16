@@ -77,16 +77,6 @@ export function LibrarySection() {
       </div>
 
       <Choice
-        name="libraryLayout"
-        label="How the library is arranged"
-        hint="Shelves are the folders you already made: one row for each folder inside a watched folder, with what you have not finished at the top. One wall is every film at once."
-        options={[
-          { value: 'shelves', label: 'Shelves' },
-          { value: 'wall', label: 'One wall' },
-        ]}
-      />
-
-      <Choice
         name="missingFilms"
         label="Films whose file has gone"
         hint="An unplugged drive takes its films with it. Either way Subtext keeps where you were up to and puts them back when the file returns."

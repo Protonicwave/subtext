@@ -681,6 +681,26 @@ pub(crate) async fn write_preference(
         .map_err(Failure::of)
 }
 
+/// Forgets preferences the application no longer has anything to do with.
+///
+/// Which keys those are is the front end's to say, because the front end is
+/// where the table of settings lives and duplicating it here would be a second
+/// list to keep in step. This end only does as it is told, and a key that was
+/// not there was already forgotten.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn forget_preferences(
+    state: State<'_, AppState>,
+    keys: Vec<String>,
+) -> Answer<()> {
+    let preferences = state.scanner().database().preferences();
+    for key in &keys {
+        preferences.remove(key).map_err(Failure::of)?;
+    }
+
+    Ok(())
+}
+
 /// Reads every watched folder again.
 ///
 /// Cheap when nothing has moved: an unchanged folder is one stat per file and

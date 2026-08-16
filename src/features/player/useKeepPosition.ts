@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Id } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
-import { useSettings } from '@/shared/settings/useSettings';
 import { useLibrary } from '@/features/library/useLibrary';
+import { WATCHED_FRACTION } from './intervals';
 import { isFinished } from './resume';
 
 /**
@@ -101,7 +101,7 @@ async function save({ filmId, positionMs, durationMs }: Watching): Promise<void>
       filmId,
       Math.round(positionMs),
       durationMs === null ? null : Math.round(durationMs),
-      isFinished(positionMs, durationMs, useSettings.getState().settings.watchedFraction),
+      isFinished(positionMs, durationMs, WATCHED_FRACTION),
     );
   } catch {
     // Nothing to tell somebody watching a film. The position is a convenience,

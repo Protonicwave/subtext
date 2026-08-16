@@ -5,6 +5,7 @@ const { ipc } = vi.hoisted(() => ({
   ipc: {
     readPreferences: vi.fn(),
     writePreference: vi.fn(),
+    forgetPreferences: vi.fn(),
   },
 }));
 
@@ -23,6 +24,7 @@ describe('the settings', () => {
     useSettings.setState({ settings: DEFAULTS, problem: null });
     ipc.readPreferences.mockResolvedValue([]);
     ipc.writePreference.mockResolvedValue(null);
+    ipc.forgetPreferences.mockResolvedValue(null);
   });
 
   it('reads what was kept from the last time', async () => {
@@ -31,6 +33,43 @@ describe('the settings', () => {
     await useSettings.getState().load();
 
     expect(useSettings.getState().settings.subtitleSize).toBe(6.2);
+  });
+
+  it('drops the keys an older release left behind, and keeps the rest', async () => {
+    ipc.readPreferences.mockResolvedValue([
+      { key: 'subtitles.size', value: '6.2' },
+      { key: 'transcript.typeface', value: 'serif' },
+      { key: 'playback.skip', value: '30000' },
+    ]);
+
+    await useSettings.getState().load();
+
+    expect(useSettings.getState().settings.subtitleSize).toBe(6.2);
+    await vi.waitFor(() => {
+      expect(ipc.forgetPreferences).toHaveBeenCalledWith(['transcript.typeface', 'playback.skip']);
+    });
+  });
+
+  it('asks for nothing to be forgotten where there is nothing to forget', async () => {
+    ipc.readPreferences.mockResolvedValue([{ key: 'subtitles.size', value: '6.2' }]);
+
+    await useSettings.getState().load();
+
+    expect(ipc.forgetPreferences).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The settings are already on the screen by then, and a library that would
+   * not let go of a row nothing reads is still a library everything else can
+   * be drawn from.
+   */
+  it('carries on when the dead keys cannot be dropped', async () => {
+    ipc.readPreferences.mockResolvedValue([{ key: 'transcript.follow', value: 'false' }]);
+    ipc.forgetPreferences.mockRejectedValue(new Error('the library file is read only'));
+
+    await useSettings.getState().load();
+
+    expect(useSettings.getState().problem).toBeNull();
   });
 
   it('carries on with the defaults when the library cannot be read', async () => {

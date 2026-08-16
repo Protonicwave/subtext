@@ -49,6 +49,7 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::save_poster,
             commands::read_preferences,
             commands::write_preference,
+            commands::forget_preferences,
             commands::rescan,
             commands::scan_progress,
             commands::is_scanning,
