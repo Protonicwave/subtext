@@ -57,9 +57,11 @@
 
 mod align;
 mod correlate;
+mod landing;
 mod rate;
 mod signal;
 
 pub use crate::align::{Alignment, Confidence, align};
+pub use crate::landing::{Landing, TOLERANCE_MS, landing_of};
 pub use crate::rate::RATES;
 pub use crate::signal::{BIN_MS, Signal};

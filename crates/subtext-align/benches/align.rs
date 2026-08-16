@@ -1,23 +1,30 @@
 //! How long it takes to work out what a track is out by.
 //!
-//! Two numbers matter. Building the cue signal happens before anything else and
-//! has to disappear against the rest of the work, so it is measured at the five
-//! thousand cues a long film carries. And the whole search, being six rate
+//! Three numbers matter. Building the cue signal happens before anything else
+//! and has to disappear against the rest of the work, so it is measured at the
+//! five thousand cues a long film carries. And the whole search, being six rate
 //! candidates over a two hour film, has to come in under a second, since it runs
 //! while somebody waits and the audio it is measured against costs a great deal
 //! more than this does.
+//!
+//! The third is the landing figure, which the search reads twice, and which has
+//! to stay small enough that checking an answer is never a reason not to check
+//! it. Five milliseconds over a three thousand line track is the bar.
 
 use std::hint::black_box;
 
 use criterion::Criterion;
-use subtext_align::{Signal, align};
-use subtext_core::{Cue, Timestamp};
+use subtext_align::{BIN_MS, Signal, align, landing_of};
+use subtext_core::{Correction, Cue, Timestamp};
 
 /// Two hours, which is a film.
 const FILM_MS: u32 = 2 * 60 * 60 * 1_000;
 
 /// What a long film's transcript runs to.
 const CUES: u32 = 5_000;
+
+/// The track length the landing figure is held to.
+const MEASURED: u32 = 3_000;
 
 /// How far the film's dialogue falls after the file claims it does.
 const LATE_MS: u32 = 2_500;
@@ -38,6 +45,23 @@ fn main() {
         bencher.iter(|| black_box(align(black_box(&cues), black_box(&speech))));
     });
 
+    // Measured where it is worst. A line with an utterance under it is answered
+    // by the first bin the search looks in; a line with nothing anywhere near it
+    // costs the whole reach, both ways. So the film here talks through its first
+    // few minutes and says nothing for the rest of its length, which puts almost
+    // every one of the three thousand lines into the expensive case.
+    let track = dialogue(MEASURED);
+    let quiet_film = talks_early(&track);
+    criterion.bench_function("measure where three thousand lines land", |bencher| {
+        bencher.iter(|| {
+            black_box(landing_of(
+                black_box(&track),
+                black_box(&quiet_film),
+                Correction::of_offset(i32::try_from(LATE_MS).unwrap_or_default()),
+            ))
+        });
+    });
+
     criterion.final_summary();
 }
 
@@ -56,6 +80,16 @@ fn dialogue(count: u32) -> Vec<Cue> {
             }
         })
         .collect()
+}
+
+/// A film the length of the others that talks only over its opening minutes.
+fn talks_early(cues: &[Cue]) -> Signal {
+    let bin = |ms: u32| (ms + LATE_MS) as usize / BIN_MS as usize;
+    let mut bins = vec![false; (FILM_MS / BIN_MS) as usize];
+    for cue in cues.iter().take(cues.len() / 20) {
+        bins[bin(cue.start.millis())..bin(cue.end.millis())].fill(true);
+    }
+    Signal::from_bins(bins)
 }
 
 /// The same dialogue where the film actually says it.
