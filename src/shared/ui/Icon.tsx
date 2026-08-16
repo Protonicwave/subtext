@@ -57,6 +57,15 @@ export function CoversIcon(props: IconProps) {
   );
 }
 
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={2.2}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </Icon>
+  );
+}
+
 /** The library as a list. */
 export function ListIcon(props: IconProps) {
   return (
