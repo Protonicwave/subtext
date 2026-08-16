@@ -57,27 +57,31 @@ fn run() -> Result<(), String> {
         return Ok(());
     };
 
-    let gathered = films::gather(&arguments.films, arguments.limit)?;
+    let gathered = films::gather(&arguments.films, arguments.limit, arguments.truth_lands)?;
     let films = gathered.films;
-    if films.len() < 2 {
-        return Err(
-            "a corpus needs at least two usable films, since a case that must be refused is one film's subtitle measured against another film's audio"
-                .to_owned(),
-        );
+    if films.is_empty() {
+        return Err("no film in that directory could be taken as truth".to_owned());
     }
 
     let mut rows = Vec::new();
     println!();
     for (at, film) in films.iter().enumerate() {
-        // The next film round the ring, so every film supplies one mismatched
-        // case and no film is measured against itself.
-        let against = (at + 1) % films.len();
         let mut built = cases::manufacture(at, &film.truth);
-        built.push(cases::mismatched(
-            &film.truth,
-            against,
-            &films[against].title,
-        ));
+
+        // The next film round the ring, so every film supplies one mismatched
+        // case and no film is measured against itself. A single film supplies
+        // none: measuring a subtitle against the film it was written for is not
+        // a mismatch, and inventing one by shuffling its own timings would be
+        // measuring the shuffle. The report says this is missing rather than
+        // leaving somebody to notice.
+        if films.len() > 1 {
+            let against = (at + 1) % films.len();
+            built.push(cases::mismatched(
+                &film.truth,
+                against,
+                &films[against].title,
+            ));
+        }
 
         println!("Measuring {} over {} cases", film.title, built.len());
         for case in &built {
@@ -157,6 +161,9 @@ struct Arguments {
     films: PathBuf,
     report: PathBuf,
     bars: Bars,
+    /// How much of a subtitle file beside a film has to land on that film before
+    /// it is taken as truth.
+    truth_lands: f32,
     limit: Option<usize>,
 }
 
@@ -165,6 +172,7 @@ fn arguments() -> Result<Option<Arguments>, String> {
     let mut films: Option<PathBuf> = None;
     let mut report = PathBuf::from(DEFAULT_REPORT);
     let mut bars = Bars::default();
+    let mut truth_lands = films::TRUTH_LANDS;
     let mut limit = None;
 
     let mut given = std::env::args().skip(1);
@@ -177,6 +185,7 @@ fn arguments() -> Result<Option<Arguments>, String> {
             "--report" => report = PathBuf::from(value(&mut given, "--report")?),
             "--threshold" => bars.threshold = number(&mut given, "--threshold")?,
             "--bar" => bars.bar = number(&mut given, "--bar")?,
+            "--truth-lands" => truth_lands = number(&mut given, "--truth-lands")?,
             "--limit" => limit = Some(number::<usize>(&mut given, "--limit")?),
             unknown if unknown.starts_with('-') => {
                 return Err(format!("{unknown} is not an option this understands"));
@@ -197,6 +206,7 @@ fn arguments() -> Result<Option<Arguments>, String> {
         films,
         report,
         bars,
+        truth_lands,
         limit,
     }))
 }
@@ -224,6 +234,8 @@ fn usage() {
     println!("  --report <file>    where the machine readable report goes");
     println!("  --threshold <n>    how sure a measurement has to be before it is written");
     println!("  --bar <n>          how much of a track has to land on the talking");
+    println!("  --truth-lands <n>  how much of a subtitle beside a film has to land on it");
+    println!("                     before it is taken as truth for that film");
     println!("  --limit <n>        measure at most this many films");
     println!();
     println!("Only the films are read. Nothing is written to any of them, and nothing");

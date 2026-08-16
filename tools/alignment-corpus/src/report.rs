@@ -28,6 +28,15 @@ const THRESHOLDS: [f32; 6] = [0.005, 0.010, 0.015, 0.025, 0.040, 0.060];
 /// most of one.
 const BARS: [f32; 5] = [0.2, 0.3, 0.4, 0.5, 0.6];
 
+/// How many films a report needs before its numbers are worth settling anything
+/// on.
+///
+/// The plan's figure. A run over fewer is worth having, because it exercises the
+/// engine end to end and will show a gross failure, but it is not evidence about
+/// a threshold: the whole complaint that started this part is a number set from
+/// one film.
+const TELLING_FILMS: usize = 20;
+
 /// One case, measured.
 #[derive(Debug, Serialize)]
 pub(crate) struct Row {
@@ -80,6 +89,12 @@ pub(crate) struct Report {
 pub(crate) struct Measured {
     pub(crate) title: String,
     pub(crate) path: String,
+    /// Whether the timings taken as truth came from inside the film or from a
+    /// file beside it, which is the difference between a clock and a claim that
+    /// had to be checked.
+    pub(crate) truth_from: &'static str,
+    /// How much of that truth lands on the film's own speech untouched.
+    pub(crate) truth_lands: f32,
     /// How many lines its own track holds, which is the size of the truth every
     /// case built from it rests on.
     pub(crate) lines: usize,
@@ -119,6 +134,39 @@ impl Report {
         self.print_families();
         self.print_sweeps();
         self.print_distances();
+        self.print_what_was_not_measured();
+    }
+
+    /// What a run could not put a number on.
+    ///
+    /// Printed last and in full sentences, because a report that is quiet about
+    /// its gaps reads as a report with none. The figure that matters most in the
+    /// plan is how often a subtitle belonging to another film is written to this
+    /// one, and that figure cannot be taken at all from a single film.
+    fn print_what_was_not_measured(&self) {
+        let mismatched = self
+            .rows
+            .iter()
+            .filter(|row| row.family == Family::Mismatched.name())
+            .count();
+        if mismatched > 0 && self.films.len() >= TELLING_FILMS {
+            return;
+        }
+
+        println!();
+        println!("What this run does not say");
+        if mismatched == 0 {
+            println!("  No mismatched case could be built, because that means one film's timings");
+            println!("  against another film's audio and there is only one film here. Nothing in");
+            println!("  this report says anything about refusing a subtitle for another film.");
+        }
+        if self.films.len() < TELLING_FILMS {
+            println!(
+                "  {} films is too few to settle a threshold or a bar on. The plan asks for",
+                self.films.len()
+            );
+            println!("  at least {TELLING_FILMS}, of different origins, mixes and languages.");
+        }
     }
 
     fn print_cases(&self) {
