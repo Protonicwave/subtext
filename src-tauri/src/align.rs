@@ -283,6 +283,37 @@ mod tests {
         cues
     }
 
+    /// The dialogue above with the sounds of the film captioned alongside it,
+    /// which is what a track written for the hearing impaired holds.
+    ///
+    /// The descriptions sit in the quiet, because that is when a door slams and
+    /// a phone rings, and it is where a reading looking for voices finds
+    /// nothing.
+    fn captioned_cues() -> Vec<Cue> {
+        let spoken = dialogue();
+        let mut cues = spoken.clone();
+        for pair in spoken.windows(2) {
+            let quiet = pair[1].start.millis().saturating_sub(pair[0].end.millis());
+            if quiet < 1_200 {
+                continue;
+            }
+            let at = pair[0].end.millis() + quiet / 3;
+            cues.push(Cue {
+                index: 0,
+                start: Timestamp::from_millis(at),
+                end: Timestamp::from_millis(at + 900),
+                text: "[DOOR SLAMS]".to_owned(),
+                position: None,
+            });
+        }
+
+        cues.sort_by_key(|cue| cue.start);
+        for (at, cue) in cues.iter_mut().enumerate() {
+            cue.index = u32::try_from(at).unwrap() + 1;
+        }
+        cues
+    }
+
     /// The film's soundtrack, talking where `spoken` says it talks.
     ///
     /// Built once and kept, because laying out six million samples costs more
@@ -379,6 +410,22 @@ mod tests {
                 })
                 .collect();
             Self::written(soundtrack(&spoken), &cues)
+        }
+
+        /// The same film with the same timings, captioned for somebody who
+        /// cannot hear it: every line of the dialogue, and a description of the
+        /// sounds in the quiet between them.
+        fn captioned() -> Self {
+            let late = Correction::of_offset(TRUTH);
+            let spoken: Vec<Cue> = dialogue()
+                .iter()
+                .map(|cue| Cue {
+                    start: late.apply(cue.start),
+                    end: late.apply(cue.end),
+                    ..cue.clone()
+                })
+                .collect();
+            Self::written(soundtrack(&spoken), &captioned_cues())
         }
 
         /// A film that speaks only the first third of what its subtitle claims,
@@ -486,6 +533,35 @@ mod tests {
 
         let error = residual(fixture.correction());
         assert!(error <= SLACK, "out by {error}ms");
+    }
+
+    /// A captioned track describes the same film as a plain one and has to be
+    /// measured to the same answer. What it must not do is lose a caption: the
+    /// descriptions are left out of the measurement and out of nothing else, so
+    /// the cues the player draws and the cues in the library are the file's own.
+    #[test]
+    fn the_sounds_a_film_makes_are_measured_past_rather_than_thrown_away() {
+        let fixture = Fixture::captioned();
+
+        let AlignmentView::Aligned { .. } = fixture.align() else {
+            panic!("a captioned track describes the film as well as a plain one");
+        };
+        let error = residual(fixture.correction());
+        assert!(error <= SLACK, "out by {error}ms");
+
+        let expected = captioned_cues();
+        let drawn = fixture.database.tracks().cues(fixture.track_id).unwrap();
+        assert_eq!(drawn.len(), expected.len());
+        assert_eq!(
+            drawn
+                .iter()
+                .filter(|cue| cue.text == "[DOOR SLAMS]")
+                .count(),
+            expected
+                .iter()
+                .filter(|cue| cue.text == "[DOOR SLAMS]")
+                .count()
+        );
     }
 
     /// The judgement the figure exists for, checked where it turns over. A
