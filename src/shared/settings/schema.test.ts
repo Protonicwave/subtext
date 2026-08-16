@@ -6,7 +6,7 @@ describe('the settings a library file holds', () => {
     for (const [name, value] of [
       ['matching', 'exact'],
       ['subtitleSize', 5.5],
-      ['dialogueArrows', false],
+      ['libraryDescending', true],
       ['grain', 0],
       ['subtitleLeadInMs', 120],
       ['subtitleMinimumMs', 0],
@@ -40,7 +40,7 @@ describe('the settings a library file holds', () => {
     // version that offered something this one does not.
     const nonsense = [
       { key: FIELDS.matching.key, value: 'whatever-comes-next' },
-      { key: FIELDS.dialogueArrows.key, value: 'yes' },
+      { key: FIELDS.libraryDescending.key, value: 'yes' },
       { key: FIELDS.subtitleSize.key, value: 'quite large' },
       { key: FIELDS.subtitleSize.key.replace('size', 'unheard-of'), value: '3' },
     ];
@@ -48,7 +48,7 @@ describe('the settings a library file holds', () => {
     const settings = settingsFrom(nonsense);
 
     expect(settings.matching).toBe('relaxed');
-    expect(settings.dialogueArrows).toBe(DEFAULTS.dialogueArrows);
+    expect(settings.libraryDescending).toBe(DEFAULTS.libraryDescending);
     expect(settings.subtitleSize).toBe(DEFAULTS.subtitleSize);
   });
 

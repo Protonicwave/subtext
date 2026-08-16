@@ -59,7 +59,7 @@ describe('the settings screen', () => {
 
     const playback = await open('Playback');
 
-    expect(within(playback).getByText('Skip interval')).toBeInTheDocument();
+    expect(within(playback).getByText('Opening a film again')).toBeInTheDocument();
     expect(screen.queryByText('Watched folders')).not.toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useSettings } from '@/shared/settings/useSettings';
+import { SKIP_MS } from './intervals';
 import type { Stepping } from './useStepping';
 import { STEP_MS, type Sync } from './useSync';
 import type { TrackChoice } from './useTrack';
@@ -63,11 +63,11 @@ export function useShortcuts(actions: Actions) {
         wake,
       } = latest.current;
 
-      // What the arrows mean, which is a matter of preference and of whether
-      // the film has any dialogue for them to land on. Read at the moment the
-      // key is pressed, like the actions above it.
-      const { dialogueArrows, skipMs } = useSettings.getState().settings;
-      const byLine = dialogueArrows && stepping.available;
+      // What the arrows mean, which is whether the film has any dialogue for
+      // them to land on. Somebody pressing the left arrow missed a line, and
+      // the line is where they meant to go; a film with no subtitle has
+      // nothing to land on and moves by the interval instead.
+      const byLine = stepping.available;
 
       switch (event.key) {
         case ' ':
@@ -76,11 +76,11 @@ export function useShortcuts(actions: Actions) {
           break;
         case 'ArrowLeft':
           if (byLine) stepping.back();
-          else transport.skipBy(-skipMs);
+          else transport.skipBy(-SKIP_MS);
           break;
         case 'ArrowRight':
           if (byLine) stepping.on();
-          else transport.skipBy(skipMs);
+          else transport.skipBy(SKIP_MS);
           break;
         case 'm':
           transport.toggleMute();

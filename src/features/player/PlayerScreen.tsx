@@ -10,6 +10,7 @@ import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSettings } from '@/shared/settings/useSettings';
+import { REWIND_MS } from './intervals';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
 import { NEAR_ENOUGH } from './ScrubberPreview';
@@ -85,7 +86,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
   // Worked out once, and not again when a setting the player also reads
   // changes: the element has already been told where to start.
   const [start] = useState(() =>
-    settings.resume === 'beginning' ? 0 : startAtOf(film, settings.rewindMs),
+    settings.resume === 'beginning' ? 0 : startAtOf(film, REWIND_MS),
   );
 
   // A film starts a little before where it was left.

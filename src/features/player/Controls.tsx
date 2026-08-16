@@ -21,7 +21,7 @@ import {
 } from '@/shared/ui/Icon';
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
-import { useSetting } from '@/shared/settings/useSettings';
+import { SKIP_MS } from './intervals';
 import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
 import { TrackMenu } from './TrackMenu';
@@ -94,8 +94,7 @@ export function Controls({
 }: ControlsProps) {
   const { positionMs, durationMs, playing, volume, muted } = playback;
 
-  const skipMs = useSetting('skipMs');
-  const seconds = Math.round(skipMs / 1000);
+  const seconds = Math.round(SKIP_MS / 1000);
   const onScrub = (event: ChangeEvent<HTMLInputElement>) => {
     transport.seekTo(Number(event.target.value));
   };
@@ -185,7 +184,7 @@ export function Controls({
         <Control
           label={`Back ${String(seconds)} seconds`}
           onClick={() => {
-            transport.skipBy(-skipMs);
+            transport.skipBy(-SKIP_MS);
           }}
         >
           <SkipBackIcon size={17} />
@@ -194,7 +193,7 @@ export function Controls({
         <Control
           label={`Forward ${String(seconds)} seconds`}
           onClick={() => {
-            transport.skipBy(skipMs);
+            transport.skipBy(SKIP_MS);
           }}
         >
           <SkipForwardIcon size={17} />

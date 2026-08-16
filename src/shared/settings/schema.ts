@@ -182,23 +182,6 @@ export const FIELDS = {
   subtitleMinimumMs: amount('subtitles.minimum', { least: 0, most: 2_000, step: 50 }, 850),
 
   resume: choice('playback.resume', ['carry-on', 'beginning'], 'carry-on'),
-  /*
-   * Coming back to a film in the middle of a line is disorienting, and a few
-   * seconds of run-up is enough to remember where you were.
-   */
-  rewindMs: amount('playback.rewind', { least: 0, most: 30_000, step: 1_000 }, 5_000),
-  skipMs: amount('playback.skip', { least: 5_000, most: 60_000, step: 5_000 }, 10_000),
-  /*
-   * On, because it is the better answer to what somebody pressing the left
-   * arrow wants: they missed a line, and the line is where they meant to go.
-   */
-  dialogueArrows: toggle('playback.arrows', true),
-  /*
-   * Not all of it, because almost nobody sits through the credits and a film
-   * left two minutes from the end should not be offered for ever.
-   */
-  watchedFraction: amount('playback.watched', { least: 0.8, most: 1, step: 0.01 }, 0.97),
-  hideAfterMs: amount('playback.hide', { least: 1_000, most: 10_000, step: 200 }, 2_600),
   hardwareDecoding: toggle('playback.hardware', true),
 
   accent: choice('appearance.accent', ['film', 'fixed'], 'film'),

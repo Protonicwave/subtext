@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
-import { DEFAULTS } from '@/shared/settings/schema';
+import { SKIP_MS } from './intervals';
 import type { Alignment } from './useAlignment';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
@@ -103,10 +103,10 @@ describe('the control bar', () => {
     const { transport } = show();
 
     await userEvent.click(screen.getByRole('button', { name: /forward 10 seconds/i }));
-    expect(transport.skipBy).toHaveBeenCalledWith(DEFAULTS.skipMs);
+    expect(transport.skipBy).toHaveBeenCalledWith(SKIP_MS);
 
     await userEvent.click(screen.getByRole('button', { name: /back 10 seconds/i }));
-    expect(transport.skipBy).toHaveBeenCalledWith(-DEFAULTS.skipMs);
+    expect(transport.skipBy).toHaveBeenCalledWith(-SKIP_MS);
   });
 
   it('steps by line as well as by seconds', async () => {
