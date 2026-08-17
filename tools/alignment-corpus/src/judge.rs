@@ -14,7 +14,7 @@
 //! from a run of real films actually takes.
 
 use serde::Serialize;
-use subtext_align::Alignment;
+use subtext_align::{Alignment, Misfit};
 
 use crate::cases::Wanted;
 
@@ -54,6 +54,30 @@ impl Default for Bars {
     }
 }
 
+/// A film one correction cannot describe, as a report writes it down.
+///
+/// The engine's own type without the serialising, which the engine has no business
+/// carrying: it is measured there and written down here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Shape {
+    /// Time inserted into the film, so every part of it is right about itself and
+    /// no one number places them all.
+    Breaks { at_ms: u32 },
+    /// A stretch of the film the subtitle has no lines for, going on long enough
+    /// to mean it was written for a different cut.
+    DifferentCut { from_ms: u32 },
+}
+
+impl Shape {
+    fn of(misfit: Misfit) -> Self {
+        match misfit {
+            Misfit::Breaks { at_ms } => Self::Breaks { at_ms },
+            Misfit::DifferentCut { from_ms } => Self::DifferentCut { from_ms },
+        }
+    }
+}
+
 /// Everything about a measurement that the decision reads.
 ///
 /// Kept apart from the measurement itself so that a report can be re-decided at
@@ -74,6 +98,10 @@ pub(crate) struct Figures {
     pub(crate) median_before_ms: u32,
     pub(crate) median_after_ms: u32,
     pub(crate) examined: u32,
+    /// A way the film said one correction does not describe it, where it said so.
+    /// Nothing to do with the threshold or the bar, so a sweep over those carries
+    /// it unchanged.
+    pub(crate) misfit: Option<Shape>,
 }
 
 impl Figures {
@@ -88,6 +116,7 @@ impl Figures {
             median_before_ms: found.as_written().median_ms(),
             median_after_ms: found.landing().median_ms(),
             examined: found.landing().examined(),
+            misfit: found.misfit().map(Shape::of),
         }
     }
 }
@@ -102,6 +131,10 @@ pub(crate) enum Outcome {
     Uncertain,
     /// Clear enough, and it would not have put the lines on the talking.
     NoBetter,
+    /// The film has time cut into it, so no one correction describes all of it.
+    Breaks,
+    /// The subtitle was written for a different cut of the film.
+    DifferentCut,
 }
 
 impl Outcome {
@@ -110,6 +143,8 @@ impl Outcome {
             Self::Accepted => "accepted",
             Self::Uncertain => "uncertain",
             Self::NoBetter => "no better",
+            Self::Breaks => "breaks",
+            Self::DifferentCut => "other cut",
         }
     }
 }
@@ -121,6 +156,11 @@ impl Outcome {
 pub(crate) fn outcome(figures: Figures, bars: Bars) -> Outcome {
     if figures.confidence < bars.threshold {
         return Outcome::Uncertain;
+    }
+    match figures.misfit {
+        Some(Shape::Breaks { .. }) => return Outcome::Breaks,
+        Some(Shape::DifferentCut { .. }) => return Outcome::DifferentCut,
+        None => {}
     }
     if figures.examined == 0
         || figures.landed_after < figures.landed_before
@@ -180,7 +220,7 @@ pub(crate) fn verdict(outcome: Outcome, wanted: Wanted, worst_ms: Option<i64>) -
 
 #[cfg(test)]
 mod tests {
-    use super::{Bars, Figures, Outcome, Verdict, outcome, verdict};
+    use super::{Bars, Figures, Outcome, Shape, Verdict, outcome, verdict};
     use crate::cases::Wanted;
 
     /// A measurement sure enough to act on, landing most of a track.
@@ -199,6 +239,7 @@ mod tests {
             median_before_ms: 2_000,
             median_after_ms: 340,
             examined: 1_200,
+            misfit: None,
         }
     }
 
@@ -247,6 +288,49 @@ mod tests {
             ..good()
         };
         assert_eq!(outcome(nothing, Bars::default()), Outcome::NoBetter);
+    }
+
+    /// A film one correction cannot describe is refused whatever it scored and
+    /// however much it would have landed, and it is refused as the shape it is.
+    /// These two are the files the bar was left to catch on somebody else's
+    /// behalf, and each of them now says which it is.
+    #[test]
+    fn a_film_no_one_correction_describes_is_refused_as_the_shape_it_is() {
+        let broadcast = Figures {
+            misfit: Some(Shape::Breaks { at_ms: 2_700_000 }),
+            landed_after: 0.9,
+            ..good()
+        };
+        assert_eq!(outcome(broadcast, Bars::default()), Outcome::Breaks);
+        assert_eq!(
+            verdict(Outcome::Breaks, Wanted::Refusal, None),
+            Verdict::Right
+        );
+
+        let another_cut = Figures {
+            misfit: Some(Shape::DifferentCut { from_ms: 4_350_000 }),
+            landed_after: 0.9,
+            ..good()
+        };
+        assert_eq!(outcome(another_cut, Bars::default()), Outcome::DifferentCut);
+        assert_eq!(
+            verdict(Outcome::DifferentCut, Wanted::Refusal, None),
+            Verdict::Right
+        );
+    }
+
+    /// And a measurement nobody could be sure of keeps the wording it had. A
+    /// subtitle for another film altogether goes unexplained everywhere as well,
+    /// and it is the commonest wrong pairing there is rather than a cut of
+    /// anything.
+    #[test]
+    fn a_measurement_nobody_believes_is_uncertain_before_it_is_anything_else() {
+        let figures = Figures {
+            confidence: 0.0,
+            misfit: Some(Shape::DifferentCut { from_ms: 900_000 }),
+            ..good()
+        };
+        assert_eq!(outcome(figures, Bars::default()), Outcome::Uncertain);
     }
 
     /// The whole point of taking the figures apart from the measurement: the

@@ -38,6 +38,14 @@
 //! and out of nothing else: what is drawn and what is stored are the file's own
 //! cues.
 //!
+//! There are also files no correction fits, and there are two of them. A film
+//! recorded off a broadcast has time inserted into it, so its lines are all
+//! there and one number cannot place them all. A subtitle for a different cut
+//! describes scenes this film does not have, and no number places those at all.
+//! Both score well, because most of either film really does line up, so both are
+//! looked for in the stretches of the film rather than in the answer, and each is
+//! named as what it is: see [`Misfit`].
+//!
 //! What it will not do is decide. An answer applied to a film nobody has watched
 //! yet is wrong for the whole film if it is wrong at all, with no reason to
 //! suspect the tool rather than the file, so both figures are reported and the
@@ -85,11 +93,13 @@ mod align;
 mod correlate;
 mod landing;
 mod local;
+mod misfit;
 mod rate;
 mod signal;
 mod spoken;
 
 pub use crate::align::{Alignment, Confidence, align};
 pub use crate::landing::{LATE_TOLERANCE_MS, LEAD_TOLERANCE_MS, Landing, landing_of};
+pub use crate::misfit::Misfit;
 pub use crate::rate::RATES;
 pub use crate::signal::{BIN_MS, Signal};

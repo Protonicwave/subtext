@@ -4,6 +4,7 @@ use subtext_core::{Correction, Cue, Timestamp};
 
 use crate::landing::{Landing, landing_of};
 use crate::local::{Chunks, Fit};
+use crate::misfit::{Misfit, misfit_of};
 use crate::rate;
 use crate::signal::{self, BIN_MS, Signal};
 
@@ -112,6 +113,7 @@ pub struct Alignment {
     confidence: Confidence,
     landing: Landing,
     as_written: Landing,
+    misfit: Option<Misfit>,
 }
 
 impl Alignment {
@@ -147,6 +149,22 @@ impl Alignment {
     pub fn as_written(self) -> Landing {
         self.as_written
     }
+
+    /// A way this film cannot be described by one correction, where the film
+    /// showed one.
+    ///
+    /// There is always a correction, and for these two shapes of file there is
+    /// always a bad one. A film with time cut into it has a best answer for one
+    /// half and the wrong answer for the other. A subtitle for a different cut
+    /// has a best answer for the scenes the two versions share and nothing to
+    /// say about the rest. Both can score well, because most of the film really
+    /// does line up, and neither is a correction anybody should be handed.
+    ///
+    /// Reported rather than acted on, like everything else here.
+    #[must_use]
+    pub fn misfit(self) -> Option<Misfit> {
+        self.misfit
+    }
 }
 
 /// One explanation of the film, as the coarse pass left it.
@@ -167,6 +185,14 @@ struct Measured {
     score: f32,
     agreement: f32,
     tightness: f32,
+    /// The candidate this came from, and the line the film's stretches came to
+    /// about it. Both are kept so that the winner can be put back to the film
+    /// once, to be read for the ways the film does not fit it. The settled
+    /// correction above cannot stand in for them: the stretches were measured
+    /// against the candidate, and what each of them is left needing is measured
+    /// against this line.
+    from: Candidate,
+    fit: Fit,
 }
 
 /// The correction that best explains where the speech falls in terms of where
@@ -201,6 +227,7 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         confidence: Confidence::NONE,
         landing: Landing::NONE,
         as_written: Landing::NONE,
+        misfit: None,
     };
 
     // Nothing settled, which is not nothing measured. The film was read and no
@@ -211,6 +238,10 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         confidence: Confidence::NONE,
         landing: landing_of(cues, speech, Correction::IDENTITY),
         as_written: landing_of(cues, speech, Correction::IDENTITY),
+        // Nothing explained the film, so there is no answer for the film to be
+        // read as not fitting. Naming a shape here would be describing how badly
+        // an answer nobody is being offered fails.
+        misfit: None,
     };
 
     let window = (LAG_WINDOW_MS / BIN_MS) as usize;
@@ -250,6 +281,8 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
             score: fit.score(),
             agreement: fit.agreement,
             tightness: fit.tightness,
+            from: candidate,
+            fit,
         });
     }
 
@@ -261,6 +294,15 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         return unsettled();
     }
 
+    // The winner put back to the film once, and every stretch of it asked not
+    // where its lines belong but whether the answer explains it at all. This is
+    // the only pass that asks, so it runs after the field has been settled rather
+    // than for each candidate: on a film that fits, nothing comes of it, and on a
+    // film that does not, what comes of it is the difference between a file
+    // somebody could correct and a file for a different picture.
+    track.rebuild(cues, best.from.rate);
+    let misfit = misfit_of(chunks.readings(speech, &track, best.from.lag, best.fit));
+
     Alignment {
         correction: best.correction,
         confidence: Confidence {
@@ -270,6 +312,7 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         },
         landing: landing_of(cues, speech, best.correction),
         as_written: landing_of(cues, speech, Correction::IDENTITY),
+        misfit,
     }
 }
 
@@ -402,10 +445,12 @@ mod tests {
     #![allow(
         clippy::cast_possible_truncation,
         clippy::expect_used,
+        clippy::panic,
         clippy::unwrap_used
     )]
 
     use super::{Confidence, align};
+    use crate::misfit::Misfit;
     use crate::rate::RATES;
     use crate::signal::{BIN_MS, Signal};
     use subtext_core::{Correction, Cue, Timestamp};
@@ -738,6 +783,9 @@ mod tests {
             "answered with a rate of {}",
             found.correction().rate()
         );
+        // And the file is named for what it is, so that nothing has to work out
+        // from a rate and a landing figure why the answer was refused.
+        assert!(matches!(found.misfit(), Some(Misfit::Breaks { .. })));
         // And the part of the film it cannot answer is missing from the figure,
         // which is what stands between this and somebody's library.
         assert!(
@@ -745,6 +793,110 @@ mod tests {
             "{} of the film landed",
             found.landing().fraction()
         );
+    }
+
+    /// A film recorded off a broadcast, which is the first of the two shapes no
+    /// single correction fits. Twenty seconds of advertisement is cut into the
+    /// middle of it, so the lines before the break belong where they are and the
+    /// lines after belong twenty seconds later. Every stretch of the film knows
+    /// where its own lines are; no one number places both halves.
+    ///
+    /// Twenty seconds rather than one, because a break has to be further than a
+    /// stretch is searched by before it counts as a break rather than as the
+    /// wobble of a peak. It is well inside what the second, wider search covers,
+    /// which is what makes the second half report where it is instead of
+    /// reporting nothing.
+    #[test]
+    fn a_film_with_breaks_cut_into_it_is_named_as_one() {
+        let cues = dialogue(1_500);
+        let cut = cues[cues.len() / 2].start.millis();
+        let broadcast: Vec<Cue> = cues
+            .iter()
+            .map(|cue| {
+                let moved = |at: u32| if at < cut { at } else { at + 20_000 };
+                Cue {
+                    start: Timestamp::from_millis(moved(cue.start.millis())),
+                    end: Timestamp::from_millis(moved(cue.end.millis())),
+                    ..cue.clone()
+                }
+            })
+            .collect();
+
+        let found = align(&cues, &Signal::from_cues(&broadcast));
+        let Some(Misfit::Breaks { at_ms }) = found.misfit() else {
+            panic!(
+                "a film with time cut into it has breaks: {:?}",
+                found.misfit()
+            );
+        };
+
+        // Within a stretch of film of where the break is. The readings are five
+        // minutes wide, so this is as near as anything here can honestly say, and
+        // it is near enough to tell somebody which part of the film to look at.
+        assert!(
+            at_ms.abs_diff(cut) < 400_000,
+            "the break was at {cut}ms and was found at {at_ms}ms"
+        );
+    }
+
+    /// A subtitle for a different cut of the same picture, which is the second
+    /// shape and the one no correction can answer. A scene of a quarter of an hour
+    /// is missing from the subtitle's cut, so the film talks through a stretch the
+    /// subtitle has no lines for at all, and everything after it is out by the
+    /// length of that scene.
+    ///
+    /// The distinction from the case above is what this is for. There the lines
+    /// were all present and merely moved; here some of the film is not described
+    /// at any shift, and bending the subtitle over it would produce something that
+    /// looks aligned and is wrong in every added scene.
+    #[test]
+    fn a_subtitle_for_a_different_cut_is_named_as_one() {
+        let spoken = dialogue(1_500);
+        let scene = 900_000;
+        let from = spoken[spoken.len() * 3 / 5].start.millis();
+
+        // The subtitle's own cut: the scene is not in it, so its lines are not
+        // there and everything after it happens a quarter of an hour earlier.
+        let theirs: Vec<Cue> = spoken
+            .iter()
+            .filter(|cue| cue.start.millis() < from || cue.start.millis() >= from + scene)
+            .map(|cue| {
+                let moved = |at: u32| if at < from { at } else { at - scene };
+                Cue {
+                    start: Timestamp::from_millis(moved(cue.start.millis())),
+                    end: Timestamp::from_millis(moved(cue.end.millis())),
+                    ..cue.clone()
+                }
+            })
+            .collect();
+
+        let found = align(&theirs, &Signal::from_cues(&spoken));
+        assert!(
+            matches!(found.misfit(), Some(Misfit::DifferentCut { .. })),
+            "a subtitle for another cut is not a mistimed one: {:?}",
+            found.misfit()
+        );
+    }
+
+    /// And the ordinary cases are not named as anything. A film that needs
+    /// shifting, a film that needs stretching, a film that needs nothing and a
+    /// film read imperfectly are all films one correction describes.
+    #[test]
+    fn a_film_one_correction_fits_is_not_named_as_a_misfit() {
+        let cues = dialogue(1_500);
+        for truth in [
+            Correction::IDENTITY,
+            Correction::of_offset(2_500),
+            Correction::of_offset(-8_000),
+            Correction::new(0, RATES[1]),
+            Correction::new(-3_000, RATES[2]),
+        ] {
+            let found = align(&cues, &speech_of(&cues, truth));
+            assert_eq!(found.misfit(), None, "at {truth:?}");
+        }
+
+        let noisy = noisier(&speech_of(&cues, Correction::of_offset(1_800)), 20);
+        assert_eq!(align(&cues, &noisy).misfit(), None);
     }
 
     /// The figure the caller decides on, alongside the one it has to be

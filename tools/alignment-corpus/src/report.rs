@@ -288,6 +288,7 @@ impl Report {
             Family::Stretch,
             Family::Both,
             Family::Splice,
+            Family::Recut,
             Family::Mismatched,
         ] {
             let mut tally = Tally::default();
@@ -456,6 +457,7 @@ mod tests {
                 median_before_ms: 1_900,
                 median_after_ms: 340,
                 examined: 1_200,
+                misfit: None,
             },
         }
     }

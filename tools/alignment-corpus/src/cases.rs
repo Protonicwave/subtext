@@ -41,6 +41,18 @@ const BOTH: [(usize, i32); 2] = [(1, 2_500), (2, -4_000)];
 const SPLICE_AT: f64 = 0.4;
 const SPLICE_MS: u32 = 90_000;
 
+/// Where a scene the subtitle's cut does not have sits, and how long it runs.
+///
+/// Four minutes, three fifths of the way through. This is the other shape of file
+/// no correction fits and it is not the same as the one above: there the lines are
+/// all present and merely moved, here the film talks for four minutes that the
+/// subtitle has no lines for at all, and everything after that is out by the
+/// length of the scene. A theatrical subtitle over an extended cut is exactly
+/// this, and bending it on produces something that looks aligned and is wrong in
+/// every added scene.
+const RECUT_AT: f64 = 0.6;
+const RECUT_MS: u32 = 240_000;
+
 /// How far out an accepted answer may be and still be right, for a case that
 /// only needs shifting.
 ///
@@ -68,6 +80,9 @@ pub(crate) enum Family {
     /// A film with time cut into the middle of it, which no single correction
     /// can answer.
     Splice,
+    /// A subtitle for a cut of the film with a scene missing from it, which is
+    /// not a timing problem at all.
+    Recut,
     /// A subtitle belonging to another film altogether.
     Mismatched,
 }
@@ -79,6 +94,7 @@ impl Family {
             Self::Stretch => "stretch",
             Self::Both => "both",
             Self::Splice => "splice",
+            Self::Recut => "other cut",
             Self::Mismatched => "mismatched",
         }
     }
@@ -174,6 +190,9 @@ pub(crate) fn manufacture(film: usize, truth: &[Cue]) -> Vec<Case> {
     if let Some(case) = spliced(film, truth) {
         cases.push(case);
     }
+    if let Some(case) = recut(film, truth) {
+        cases.push(case);
+    }
 
     cases
 }
@@ -206,6 +225,53 @@ fn spliced(film: usize, truth: &[Cue]) -> Option<Case> {
             "{} inserted at {}",
             seconds(i32::try_from(SPLICE_MS).unwrap_or(i32::MAX)),
             seconds(i32::try_from(cut).unwrap_or(i32::MAX))
+        ),
+        authored,
+        belongs_ms,
+        film,
+        wanted: Wanted::Refusal,
+    })
+}
+
+/// A subtitle for a cut of the film that is missing a scene.
+///
+/// The lines inside the scene are not in the file at all, because that scene is
+/// not in the cut it was written for, and every line after it is early by the
+/// length of the scene. So the film talks for four minutes the subtitle has
+/// nothing to say about, and no single correction answers it: whichever part is
+/// put right, the other is left further out than it started.
+///
+/// A refusal is the only right ending, and the ending should say which of the two
+/// unanswerable shapes this is. Somebody told their file is for a different cut
+/// can go and find the right one; somebody told only that it could not be
+/// measured cannot.
+fn recut(film: usize, truth: &[Cue]) -> Option<Case> {
+    let last = truth.iter().map(|cue| cue.end.millis()).max()?;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let from = (f64::from(last) * RECUT_AT) as u32;
+    if last < from + RECUT_MS * 2 {
+        return None;
+    }
+
+    let theirs: Vec<Cue> = truth
+        .iter()
+        .filter(|cue| cue.start.millis() < from || cue.start.millis() >= from + RECUT_MS)
+        .cloned()
+        .collect();
+    let (authored, belongs_ms) = from_truth(&theirs, |at| {
+        if at < from {
+            Some(at)
+        } else {
+            at.checked_sub(RECUT_MS)
+        }
+    });
+
+    Some(Case {
+        family: Family::Recut,
+        about: format!(
+            "{} missing from {}",
+            seconds(i32::try_from(RECUT_MS).unwrap_or(i32::MAX)),
+            seconds(i32::try_from(from).unwrap_or(i32::MAX))
         ),
         authored,
         belongs_ms,
@@ -283,7 +349,8 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        Family, OFFSETS_MS, SPLICE_MS, Wanted, from_truth, manufacture, millis_of, seconds,
+        Family, OFFSETS_MS, RECUT_MS, SPLICE_MS, Wanted, from_truth, manufacture, millis_of,
+        seconds,
     };
     use subtext_align::RATES;
     use subtext_core::{Correction, Cue, Timestamp};
@@ -370,6 +437,61 @@ mod tests {
                 .filter(|case| case.family == Family::Splice)
                 .count(),
             1
+        );
+        assert_eq!(
+            cases
+                .iter()
+                .filter(|case| case.family == Family::Recut)
+                .count(),
+            1
+        );
+    }
+
+    /// The other shape no correction fits, and the thing that makes it a
+    /// different shape: the lines inside the missing scene are not in the file at
+    /// all, so there is a stretch of film the subtitle says nothing about.
+    #[test]
+    fn a_recut_leaves_out_a_scene_rather_than_moving_it() {
+        let truth = truth(1_200);
+        let case = manufacture(0, &truth)
+            .into_iter()
+            .find(|case| case.family == Family::Recut)
+            .expect("a film long enough to cut a scene out of");
+
+        assert!(matches!(case.wanted, Wanted::Refusal));
+        assert!(
+            case.authored.len() < truth.len(),
+            "no lines were left out of the cut"
+        );
+
+        // Every line kept is either where it was or earlier by the whole scene,
+        // and both kinds are present. A case where everything moved would be a
+        // shift, and one where nothing did would be no case at all.
+        let mut moved = 0;
+        for (cue, belongs) in case.authored.iter().zip(&case.belongs_ms) {
+            let away = belongs - cue.start.millis();
+            assert!(away == 0 || away == RECUT_MS, "moved by {away}ms");
+            if away > 0 {
+                moved += 1;
+            }
+        }
+        assert!(moved > 0 && moved < case.authored.len());
+
+        // And nothing is left in the file over the scene itself, which is what
+        // the film will be talking through with nothing to match it.
+        let missing = case
+            .belongs_ms
+            .iter()
+            .filter(|belongs| {
+                let last = truth.iter().map(|cue| cue.end.millis()).max().unwrap_or(0);
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let from = (f64::from(last) * super::RECUT_AT) as u32;
+                **belongs >= from && **belongs < from + RECUT_MS
+            })
+            .count();
+        assert_eq!(
+            missing, 0,
+            "{missing} lines were kept from the missing scene"
         );
     }
 

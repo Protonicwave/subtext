@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
-use subtext_align::{Alignment, Landing};
+use subtext_align::{Alignment, Landing, Misfit};
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
@@ -545,6 +545,34 @@ pub(crate) enum AlignmentView {
         #[specta(type = Number)]
         wanted: f32,
     },
+    /// The film has time cut into it, so no one shift describes all of it.
+    ///
+    /// What a recording off a broadcast carries. Every part of the film knows
+    /// where its own lines are and the parts disagree with each other, because a
+    /// break moves everything after it and nothing before it. The lines are all
+    /// there, which is why this is worth saying rather than simply refusing:
+    /// somebody who knows their file has breaks in it knows what they are looking
+    /// at.
+    Breaks {
+        /// Roughly where the film jumps, in milliseconds. Roughly because it is
+        /// read off stretches of film several minutes long.
+        at_ms: u32,
+        /// How the lines land as the file stands, which is the evidence for
+        /// leaving it alone.
+        as_written: LandingView,
+    },
+    /// The subtitle describes a different cut of this film.
+    ///
+    /// Somewhere in the film nobody says any of the lines being looked for, and it
+    /// goes on that way. This is not a timing problem and no correction answers
+    /// it: bending a theatrical subtitle onto an extended cut produces something
+    /// that looks aligned and is wrong in every added scene. No correction is
+    /// offered, deliberately, since a number here would only invite that.
+    DifferentCut {
+        /// Roughly where it stopped matching, in milliseconds.
+        from_ms: u32,
+        as_written: LandingView,
+    },
     /// The film could not be opened, or nothing in it could be made sense of.
     Unreadable { message: String },
     /// Somebody asked for it to stop, and it stopped.
@@ -575,6 +603,18 @@ impl AlignmentView {
             wanted,
             landing: LandingView::of(found.landing()),
             as_written: LandingView::of(found.as_written()),
+        }
+    }
+
+    /// A film one correction cannot describe, said as the shape it is.
+    pub(crate) fn misfit(found: &Alignment, misfit: Misfit) -> Self {
+        let as_written = LandingView::of(found.as_written());
+        match misfit {
+            Misfit::Breaks { at_ms } => Self::Breaks { at_ms, as_written },
+            Misfit::DifferentCut { from_ms } => Self::DifferentCut {
+                from_ms,
+                as_written,
+            },
         }
     }
 
