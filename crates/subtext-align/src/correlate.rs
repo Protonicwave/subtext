@@ -23,17 +23,33 @@ pub(crate) struct Peak {
     pub(crate) lag: isize,
     /// The peak as a fraction of what a perfect match would score.
     pub(crate) height: f64,
-    /// The best score anywhere outside the peak's own shoulder.
-    pub(crate) runner_up: f64,
+    /// The best lag anywhere outside the peak's own shoulder, and what it
+    /// scored.
+    ///
+    /// A second explanation rather than a measure of doubt. A film whose
+    /// dialogue falls into a repeating pattern gives two lags that describe it
+    /// about equally well, and neither the peak nor the arithmetic that found it
+    /// can say which. Carrying the rival forward as a candidate in its own right
+    /// is what puts the question to the film instead, and where the film cannot
+    /// tell them apart either, the two score alike and say so.
+    pub(crate) rival: Option<(isize, f64)>,
 }
 
 /// One signal, transformed once, ready to be measured against many others.
 ///
-/// The speech side of an alignment is fixed while the cue side is rebuilt at
-/// every rate candidate, so the expensive half of the work is done in the
-/// constructor and every buffer the search needs is allocated with it. Running
-/// the six candidates costs six transforms and six inverses and no allocation
-/// at all.
+/// The reference side of a correlation is fixed while the other side is rebuilt
+/// at every candidate, so the expensive half of the work is done when the
+/// reference is set and every buffer the search needs is allocated before that.
+/// Running a candidate costs one transform and one inverse and no allocation at
+/// all.
+///
+/// Two of these exist during an alignment and they are sized differently. The
+/// coarse pass measures a whole film in one go and its transform runs to about a
+/// million bins. The local stage measures a few minutes at a time, and putting
+/// its chunks through the coarse pass's plan would pay for a million bin
+/// transform to answer a question about thirty thousand, several hundred times
+/// over. Each is allocated once for the whole alignment and neither allocates
+/// again.
 pub(crate) struct Correlator {
     forward: Arc<dyn RealToComplex<f32>>,
     inverse: Arc<dyn ComplexToReal<f32>>,
@@ -54,20 +70,26 @@ impl Correlator {
     /// Prepares to measure things against `speech`.
     ///
     /// `longest` is the most bins any cue signal that will be handed to
-    /// [`Correlator::correlate`] can reach, and `window` the furthest either way
+    /// [`Correlator::against`] can reach, and `window` the furthest either way
     /// the search should look.
     ///
     /// Returns `None` where the speech says the same thing everywhere, since
     /// there is then nothing to line anything up against.
     pub(crate) fn new(speech: &Signal, longest: usize, window: usize) -> Option<Self> {
-        if speech.is_flat() {
-            return None;
-        }
-
         // A shift wider than the film itself is not a shift, and clamping here
         // is also what keeps the two ends of the search from meeting in the
         // middle of the transform.
-        let window = window.min(speech.len());
+        let mut correlator = Self::sized(speech.len().max(longest), window.min(speech.len()));
+        correlator.measuring(speech.bins()).then_some(correlator)
+    }
+
+    /// Buffers and plans for signals of at most `span` bins, searching `window`
+    /// bins either way, with nothing to measure against yet.
+    ///
+    /// Every allocation an alignment makes for correlation is made here. What
+    /// follows is transforms over buffers that already exist.
+    pub(crate) fn sized(span: usize, window: usize) -> Self {
+        let window = window.min(span);
 
         // Correlating through a transform gives a circular answer, where a cue
         // pushed off one end reappears at the other. Padding to the longer
@@ -75,7 +97,7 @@ impl Correlator {
         // clear of that wrap. Padding to the sum of the two lengths, which is
         // what a full linear correlation needs, would double the transform to
         // compute lags nobody asks about.
-        let padded = fast_size(speech.len().max(longest) + window + 1);
+        let padded = fast_size(span + window + 1);
 
         let mut planner = RealFftPlanner::<f32>::new();
         let forward = planner.plan_fft_forward(padded);
@@ -83,43 +105,55 @@ impl Correlator {
         let scratch =
             vec![Complex::new(0.0, 0.0); forward.get_scratch_len().max(inverse.get_scratch_len())];
 
-        let mut correlator = Self {
+        Self {
             padded,
             window: isize::try_from(window).unwrap_or(isize::MAX),
             reference: vec![Complex::new(0.0, 0.0); padded / 2 + 1],
-            reference_energy: centred_energy(speech),
+            reference_energy: 0.0,
             real: vec![0.0; padded],
             spectrum: vec![Complex::new(0.0, 0.0); padded / 2 + 1],
             scratch,
             output: vec![0.0; padded],
             forward,
             inverse,
-        };
-
-        write_centred(&mut correlator.real, speech);
-        correlator
-            .forward
-            .process_with_scratch(
-                &mut correlator.real,
-                &mut correlator.reference,
-                &mut correlator.scratch,
-            )
-            .ok()?;
-
-        Some(correlator)
+        }
     }
 
-    /// The lag at which `cues` best explains the speech.
+    /// Takes `bins` as the thing everything handed to [`Correlator::against`]
+    /// will be measured against.
+    ///
+    /// Returns false where those bins say the same thing everywhere, since there
+    /// is then nothing to line anything up against. The reference is transformed
+    /// once here and reused, which is why the local stage measures a chunk of
+    /// film against several candidates rather than a candidate against several
+    /// chunks.
+    pub(crate) fn measuring(&mut self, bins: &[bool]) -> bool {
+        let Some(shape) = Shape::of(bins) else {
+            return false;
+        };
+
+        write_centred(&mut self.real, bins, shape.mean);
+        if self
+            .forward
+            .process_with_scratch(&mut self.real, &mut self.reference, &mut self.scratch)
+            .is_err()
+        {
+            return false;
+        }
+
+        self.reference_energy = shape.energy;
+        true
+    }
+
+    /// The lag at which `cues` best explains the reference.
     ///
     /// Returns `None` where the cues say the same thing everywhere, which is
     /// what an empty track and a track covering every second of the film both
     /// look like.
-    pub(crate) fn correlate(&mut self, cues: &Signal) -> Option<Peak> {
-        if cues.is_flat() {
-            return None;
-        }
+    pub(crate) fn against(&mut self, cues: &[bool]) -> Option<Peak> {
+        let shape = Shape::of(cues)?;
 
-        write_centred(&mut self.real, cues);
+        write_centred(&mut self.real, cues, shape.mean);
         self.forward
             .process_with_scratch(&mut self.real, &mut self.spectrum, &mut self.scratch)
             .ok()?;
@@ -153,7 +187,7 @@ impl Correlator {
         // the edge of a two minute window on a feature length film, and it
         // leans against large shifts, which is the direction to lean.
         #[allow(clippy::cast_precision_loss)]
-        let scale = (self.reference_energy * centred_energy(cues)).sqrt() * self.padded as f64;
+        let scale = (self.reference_energy * shape.energy).sqrt() * self.padded as f64;
 
         let mut lag = 0;
         let mut height = f64::NEG_INFINITY;
@@ -165,25 +199,30 @@ impl Correlator {
             }
         }
 
-        // Zero rather than the lowest value seen, so that a window too narrow to
-        // hold anything outside the shoulder reports no competition instead of
-        // reporting whatever the correlation happened to trough at.
-        let mut runner_up = 0.0;
+        // Nothing rather than the lowest value seen, so that a window too narrow
+        // to hold anything outside the shoulder reports no second explanation
+        // instead of reporting whatever the correlation happened to trough at.
+        let mut rival: Option<(isize, f64)> = None;
         for candidate in -self.window..=self.window {
             if (candidate - lag).abs() <= SHOULDER_BINS {
                 continue;
             }
             let value = f64::from(self.output[self.index_of(candidate)]);
-            if value > runner_up {
-                runner_up = value;
+            if value > 0.0 && rival.is_none_or(|(_, best)| value > best) {
+                rival = Some((candidate, value));
             }
         }
 
         Some(Peak {
             lag,
             height: height / scale,
-            runner_up: runner_up / scale,
+            rival: rival.map(|(at, value)| (at, value / scale)),
         })
+    }
+
+    /// The furthest either way this will look, in bins.
+    pub(crate) fn window(&self) -> isize {
+        self.window
     }
 
     /// Where a lag sits in the transform's output.
@@ -210,36 +249,49 @@ impl fmt::Debug for Correlator {
     }
 }
 
-/// Writes a signal into `dest` with its mean taken out, and zeroes the rest.
+/// What a run of bins comes to once its mean is taken out.
+#[derive(Clone, Copy, Debug)]
+struct Shape {
+    mean: f32,
+    energy: f64,
+}
+
+impl Shape {
+    /// Nothing where the bins say the same thing everywhere. A run that is
+    /// entirely set, entirely clear, or empty has no shape to line anything up
+    /// against, and correlating it would divide by zero.
+    fn of(bins: &[bool]) -> Option<Self> {
+        let active = bins.iter().filter(|bin| **bin).count();
+        if active == 0 || active == bins.len() {
+            return None;
+        }
+
+        #[allow(clippy::cast_precision_loss)]
+        let mean = active as f32 / bins.len() as f32;
+        // Counting bits rather than squaring them: a run of `n` bins with `a` of
+        // them set has a mean of `a / n`, and the sum of the squared deviations
+        // comes to `a - a * a / n` however they are arranged.
+        #[allow(clippy::cast_precision_loss)]
+        let energy = active as f64 * (1.0 - active as f64 / bins.len() as f64);
+        Some(Self { mean, energy })
+    }
+}
+
+/// Writes bins into `dest` with their mean taken out, and zeroes the rest.
 ///
 /// Correlating without this would measure how much of the film has any activity
 /// at all, which both signals have plenty of, and the answer would be the same
 /// everywhere. With the mean out, a bin only contributes where the two signals
 /// agree about being unusual.
-fn write_centred(dest: &mut [f32], signal: &Signal) {
-    #[allow(clippy::cast_precision_loss)]
-    let mean = signal.active() as f32 / signal.len() as f32;
+fn write_centred(dest: &mut [f32], bins: &[bool], mean: f32) {
     let mut written = 0;
-    for (slot, bin) in dest.iter_mut().zip(signal.bins()) {
+    for (slot, bin) in dest.iter_mut().zip(bins) {
         *slot = if *bin { 1.0 - mean } else { -mean };
         written += 1;
     }
     for slot in &mut dest[written..] {
         *slot = 0.0;
     }
-}
-
-/// The energy a signal carries once its mean is taken out.
-///
-/// Counting bits rather than squaring them: a run of `n` bins with `a` of them
-/// set has a mean of `a / n`, and the sum of the squared deviations comes to
-/// `a - a * a / n` however they are arranged.
-fn centred_energy(signal: &Signal) -> f64 {
-    #[allow(clippy::cast_precision_loss)]
-    let active = signal.active() as f64;
-    #[allow(clippy::cast_precision_loss)]
-    let length = signal.len() as f64;
-    active * (1.0 - active / length)
 }
 
 /// The next transform length at or above `at_least` that is quick to run.
@@ -300,7 +352,7 @@ mod tests {
         let cues = Signal::from_bins(bins);
 
         let mut correlator = Correlator::new(&speech, cues.len(), 1_000).expect("speech has shape");
-        let peak = correlator.correlate(&cues).expect("cues have shape");
+        let peak = correlator.against(cues.bins()).expect("cues have shape");
         assert_eq!(peak.lag, 250);
         assert!(peak.height > 0.9, "height was {}", peak.height);
     }
@@ -310,7 +362,9 @@ mod tests {
         let signal = Signal::from_bins(bursts(20_000, 130, 40));
         let mut correlator =
             Correlator::new(&signal, signal.len(), 1_000).expect("the signal has shape");
-        let peak = correlator.correlate(&signal).expect("the signal has shape");
+        let peak = correlator
+            .against(signal.bins())
+            .expect("the signal has shape");
         assert_eq!(peak.lag, 0);
         assert!(
             (peak.height - 1.0).abs() < 0.001,
@@ -326,11 +380,7 @@ mod tests {
         assert!(Correlator::new(&Signal::from_bins(vec![true; 2_000]), 2_000, 100).is_none());
 
         let mut correlator = Correlator::new(&speech, 2_000, 100).expect("speech has shape");
-        assert!(
-            correlator
-                .correlate(&Signal::from_bins(vec![false; 2_000]))
-                .is_none()
-        );
+        assert!(correlator.against(&[false; 2_000]).is_none());
     }
 
     #[test]
@@ -340,8 +390,54 @@ mod tests {
         let signal = Signal::from_bins(bursts(500, 30, 10));
         let mut correlator =
             Correlator::new(&signal, signal.len(), 100_000).expect("the signal has shape");
-        let peak = correlator.correlate(&signal).expect("the signal has shape");
+        let peak = correlator
+            .against(signal.bins())
+            .expect("the signal has shape");
         assert_eq!(peak.lag, 0);
+    }
+
+    /// A film whose dialogue repeats gives two lags that explain it about
+    /// equally well. Which of them is right is not a question the arithmetic can
+    /// answer, so the second is reported rather than folded into a figure, and
+    /// the caller puts both to the film.
+    #[test]
+    fn a_second_explanation_is_reported_alongside_the_first() {
+        // The same run of bursts twice over, a thousand bins apart. Irregularly
+        // spaced within itself, so that the only lag other than nought which
+        // explains it is the thousand between the two copies.
+        let mut bins = vec![false; 20_000];
+        for copy in [0, 1_000] {
+            for at in [0, 137, 349, 512, 733, 861] {
+                let from = copy + at;
+                bins[from..from + 30].fill(true);
+            }
+        }
+        let signal = Signal::from_bins(bins);
+
+        let mut correlator =
+            Correlator::new(&signal, signal.len(), 2_000).expect("the signal has shape");
+        let peak = correlator
+            .against(signal.bins())
+            .expect("the signal has shape");
+        let (at, height) = peak.rival.expect("a repeating film has a second answer");
+        assert_eq!(at.abs(), 1_000, "the second answer was at {at}");
+        assert!(height > peak.height * 0.4, "the rival was {height}");
+    }
+
+    /// A reference and a candidate can be set independently, which is what lets
+    /// one correlator serve every chunk of every candidate in the local stage
+    /// without allocating again.
+    #[test]
+    fn the_thing_being_measured_against_can_be_changed_without_new_buffers() {
+        let bins = bursts(2_000, 130, 40);
+        let mut correlator = Correlator::sized(2_000, 200);
+
+        assert!(!correlator.measuring(&[false; 2_000]));
+        assert!(correlator.measuring(&shifted(&bins, 60)));
+        assert_eq!(correlator.against(&bins).expect("shape").lag, 60);
+
+        assert!(correlator.measuring(&shifted(&bins, 130)));
+        assert_eq!(correlator.against(&bins).expect("shape").lag, 130);
     }
 
     #[test]
