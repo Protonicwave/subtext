@@ -19,10 +19,11 @@ use subtext_align::Alignment;
 use crate::cases::Wanted;
 
 /// How sure the correlation has to be. The application's value.
-pub(crate) const THRESHOLD: f32 = 0.015;
+pub(crate) const THRESHOLD: f32 = 0.10;
 
-/// How much of a track has to land on the talking. The application's value.
-pub(crate) const BAR: f32 = 0.4;
+/// How much of a track has to land on the talking. The application's value, and
+/// the one that decides the hard cases.
+pub(crate) const BAR: f32 = 0.58;
 
 /// How sure a measurement against another subtitle track has to be. The
 /// application's value.
@@ -30,11 +31,12 @@ pub(crate) const BAR: f32 = 0.4;
 /// A separate number from [`THRESHOLD`] for the reason the application gives at
 /// greater length: the two are read off correlations of different kinds and the
 /// whole scale moves between them. One side of a speech correlation is an
-/// estimate, so a correct answer on a real film reaches about a quarter of a
-/// perfect match; against another subtitle track both sides are authored timings
-/// and a correct answer reaches most of one. On the first real film measured
-/// here a correct answer scored 0.455 and another film's subtitle scored 0.0040.
-pub(crate) const REFERENCE_THRESHOLD: f32 = 0.08;
+/// estimate, so stretches of a film disagree about a correct answer for reasons
+/// that have nothing to do with it; against another subtitle track nothing is
+/// estimated and they agree exactly. On the one film here carrying a track of
+/// its own, every correct answer scored one and a subtitle for a different cut
+/// scored 0.625.
+pub(crate) const REFERENCE_THRESHOLD: f32 = 0.80;
 
 /// The two numbers a run decides by.
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -60,8 +62,13 @@ impl Default for Bars {
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct Figures {
     pub(crate) confidence: f32,
-    pub(crate) peak: f32,
-    pub(crate) margin: f32,
+    /// How much of the film agreed with the answer.
+    pub(crate) agreement: f32,
+    /// How closely the stretches that agreed sat to it.
+    pub(crate) tightness: f32,
+    /// How far it stood above the next explanation that was not the same answer
+    /// arrived at another way.
+    pub(crate) separation: f32,
     pub(crate) landed_before: f32,
     pub(crate) landed_after: f32,
     pub(crate) median_before_ms: u32,
@@ -73,8 +80,9 @@ impl Figures {
     pub(crate) fn of(found: &Alignment) -> Self {
         Self {
             confidence: found.confidence().score(),
-            peak: found.confidence().peak(),
-            margin: found.confidence().margin(),
+            agreement: found.confidence().agreement(),
+            tightness: found.confidence().tightness(),
+            separation: found.confidence().separation(),
             landed_before: found.as_written().fraction(),
             landed_after: found.landing().fraction(),
             median_before_ms: found.as_written().median_ms(),
@@ -176,15 +184,20 @@ mod tests {
     use crate::cases::Wanted;
 
     /// A measurement sure enough to act on, landing most of a track.
+    ///
+    /// The figures are those of a middling correct answer over a real film
+    /// rather than round numbers, so that a test which turns over near the
+    /// application's values turns over near the readings they were set from.
     fn good() -> Figures {
         Figures {
-            confidence: 0.03,
-            peak: 0.25,
-            margin: 0.12,
-            landed_before: 0.10,
-            landed_after: 0.85,
+            confidence: 0.49,
+            agreement: 0.9,
+            tightness: 0.8,
+            separation: 0.68,
+            landed_before: 0.30,
+            landed_after: 0.70,
             median_before_ms: 2_000,
-            median_after_ms: 40,
+            median_after_ms: 340,
             examined: 1_200,
         }
     }
@@ -197,7 +210,7 @@ mod tests {
     #[test]
     fn a_measurement_nobody_could_be_sure_of_is_not_written() {
         let figures = Figures {
-            confidence: 0.004,
+            confidence: 0.0,
             ..good()
         };
         assert_eq!(outcome(figures, Bars::default()), Outcome::Uncertain);
@@ -212,7 +225,7 @@ mod tests {
     fn a_measurement_is_written_only_where_it_helps_and_lands() {
         let worse = Figures {
             landed_before: 0.9,
-            landed_after: 0.5,
+            landed_after: 0.7,
             ..good()
         };
         assert_eq!(outcome(worse, Bars::default()), Outcome::NoBetter);
@@ -242,13 +255,13 @@ mod tests {
     #[test]
     fn the_same_reading_can_be_judged_at_another_bar() {
         let bars = Bars {
-            threshold: 0.05,
+            threshold: 0.6,
             bar: 0.4,
         };
         assert_eq!(outcome(good(), bars), Outcome::Uncertain);
 
         let bars = Bars {
-            threshold: 0.015,
+            threshold: 0.10,
             bar: 0.9,
         };
         assert_eq!(outcome(good(), bars), Outcome::NoBetter);
