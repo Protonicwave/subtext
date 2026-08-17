@@ -111,19 +111,34 @@ fn run() -> Result<(), String> {
         // What the engine makes of this film's truth before anything has been
         // done to it. Everything measured below is measured against this rather
         // than against truth itself, for the reason given on `worst_error`.
-        let baseline = subtext_align::align(&film.truth, &film.speech).correction();
+        // Nothing where the soundtrack could not be read, since there was no
+        // reading for truth to disagree with.
+        let baseline = film
+            .speech
+            .as_ref()
+            .map(|speech| subtext_align::align(&film.truth, speech).correction());
         baselines.push(baseline);
 
         println!(
-            "Measuring {} over {} cases, from a baseline of {:+}ms at {:.4}",
+            "Measuring {} over {} cases, {}",
             film.title,
             built.len(),
-            baseline.offset_ms(),
-            baseline.rate()
+            baseline.map_or_else(
+                || "against the timings it brought alone".to_owned(),
+                |baseline| format!(
+                    "from a baseline of {:+}ms at {:.4}",
+                    baseline.offset_ms(),
+                    baseline.rate()
+                )
+            )
         );
         for case in &built {
-            let speech = &films[case.film].speech;
-            rows.push(measure(&film.title, case, speech, baseline, arguments.bars));
+            // Only where the film this case is measured against was heard. A
+            // film kept for its own timings alone supplies no audio cases, and
+            // supplies none to the films whose mismatched case names it either.
+            if let Some((speech, baseline)) = films[case.film].speech.as_ref().zip(baseline) {
+                rows.push(measure(&film.title, case, speech, baseline, arguments.bars));
+            }
 
             // And again against the timings the film brought with it, where it
             // brought any. Nothing to cancel this time: a film measured against

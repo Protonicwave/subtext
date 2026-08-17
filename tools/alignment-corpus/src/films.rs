@@ -101,8 +101,16 @@ pub(crate) struct Film {
     /// How much of the truth lands on the film's speech before anything is done
     /// to it, which is what admitted a file from beside the film and is worth
     /// recording for one from inside it as well.
-    pub(crate) lands: f32,
-    pub(crate) speech: Signal,
+    ///
+    /// Nothing where the audio could not be read, which is not a figure of zero.
+    pub(crate) lands: Option<f32>,
+    /// Where the film talks, where this build can hear it.
+    ///
+    /// A film that brought its own timings is kept without this. Measuring a
+    /// subtitle against those timings needs no decoder at all, so a soundtrack
+    /// in a codec this build has no reader for takes away the audio cases and
+    /// leaves the exact ones, which is better than taking away the film.
+    pub(crate) speech: Option<Signal>,
 }
 
 /// Why a film in the directory could not be used.
@@ -185,13 +193,21 @@ pub(crate) fn gather(
         let title = title_of(&path);
         match read(&path, truth_lands) {
             Ok(film) => {
+                let heard = film.speech.as_ref().map_or_else(
+                    || "its soundtrack could not be read".to_owned(),
+                    |speech| {
+                        format!(
+                            "{} utterances in {} minutes, landing on {:.0}%",
+                            utterances(speech),
+                            minutes(speech),
+                            f64::from(film.lands.unwrap_or_default()) * 100.0
+                        )
+                    },
+                );
                 println!(
-                    "  {title}: {} lines from {}, {} utterances in {} minutes, landing on {:.0}%",
+                    "  {title}: {} lines from {}, {heard}",
                     film.truth.len(),
                     film.origin.name(),
-                    utterances(&film.speech),
-                    minutes(&film.speech),
-                    f64::from(film.lands) * 100.0
                 );
                 films.push(film);
             }
@@ -217,14 +233,13 @@ fn read(path: &Path, truth_lands: f32) -> Result<Film, Skipped> {
         return Err(Skipped::NoTimings);
     }
 
-    let speech = subtext_speech::speech_of(path).map_err(Skipped::Unread)?;
-    let film = |truth: Vec<Cue>, origin, lands| Film {
+    let film = |truth: Vec<Cue>, origin, lands, speech| Film {
         title: title_of(path),
         path: path.to_path_buf(),
         truth,
         origin,
         lands,
-        speech: speech.clone(),
+        speech,
     };
 
     // A track inside the film is preferred without being measured first,
@@ -233,10 +248,22 @@ fn read(path: &Path, truth_lands: f32) -> Result<Film, Skipped> {
     if let Some(truth) = inside
         && truth.len() >= FEWEST_CUES
     {
-        let lands = lands_on(&truth, &speech);
-        return Ok(film(truth, Origin::Inside, lands));
+        // The audio is wanted here and not required. This film has already
+        // supplied timings that need no checking, and measuring a subtitle
+        // against them decodes nothing, so a soundtrack this build cannot read
+        // costs the audio cases and leaves the exact ones. A film like that is
+        // precisely the one the exact path was built for, and skipping it would
+        // leave that path with nothing to be measured on at all.
+        let speech = subtext_speech::speech_of(path).ok();
+        let lands = speech.as_ref().map(|speech| lands_on(&truth, speech));
+        return Ok(film(truth, Origin::Inside, lands, speech));
     }
 
+    // Truth from beside the film is a claim rather than a clock, and the only
+    // thing that can check it is the film's own speech. So here the audio is
+    // required, and a film whose soundtrack cannot be read has nothing that
+    // could admit its subtitle.
+    let speech = subtext_speech::speech_of(path).map_err(Skipped::Unread)?;
     let long_enough: Vec<Vec<Cue>> = beside
         .into_iter()
         .filter(|cues| cues.len() >= FEWEST_CUES)
@@ -259,7 +286,7 @@ fn read(path: &Path, truth_lands: f32) -> Result<Film, Skipped> {
     if best.1 < truth_lands {
         return Err(Skipped::DoesNotFit(best.1));
     }
-    Ok(film(best.0, Origin::Beside, best.1))
+    Ok(film(best.0, Origin::Beside, Some(best.1), Some(speech)))
 }
 
 /// How much of a track lands on a film's speech as it was written.
@@ -369,17 +396,22 @@ fn title_of(path: &Path) -> String {
 }
 
 /// A film as the report records it.
-pub(crate) fn measured(film: &Film, baseline: Correction) -> Measured {
+///
+/// Everything read off the soundtrack is absent together, for a film whose
+/// soundtrack this build cannot read. Nothing there is a figure of zero: a film
+/// with no utterances and a film that was never listened to are different
+/// things, and a report that wrote both as nought would not say which.
+pub(crate) fn measured(film: &Film, baseline: Option<Correction>) -> Measured {
     Measured {
-        baseline_offset_ms: baseline.offset_ms(),
-        baseline_rate: baseline.rate(),
+        baseline_offset_ms: baseline.map(Correction::offset_ms),
+        baseline_rate: baseline.map(Correction::rate),
         title: film.title.clone(),
         path: film.path.display().to_string(),
         truth_from: film.origin.name(),
         truth_lands: film.lands,
         lines: film.truth.len(),
-        utterances: utterances(&film.speech),
-        minutes: minutes(&film.speech),
+        utterances: film.speech.as_ref().map(utterances),
+        minutes: film.speech.as_ref().map(minutes),
     }
 }
 

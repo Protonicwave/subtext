@@ -106,20 +106,24 @@ pub(crate) struct Measured {
     /// had to be checked.
     pub(crate) truth_from: &'static str,
     /// How much of that truth lands on the film's own speech untouched.
-    pub(crate) truth_lands: f32,
+    ///
+    /// Absent, along with everything else below that was read off the
+    /// soundtrack, for a film whose soundtrack this build cannot read. Such a
+    /// film is kept for its own timings and supplies no audio cases.
+    pub(crate) truth_lands: Option<f32>,
     /// What the engine made of this film's truth before anything was perturbed,
     /// which every error in the table is measured against rather than against
     /// truth itself. A large value here is truth disagreeing with the film, not
     /// the engine failing.
-    pub(crate) baseline_offset_ms: i32,
-    pub(crate) baseline_rate: f64,
+    pub(crate) baseline_offset_ms: Option<i32>,
+    pub(crate) baseline_rate: Option<f64>,
     /// How many lines its own track holds, which is the size of the truth every
     /// case built from it rests on.
     pub(crate) lines: usize,
     /// How many separate times somebody starts talking, which is the number of
     /// places a line has to land on.
-    pub(crate) utterances: u32,
-    pub(crate) minutes: u32,
+    pub(crate) utterances: Option<u32>,
+    pub(crate) minutes: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
