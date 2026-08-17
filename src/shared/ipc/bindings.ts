@@ -374,6 +374,39 @@ wanted: number; landing: LandingView; asWritten: LandingView } |
 { outcome: "no-better"; correction: CorrectionView; landing: LandingView; asWritten: LandingView; 
 /**  The share of lines a measurement has to land to be written. */
 wanted: number } | 
+/**
+ *  The film has time cut into it, so no one shift describes all of it.
+ * 
+ *  What a recording off a broadcast carries. Every part of the film knows
+ *  where its own lines are and the parts disagree with each other, because a
+ *  break moves everything after it and nothing before it. The lines are all
+ *  there, which is why this is worth saying rather than simply refusing:
+ *  somebody who knows their file has breaks in it knows what they are looking
+ *  at.
+ */
+{ outcome: "breaks"; 
+/**
+ *  Roughly where the film jumps, in milliseconds. Roughly because it is
+ *  read off stretches of film several minutes long.
+ */
+atMs: number; 
+/**
+ *  How the lines land as the file stands, which is the evidence for
+ *  leaving it alone.
+ */
+asWritten: LandingView } | 
+/**
+ *  The subtitle describes a different cut of this film.
+ * 
+ *  Somewhere in the film nobody says any of the lines being looked for, and it
+ *  goes on that way. This is not a timing problem and no correction answers
+ *  it: bending a theatrical subtitle onto an extended cut produces something
+ *  that looks aligned and is wrong in every added scene. No correction is
+ *  offered, deliberately, since a number here would only invite that.
+ */
+{ outcome: "different-cut"; 
+/**  Roughly where it stopped matching, in milliseconds. */
+fromMs: number; asWritten: LandingView } | 
 /**  The film could not be opened, or nothing in it could be made sense of. */
 { outcome: "unreadable"; message: string } | 
 /**  Somebody asked for it to stop, and it stopped. */

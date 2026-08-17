@@ -4,6 +4,7 @@ import type {
   LandingView,
   ReferenceView,
 } from '@/shared/ipc/bindings';
+import { clockOf } from '@/shared/media/clock';
 import { languageNamed } from '@/shared/media/languages';
 import { RATES, asWritten, offsetLabel, sameRate } from './useSync';
 
@@ -96,6 +97,24 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
         sentence: `The lines in this subtitle do not fall where the talking in this film does, whatever they are moved by.${measured(
           outcome.asWritten,
         )} It may belong to a different film or a different cut. Nothing has been changed, and the bracket keys still work.`,
+      };
+    case 'breaks':
+      return {
+        title: 'This film has breaks in it',
+        sentence: `The subtitles fit this film until about ${clockOf(
+          outcome.atMs,
+        )}, and after that everything is out by the same amount again, which is what an advertisement break in a recording does. One shift cannot put both parts right.${measured(
+          outcome.asWritten,
+        )} Nothing has been changed, and the bracket keys still work.`,
+      };
+    case 'different-cut':
+      return {
+        title: 'A subtitle for a different cut',
+        sentence: `The subtitles fit this film until about ${clockOf(
+          outcome.fromMs,
+        )}, and then the film goes on talking through lines this subtitle does not have. That is a different cut of the film rather than a timing to correct, and moving it would leave every scene the two versions do not share further out than it is now.${measured(
+          outcome.asWritten,
+        )} Nothing has been changed, and the bracket keys still work.`,
       };
     case 'unreadable':
       return { title: 'This film could not be read', sentence: outcome.message };

@@ -399,6 +399,35 @@ describe('lining a subtitle up by listening to the film', () => {
     expect(screen.getByRole('status')).not.toHaveTextContent(/lines in a hundred/);
   });
 
+  /*
+   * The two shapes of file no single shift describes. Both are refusals and they
+   * are different files with different remedies, so each says which it is and
+   * roughly where in the film it showed.
+   */
+  it('says a recording with breaks in it cannot be put right by one shift', () => {
+    ended({ outcome: 'breaks', atMs: 2_745_000, asWritten: landing(0.31) });
+
+    expect(screen.getByText('This film has breaks in it')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/until about 45:45/);
+    expect(screen.getByRole('status')).toHaveTextContent(/advertisement break in a recording/);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /As the file stands, 31 lines in a hundred land on the talking/,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(/Nothing has been changed/);
+  });
+
+  it('says a subtitle for a different cut is a different cut and not a timing', () => {
+    ended({ outcome: 'different-cut', fromMs: 4_350_000, asWritten: landing(0.28) });
+
+    expect(screen.getByText('A subtitle for a different cut')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/until about 1:12:30/);
+    expect(screen.getByRole('status')).toHaveTextContent(/different cut of the film/);
+    expect(screen.getByRole('status')).toHaveTextContent(/Nothing has been changed/);
+    // No correction is offered for either of them, since a number here is what
+    // would invite bending a subtitle over scenes it has no lines for.
+    expect(screen.queryByRole('button', { name: /put it back/i })).not.toBeInTheDocument();
+  });
+
   it('passes on what could not be read', () => {
     ended({ outcome: 'unreadable', message: 'the file ends part way through a cluster' });
     expect(screen.getByText(/ends part way through a cluster/)).toBeInTheDocument();

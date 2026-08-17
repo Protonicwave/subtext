@@ -236,6 +236,21 @@ pub(crate) fn run(
         return Ok(AlignmentView::uncertain(&found, confidence, THRESHOLD));
     }
 
+    // A film one correction cannot describe, before the figure that would refuse
+    // it anyway. Both of these shapes are already turned away by the bar below,
+    // since a file that is right for half of a film does not land enough of it,
+    // and being turned away is not the same as being told why. A recording with
+    // breaks in it and a subtitle for another cut are different files with
+    // different remedies, and somebody who is told which they have can act on it.
+    //
+    // After the threshold rather than before it, because a subtitle belonging to
+    // another film altogether also goes unexplained everywhere, and that is the
+    // commonest wrong pairing there is. It has its own wording, which says the
+    // ordinary thing about a file that does not match, and it should keep it.
+    if let Some(misfit) = found.misfit() {
+        return Ok(AlignmentView::misfit(&found, misfit));
+    }
+
     // The answer is clear. Whether it is any good is a different question, and
     // it is asked of the film rather than of the correlation that produced it.
     if !worth_writing(found.landing(), found.as_written()) {
@@ -348,6 +363,14 @@ fn against(
     let found = subtext_align::align(cues, &reference.dialogue);
     let confidence = found.confidence().score();
     if confidence < REFERENCE_THRESHOLD || !worth_writing(found.landing(), found.as_written()) {
+        return Ok(None);
+    }
+    // A film the reference says one correction cannot describe is set aside for
+    // the soundtrack rather than reported, which is what everything else on this
+    // path does with a reference that did not settle the question. The reference
+    // may be the file with breaks in it, or the one for another cut, and it has
+    // not said which of the two tracks is at fault. The film can.
+    if found.misfit().is_some() {
         return Ok(None);
     }
 
@@ -546,6 +569,75 @@ mod tests {
         })
     }
 
+    /// How far into the film a break is cut, and how much it inserts.
+    ///
+    /// A quarter of a minute at two fifths of the way through, which is what an
+    /// advertisement break in a recorded broadcast does. Further than a stretch of
+    /// film is searched by at first and well inside the second, wider search, so
+    /// the film after the break reports where it is rather than reporting nothing.
+    /// That is the difference this fixture exists to exercise.
+    const BREAK_AT: u32 = 288_000;
+    const BREAK_MS: u32 = 15_000;
+
+    /// The scene a different cut of the film does not have, and where it sits.
+    ///
+    /// Three minutes, which is further than any stretch is searched by at all. The
+    /// film talks all the way through it and the subtitle has no lines for any of
+    /// it, which is what a subtitle for a different cut looks like.
+    const SCENE_AT: u32 = 400_000;
+    const SCENE_MS: u32 = 180_000;
+
+    /// The film as a recording off a broadcast has it, with a break cut in.
+    fn broadcast(spoken: &[Cue]) -> &'static [u8] {
+        static BYTES: OnceLock<Vec<u8>> = OnceLock::new();
+        BYTES.get_or_init(|| {
+            let moved = |at: u32| if at < BREAK_AT { at } else { at + BREAK_MS };
+            let mut film = Film::new(LENGTH_MS).recorded(8_000, 1);
+            for cue in spoken {
+                film = film.speaking(moved(cue.start.millis()), moved(cue.end.millis()));
+            }
+            film.matroska()
+        })
+    }
+
+    /// The film talking exactly where its subtitle says, for the cases where what
+    /// is wrong is the subtitle's cut rather than its timing.
+    fn as_written(spoken: &[Cue]) -> &'static [u8] {
+        static BYTES: OnceLock<Vec<u8>> = OnceLock::new();
+        BYTES.get_or_init(|| {
+            let mut film = Film::new(LENGTH_MS).recorded(8_000, 1);
+            for cue in spoken {
+                film = film.speaking(cue.start.millis(), cue.end.millis());
+            }
+            film.matroska()
+        })
+    }
+
+    /// A subtitle for a cut of the film that does not have one of its scenes: no
+    /// lines for it, and everything after it three minutes earlier.
+    fn a_shorter_cut() -> Vec<Cue> {
+        dialogue()
+            .iter()
+            .filter(|cue| {
+                cue.start.millis() < SCENE_AT || cue.start.millis() >= SCENE_AT + SCENE_MS
+            })
+            .map(|cue| {
+                let moved = |at: u32| {
+                    if at < SCENE_AT {
+                        at
+                    } else {
+                        at.saturating_sub(SCENE_MS)
+                    }
+                };
+                Cue {
+                    start: Timestamp::from_millis(moved(cue.start.millis())),
+                    end: Timestamp::from_millis(moved(cue.end.millis())),
+                    ..cue.clone()
+                }
+            })
+            .collect()
+    }
+
     /// A library holding one film and one subtitle track for it.
     struct Fixture {
         database: Database,
@@ -677,6 +769,18 @@ mod tests {
         /// of it was read.
         fn take_the_film_away(&self) {
             std::fs::remove_file(self.root.join("Heat.mkv")).unwrap();
+        }
+
+        /// A recording of the film off a broadcast, with a break cut into the
+        /// middle of it. Every part of it says where its own lines are and the two
+        /// parts disagree, which is a file one correction cannot describe.
+        fn with_breaks() -> Self {
+            Self::written(broadcast(&dialogue()), &dialogue())
+        }
+
+        /// The film, with a subtitle written for a shorter cut of it.
+        fn for_another_cut() -> Self {
+            Self::written(as_written(&dialogue()), &a_shorter_cut())
         }
 
         /// A film that speaks only the first third of what its subtitle claims,
@@ -1087,6 +1191,53 @@ mod tests {
 
         assert!(landing.fraction > as_written.fraction, "no better either");
         assert!(landing.fraction < wanted, "{} landed", landing.fraction);
+        assert!(fixture.correction().is_identity());
+    }
+
+    /// A recording with an advertisement break in it. The lines are all there and
+    /// no single shift places them all, so nothing is written and the file is
+    /// named for what it is. Being turned away by the landing figure would have
+    /// happened anyway; being told which kind of file this is, and roughly where
+    /// it jumps, is what somebody can act on.
+    #[test]
+    fn a_film_with_a_break_cut_into_it_is_named_rather_than_corrected() {
+        let fixture = Fixture::with_breaks();
+
+        let outcome = fixture.align();
+        let AlignmentView::Breaks { at_ms, as_written } = outcome else {
+            panic!("a recording with a break in it should be named as one: {outcome:?}");
+        };
+
+        // Within a stretch of film of where the break is, which is as near as
+        // readings a minute wide can honestly put it.
+        assert!(
+            at_ms.abs_diff(BREAK_AT) < 120_000,
+            "the break is at {BREAK_AT}ms and was found at {at_ms}ms"
+        );
+        assert!(as_written.examined > 0);
+        assert!(fixture.correction().is_identity());
+    }
+
+    /// A subtitle for a shorter cut of the same film. The film talks through three
+    /// minutes the subtitle has no lines for at all, and everything after that is
+    /// out by the length of the missing scene.
+    ///
+    /// This is the case a correction must never be offered for. Half the film
+    /// would line up and every added scene would be further out than it started,
+    /// and nothing about the result would look wrong until somebody reached one.
+    #[test]
+    fn a_subtitle_for_a_different_cut_is_refused_and_says_where_it_stopped_matching() {
+        let fixture = Fixture::for_another_cut();
+
+        let outcome = fixture.align();
+        let AlignmentView::DifferentCut { from_ms, .. } = outcome else {
+            panic!("a subtitle for another cut should be refused as one: {outcome:?}");
+        };
+
+        assert!(
+            from_ms > 0 && from_ms < LENGTH_MS,
+            "it stopped matching at {from_ms}ms"
+        );
         assert!(fixture.correction().is_identity());
     }
 
