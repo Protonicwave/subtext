@@ -369,8 +369,10 @@ fn title_of(path: &Path) -> String {
 }
 
 /// A film as the report records it.
-pub(crate) fn measured(film: &Film) -> Measured {
+pub(crate) fn measured(film: &Film, baseline: Correction) -> Measured {
     Measured {
+        baseline_offset_ms: baseline.offset_ms(),
+        baseline_rate: baseline.rate(),
         title: film.title.clone(),
         path: film.path.display().to_string(),
         truth_from: film.origin.name(),
