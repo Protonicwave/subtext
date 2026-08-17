@@ -24,6 +24,17 @@ pub(crate) const THRESHOLD: f32 = 0.015;
 /// How much of a track has to land on the talking. The application's value.
 pub(crate) const BAR: f32 = 0.4;
 
+/// How sure a measurement against another subtitle track has to be. The
+/// application's value.
+///
+/// A separate number from [`THRESHOLD`] for the reason the application gives at
+/// greater length: the two are read off correlations of different kinds and the
+/// whole scale moves between them. One side of a speech correlation is an
+/// estimate, so a correct answer on a real film reaches about a quarter of a
+/// perfect match; against another subtitle track both sides are authored timings
+/// and a correct answer reaches most of one.
+pub(crate) const REFERENCE_THRESHOLD: f32 = 0.08;
+
 /// The two numbers a run decides by.
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct Bars {

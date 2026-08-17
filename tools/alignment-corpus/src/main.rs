@@ -15,6 +15,13 @@
 //! the worst line of each accepted case was left, and how the lines landed
 //! before and after.
 //!
+//! Every case is measured a second time where the film carries a text track of
+//! its own, against those timings rather than against the soundtrack, which is
+//! the path the application tries first and the one that needs no decoder. Those
+//! rows are reported apart from the others, because a correlation with authored
+//! timings on both sides scores on a different scale from one with a speech
+//! reading on a side and mixing the two would blur both.
+//!
 //! ```text
 //! cargo run --release -p alignment-corpus -- "D:\Films"
 //! ```
@@ -33,6 +40,7 @@ mod report;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use subtext_align::Signal;
 use subtext_core::{Correction, Timestamp};
 
 use crate::cases::Case;
@@ -63,7 +71,23 @@ fn run() -> Result<(), String> {
         return Err("no film in that directory could be taken as truth".to_owned());
     }
 
+    // A film's own timings as a signal, for the films that brought one. This is
+    // the reference the application prefers over the soundtrack: it was written
+    // against these frames, so a second track can be measured against it exactly
+    // and without a sample being decoded. A film whose truth came from a file
+    // beside it supplies none, because that file is a pairing made by name and
+    // is the kind of thing the whole feature exists to put right.
+    let references: Vec<Option<Signal>> = films
+        .iter()
+        .map(|film| (film.origin == films::Origin::Inside).then(|| Signal::from_cues(&film.truth)))
+        .collect();
+    let reference_bars = Bars {
+        threshold: arguments.reference_threshold,
+        bar: arguments.bars.bar,
+    };
+
     let mut rows = Vec::new();
+    let mut reference_rows = Vec::new();
     let mut baselines = Vec::new();
     println!();
     for (at, film) in films.iter().enumerate() {
@@ -100,11 +124,28 @@ fn run() -> Result<(), String> {
         for case in &built {
             let speech = &films[case.film].speech;
             rows.push(measure(&film.title, case, speech, baseline, arguments.bars));
+
+            // And again against the timings the film brought with it, where it
+            // brought any. Nothing to cancel this time: a film measured against
+            // its own track answers the identity by construction, so the
+            // baseline that stands in for truth disagreeing with the film in the
+            // reading above has nothing to correct for here.
+            if let Some(reference) = references[case.film].as_ref() {
+                reference_rows.push(measure(
+                    &film.title,
+                    case,
+                    reference,
+                    Correction::IDENTITY,
+                    reference_bars,
+                ));
+            }
         }
     }
 
     let report = Report {
         bars: arguments.bars,
+        reference_threshold: arguments.reference_threshold,
+        reference_rows,
         films: films
             .iter()
             .zip(&baselines)
@@ -129,14 +170,12 @@ fn run() -> Result<(), String> {
 }
 
 /// One case, measured and judged.
-fn measure(
-    film: &str,
-    case: &Case,
-    speech: &subtext_align::Signal,
-    baseline: Correction,
-    bars: Bars,
-) -> Row {
-    let found = subtext_align::align(&case.authored, speech);
+///
+/// What it is measured against is a signal and nothing more, which is the whole
+/// reason the same code serves both paths: a film's speech and a film's own
+/// subtitle track are the same shape once either has been read.
+fn measure(film: &str, case: &Case, against: &Signal, baseline: Correction, bars: Bars) -> Row {
+    let found = subtext_align::align(&case.authored, against);
     let figures = Figures::of(&found);
     let outcome = judge::outcome(figures, bars);
 
@@ -204,6 +243,9 @@ struct Arguments {
     films: PathBuf,
     report: PathBuf,
     bars: Bars,
+    /// How sure a measurement against a text track inside the film has to be,
+    /// which is a different scale from the one above and so a different number.
+    reference_threshold: f32,
     /// How much of a subtitle file beside a film has to land on that film before
     /// it is taken as truth.
     truth_lands: f32,
@@ -215,6 +257,7 @@ fn arguments() -> Result<Option<Arguments>, String> {
     let mut films: Option<PathBuf> = None;
     let mut report = PathBuf::from(DEFAULT_REPORT);
     let mut bars = Bars::default();
+    let mut reference_threshold = judge::REFERENCE_THRESHOLD;
     let mut truth_lands = films::TRUTH_LANDS;
     let mut limit = None;
 
@@ -228,6 +271,9 @@ fn arguments() -> Result<Option<Arguments>, String> {
             "--report" => report = PathBuf::from(value(&mut given, "--report")?),
             "--threshold" => bars.threshold = number(&mut given, "--threshold")?,
             "--bar" => bars.bar = number(&mut given, "--bar")?,
+            "--reference-threshold" => {
+                reference_threshold = number(&mut given, "--reference-threshold")?;
+            }
             "--truth-lands" => truth_lands = number(&mut given, "--truth-lands")?,
             "--limit" => limit = Some(number::<usize>(&mut given, "--limit")?),
             unknown if unknown.starts_with('-') => {
@@ -249,6 +295,7 @@ fn arguments() -> Result<Option<Arguments>, String> {
         films,
         report,
         bars,
+        reference_threshold,
         truth_lands,
         limit,
     }))
@@ -277,6 +324,9 @@ fn usage() {
     println!("  --report <file>    where the machine readable report goes");
     println!("  --threshold <n>    how sure a measurement has to be before it is written");
     println!("  --bar <n>          how much of a track has to land on the talking");
+    println!("  --reference-threshold <n>");
+    println!("                     how sure a measurement against a text track inside");
+    println!("                     the film has to be, which is a different scale");
     println!("  --truth-lands <n>  how much of a subtitle beside a film has to land on it");
     println!("                     before it is taken as truth for that film");
     println!("  --limit <n>        measure at most this many films");

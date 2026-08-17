@@ -75,9 +75,21 @@ impl Row {
 #[derive(Debug, Serialize)]
 pub(crate) struct Report {
     pub(crate) bars: Bars,
+    /// The threshold the rows below were judged at, which is not the one the
+    /// rows above were.
+    pub(crate) reference_threshold: f32,
     pub(crate) films: Vec<Measured>,
     pub(crate) skipped: Vec<Skip>,
     pub(crate) rows: Vec<Row>,
+    /// The same cases measured against a text track inside the film rather than
+    /// against its soundtrack.
+    ///
+    /// Kept apart rather than mixed in, for two reasons. They are judged at a
+    /// threshold of their own, since a correlation of two sets of authored
+    /// timings scores on a different scale from one where a speech reading is a
+    /// side. And the sweeps above exist to settle the numbers the audio path is
+    /// decided by, which these would only blur.
+    pub(crate) reference_rows: Vec<Row>,
 }
 
 /// A film the cases were built from.
@@ -143,7 +155,53 @@ impl Report {
         self.print_families();
         self.print_sweeps();
         self.print_distances();
+        self.print_reference();
         self.print_what_was_not_measured();
+    }
+
+    /// The same cases again, measured against the film's own timings.
+    ///
+    /// Where a film carries a text subtitle track, that track was written
+    /// against these frames, and a second track can be measured against it
+    /// without a sample being decoded. What this section says is how well that
+    /// path recovers a perturbation and whether it refuses a track belonging to
+    /// another film, which are the two questions asked of the audio path above.
+    ///
+    /// It is worth reading for what it is. Both sides here are authored timings
+    /// with nothing estimated on either, so a right answer should come back to
+    /// the bin rather than to the tenth of a second, and a wide margin against
+    /// the mismatched cases is expected rather than impressive. What it cannot
+    /// say is anything about a film whose own track is itself out, since the
+    /// case and its answer are both built from that track.
+    fn print_reference(&self) {
+        println!();
+        println!("Against a text track inside the film");
+        if self.reference_rows.is_empty() {
+            println!("  No film here carries one, so nothing in this run says anything about");
+            println!("  measuring a subtitle against the timings a film brought with it.");
+            return;
+        }
+
+        let mut tally = Tally::default();
+        let mut worst = 0_i64;
+        for row in &self.reference_rows {
+            tally.count(row.verdict);
+            worst = worst.max(row.worst_error_ms.unwrap_or(0));
+        }
+        println!(
+            "  {} cases over {} films, judged at a threshold of {:.4} and a bar of {:.2}",
+            tally.cases,
+            self.films
+                .iter()
+                .filter(|film| film.truth_from == crate::films::Origin::Inside.name())
+                .count(),
+            self.reference_threshold,
+            self.bars.bar
+        );
+        println!(
+            "  {} right, {} wrong, {} missed, and the worst accepted answer out by {worst}ms",
+            tally.right, tally.wrong, tally.missed
+        );
     }
 
     /// What a run could not put a number on.
