@@ -18,15 +18,42 @@
 //! A subtitle for a different cut has content missing. Somewhere in the film
 //! nobody is saying any of the lines being looked for, because the scene they
 //! belong to is not in this cut or the one that is playing was not in theirs.
-//! That stretch finds nothing at any shift, and no correction is the answer to
-//! it: bending a theatrical subtitle onto an extended cut produces something that
+//! That stretch finds nothing at any shift, and once it has happened the film
+//! never starts matching again, because everything after content the two versions
+//! do not share is out by the length of it. No correction is the answer to that:
+//! bending a theatrical subtitle onto an extended cut produces something that
 //! looks aligned and is wrong in every added scene. Saying where it stopped
 //! matching is worth more than any correction that could be applied there.
+//!
+//! Both shapes are read from what the stretches of the film said about the answer,
+//! and both readings are set where a film that fits cannot reach them. That is the
+//! order of the trade: a stretch of a real soundtrack the reading found hard is
+//! common, so this errs towards saying nothing at all rather than towards telling
+//! somebody their file is for a different picture when it is not.
 //!
 //! Neither is written. This module names them, and naming is the whole of what it
 //! does.
 
 use crate::local::{AGREE_MS, middle_of};
+
+/// How far from the answer a stretch has to be left before it counts as not
+/// described by it, in milliseconds.
+///
+/// Two seconds, and the readings are distances from the answer rather than from
+/// the candidate it was composed out of, so a stretch the answer describes reads
+/// nought here. What it has to clear is the wander of a stretch's own peak, which
+/// on real audio runs to a few hundred milliseconds: a speech reading marks bins
+/// nobody spoke in and misses lines under a loud mix, so no stretch of a real film
+/// sits exactly on the answer. Two seconds is several times that and a fraction of
+/// anything either of the two shapes below produces, since a break is a reel of
+/// advertisement and a missing scene is minutes.
+///
+/// Set from a run over a real library, where the stretches of a correctly aligned
+/// film sat within a few hundred milliseconds of the answer and a bound at a
+/// quarter of this refused ten correct answers on two films as though they were
+/// for another cut. A confident wrong diagnosis is worse than none, which is the
+/// whole reason this part exists.
+pub(crate) const FAR_MS: f64 = 2_000.0;
 
 /// How far apart two stretches of a film have to be left before the difference
 /// is a step rather than a wobble, in milliseconds.
@@ -55,8 +82,8 @@ const EITHER_SIDE: usize = 4;
 /// would make a step out of any one chunk that found something distant.
 const LEAST_ASIDE: usize = 2;
 
-/// How many stretches of film in a row have to find nothing before the subtitle
-/// is said not to describe them.
+/// How many stretches of film in a row have to go unaccounted for before the
+/// subtitle is said not to describe them.
 ///
 /// Three, which is fifteen minutes of a feature at the usual chunk length and
 /// three minutes of the shortest film this measures at all. A scene or two that
@@ -102,8 +129,10 @@ pub(crate) enum Said {
     /// Where the lines in it still have to move to, in milliseconds. Nought for
     /// a stretch the answer already describes.
     Where(f64),
-    /// Somebody is talking here and nothing in the track explains it, at any
-    /// shift worth looking at.
+    /// Somebody is talking here and the track offered nothing to explain it, at
+    /// any shift worth looking at. A stretch that offered an answer its neighbours
+    /// do not bear out amounts to the same thing, and this module treats the two
+    /// alike.
     Nothing,
     /// Nothing to measure against. The film is silent here, or there is no film
     /// here at all, and a stretch like that is no evidence about a subtitle
@@ -117,6 +146,19 @@ pub(crate) struct Reading {
     /// The middle of the stretch, in milliseconds into the film.
     pub(crate) at_ms: f64,
     pub(crate) said: Said,
+}
+
+/// Whether a stretch is left somewhere the answer does not put it.
+///
+/// Only these are evidence of anything. A stretch the answer describes, give or
+/// take the wander of its own peak, is a stretch with nothing to report, and on a
+/// film that fits every stretch is one of those.
+pub(crate) fn off(reading: &Reading) -> bool {
+    match reading.said {
+        Said::Where(residual_ms) => residual_ms.abs() > FAR_MS,
+        Said::Nothing => true,
+        Said::Quiet => false,
+    }
 }
 
 /// Which of the two shapes the readings have, where they have either.
@@ -196,29 +238,42 @@ fn predicts<'a>(
     (predicted - residual_ms).abs() <= AGREE_MS
 }
 
-/// The longest run of stretches nothing bears out, where it is long enough to
-/// mean the subtitle is for something else.
+/// The run of stretches at the end of the film that the answer does not describe
+/// and nothing else does either, where it is long enough to mean the subtitle is
+/// for something else.
+///
+/// Two conditions on each stretch, and both are needed to tell this from a film
+/// with breaks in it.
+/// A stretch has to be somewhere the answer does not put it, which on a film that
+/// fits is no stretch at all. And nothing around it may bear it out, because a
+/// stretch that its neighbours agree with belongs to a second segment of a film
+/// that has been cut about, and a segment is a break rather than a scene nobody
+/// can find.
 ///
 /// A stretch with nothing in the film to measure against ends a run rather than
 /// continuing it. Silence is not evidence either way, and a subtitle should not be
 /// called wrong for a quiet reel between two it describes.
 fn unexplained(readings: &[Reading]) -> Option<Misfit> {
-    let mut longest = 0;
-    let mut from = 0;
+    // Backwards from the end, because a different cut never starts matching
+    // again. Whatever content the two versions do not share, everything after it
+    // is out by the length of that content, and nothing later puts it back. A
+    // stretch of film in the middle that could not be matched and then a film that
+    // matches again is a patch of a soundtrack this reading found hard, which is
+    // most often music over dialogue, and it is not a different cut of anything.
     let mut run = 0;
-    for at in 0..readings.len() {
-        if readings[at].said == Said::Quiet || borne_out(readings, at) {
-            run = 0;
+    let mut from = readings.len();
+    for at in (0..readings.len()).rev() {
+        if readings[at].said == Said::Quiet {
             continue;
         }
-        run += 1;
-        if run > longest {
-            longest = run;
-            from = at + 1 - run;
+        if !off(&readings[at]) || borne_out(readings, at) {
+            break;
         }
+        run += 1;
+        from = at;
     }
 
-    if longest < LEAST_UNEXPLAINED || longest * UNEXPLAINED_SHARE < readings.len() {
+    if run < LEAST_UNEXPLAINED || run * UNEXPLAINED_SHARE < readings.len() {
         return None;
     }
 
@@ -476,13 +531,25 @@ mod tests {
     #[test]
     fn a_short_patch_that_finds_nothing_is_not_a_different_cut() {
         let mut readings = along(0.0, 0.0, 24);
-        readings[9].said = Said::Nothing;
-        readings[10].said = Said::Nothing;
+        for reading in readings.iter_mut().skip(20) {
+            reading.said = Said::Nothing;
+        }
         assert_eq!(misfit_of(&readings), None);
+    }
 
-        // Three in a row is enough of a run and still too small a share of a
-        // film this long. Both conditions have to hold.
-        readings[11].said = Said::Nothing;
+    /// And a film that stops matching and then matches again is not one either,
+    /// however long the patch in the middle. A different cut is content the two
+    /// versions do not share, so everything after it is out by the length of that
+    /// content and nothing later puts it back. A film that recovers had something
+    /// in the middle this reading found hard, which is usually music over
+    /// dialogue.
+    #[test]
+    fn a_film_that_starts_matching_again_is_not_a_different_cut() {
+        let mut readings = along(0.0, 0.0, 24);
+        for reading in readings.iter_mut().skip(6).take(12) {
+            reading.said = Said::Nothing;
+        }
+
         assert_eq!(misfit_of(&readings), None);
     }
 

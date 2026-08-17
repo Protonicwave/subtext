@@ -23,7 +23,7 @@
 //! is why this runs per candidate rather than once.
 
 use crate::correlate::{Correlator, Peak};
-use crate::misfit::{Reading, Said, borne_out};
+use crate::misfit::{Reading, Said, borne_out, off};
 use crate::signal::{BIN_MS, Signal};
 
 /// How much film one chunk covers at most, in milliseconds.
@@ -74,11 +74,10 @@ pub(crate) const AGREE_MS: f64 = 150.0;
 /// chunk so that what is being compared is still mostly overlap rather than
 /// padding.
 ///
-/// This is not part of the fit and never enters it. A stretch of film that
-/// answers from the edge of the narrow window has said only that the candidate
-/// does not describe it, and there are two reasons for that: the film has time
-/// inserted into it, so this stretch has been moved further than the candidate
-/// accounts for, or the lines being looked for are not spoken here at all.
+/// This is not part of the fit and never enters it. A stretch the answer does not
+/// account for has said that much and no more, and there are two reasons for it:
+/// the film has time cut into it, so this stretch has been moved further than the
+/// answer accounts for, or the lines being looked for are not spoken here at all.
 /// Looking again over a window this wide is what tells those apart, and telling
 /// them apart is the difference between a file somebody could correct and a file
 /// for a different cut.
@@ -253,28 +252,27 @@ impl Chunks {
     /// are the evidence, and what has to be said about each of them is why.
     ///
     /// So this runs once, for the candidate that won, and asks a second question
-    /// of every stretch the narrow search turned away. Searched over two minutes
-    /// rather than ten seconds, does the stretch find one answer that stands above
-    /// the rest? Then the film has been moved further here than the answer
-    /// accounts for, which is what time cut into a film does. Does it still find
-    /// nothing in particular? Then these lines are not spoken in this stretch of
+    /// of every stretch the answer does not account for. Searched over two minutes
+    /// rather than ten seconds, does the stretch say where its lines are after all?
+    /// Then the film has been moved further here than the answer accounts for,
+    /// which is what time cut into a film does. Does it still say nothing the film
+    /// around it agrees with? Then these lines are not spoken in this stretch of
     /// this film, which is what a subtitle for a different cut looks like and what
     /// no correction can put right.
     ///
-    /// A stretch is turned away for finding nothing rather than for finding
-    /// something distant, which is why the test is a ratio and not a position.
-    /// Dialogue falls every few seconds, so a correlation over a stretch of film
-    /// almost always peaks somewhere inside a ten second window whether the lines
-    /// are spoken there or not. What tells a found answer from a chance one is that
-    /// it stands clear of every other answer for the same stretch.
+    /// What every reading holds is its distance from the answer rather than from
+    /// the candidate the answer was composed out of. That is what makes a stretch
+    /// the answer describes read nought, whatever stretch and shift the answer is
+    /// made of, so the two shapes below are the only things left in the numbers.
     ///
     /// Nothing is allocated. The wide search runs over the buffers it was given
-    /// when the film was cut up, and on an ordinary film it runs not at all.
+    /// when the film was cut up, and on a film that fits it runs not at all.
     pub(crate) fn readings(
         &mut self,
         speech: &Signal,
         cues: &Signal,
         lag_bins: isize,
+        fit: Fit,
     ) -> &[Reading] {
         let Self {
             correlator,
@@ -292,6 +290,10 @@ impl Chunks {
 
         for chunk in 0..*count {
             let from = chunk * *chunk_bins;
+            #[allow(clippy::cast_precision_loss)]
+            let at_ms = (from + *chunk_bins / 2) as f64 * f64::from(BIN_MS);
+            let answer_ms = fit.slope.mul_add(at_ms, fit.intercept_ms);
+
             let said = match speech.bins().get(from..from + *chunk_bins) {
                 Some(film) if correlator.measuring(film) => {
                     gather(
@@ -300,7 +302,9 @@ impl Chunks {
                         isize::try_from(from).unwrap_or(isize::MAX) - lag_bins,
                     );
                     match correlator.against(gathered) {
-                        Some(peak) if answered(&peak, correlator.window()) => residual_of(peak.lag),
+                        Some(peak) if answered(&peak, correlator.window()) => {
+                            away_from(answer_ms, peak.lag)
+                        }
                         // Nothing inside a window this narrow, which a stretch
                         // moved further than the answer accounts for cannot have.
                         _ => Said::Nothing,
@@ -312,18 +316,25 @@ impl Chunks {
                 _ => Said::Quiet,
             };
 
-            #[allow(clippy::cast_precision_loss)]
-            let at_ms = (from + *chunk_bins / 2) as f64 * f64::from(BIN_MS);
             readings.push(Reading { at_ms, said });
         }
 
-        // Which stretches to look at again: the ones that found nothing inside a
-        // ten second window, and the ones whose answer nothing around them bears
-        // out. The second is the larger half of it. A stretch moved half a minute
-        // by a break still peaks somewhere inside ten seconds, by chance, and the
-        // chance is different in the next stretch along, so what marks it out is
-        // not that it failed but that it disagrees with its neighbours.
-        pending.extend((0..readings.len()).filter(|at| !borne_out(readings, *at)));
+        // Which stretches to look at again: the ones the answer does not account
+        // for, and the ones nothing around them bears out. Both, because a stretch
+        // moved half a minute by a break can look like either. It peaks somewhere
+        // inside ten seconds whatever the truth is, and that chance peak lands near
+        // the answer about as readily as it lands far from it, so the reading that
+        // matters is whether the film around it agrees.
+        //
+        // The wider search subsumes this one, since it looks over everything this
+        // looked over and further, so a stretch that was right the first time comes
+        // back with the same answer. What it costs is one more transform for each
+        // stretch in doubt, on the buffers already to hand.
+        pending.extend(
+            (0..readings.len())
+                .filter(|at| off(&readings[*at]) || !borne_out(readings, *at))
+                .filter(|at| readings[*at].said != Said::Quiet),
+        );
 
         for chunk in pending.iter().copied() {
             let from = chunk * *chunk_bins;
@@ -345,7 +356,8 @@ impl Chunks {
                 continue;
             }
             if let Some(reading) = readings.get_mut(chunk) {
-                reading.said = residual_of(peak.lag);
+                let answer_ms = fit.slope.mul_add(reading.at_ms, fit.intercept_ms);
+                reading.said = away_from(answer_ms, peak.lag);
             }
         }
 
@@ -452,10 +464,14 @@ fn answered(peak: &Peak, window: isize) -> bool {
     peak.lag.abs() < window && peak.height > 0.0
 }
 
-/// How far a stretch says its lines still have to move.
+/// How far a stretch is left from where the answer puts it.
+///
+/// The stretch says where its lines belong; `answer_ms` is where the fitted line
+/// says they belong. The difference is what the answer failed to explain about
+/// this stretch of film, and nought is a stretch it explained.
 #[allow(clippy::cast_precision_loss)]
-fn residual_of(lag: isize) -> Said {
-    Said::Where(lag as f64 * f64::from(BIN_MS))
+fn away_from(answer_ms: f64, lag: isize) -> Said {
+    Said::Where(lag as f64 * f64::from(BIN_MS) - answer_ms)
 }
 
 /// Copies the bins of `from` that fall over a chunk into `dest`, padding with
@@ -736,6 +752,17 @@ mod tests {
         starts
     }
 
+    /// An answer that leaves the film needing nothing further, which is what the
+    /// readings below are measured against.
+    fn nothing_more() -> Fit {
+        Fit {
+            slope: 0.0,
+            intercept_ms: 0.0,
+            agreement: 1.0,
+            tightness: 1.0,
+        }
+    }
+
     /// A film that talks at those moments.
     fn talking(starts: &[usize], length: usize) -> Signal {
         let mut bins = vec![false; length];
@@ -774,7 +801,12 @@ mod tests {
             .collect();
 
         let mut chunks = chunks();
-        let readings = chunks.readings(&talking(&starts, length), &talking(&moved, length), 0);
+        let readings = chunks.readings(
+            &talking(&starts, length),
+            &talking(&moved, length),
+            0,
+            nothing_more(),
+        );
 
         assert_eq!(readings.len(), 24);
         for reading in readings {
@@ -808,7 +840,7 @@ mod tests {
         quietened[length * 2 / 3..].fill(false);
 
         let mut chunks = chunks();
-        let readings = chunks.readings(&Signal::from_bins(quietened), &track, 0);
+        let readings = chunks.readings(&Signal::from_bins(quietened), &track, 0, nothing_more());
 
         let quiet = readings
             .iter()

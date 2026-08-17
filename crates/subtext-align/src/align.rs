@@ -185,12 +185,14 @@ struct Measured {
     score: f32,
     agreement: f32,
     tightness: f32,
-    /// The candidate this came from, kept so that the winner can be put back to
-    /// the film once, to be read for the ways the film does not fit it. The
-    /// settled correction above cannot stand in for it: the stretches were
-    /// measured against the candidate, not against the answer composed from
-    /// them.
+    /// The candidate this came from, and the line the film's stretches came to
+    /// about it. Both are kept so that the winner can be put back to the film
+    /// once, to be read for the ways the film does not fit it. The settled
+    /// correction above cannot stand in for them: the stretches were measured
+    /// against the candidate, and what each of them is left needing is measured
+    /// against this line.
     from: Candidate,
+    fit: Fit,
 }
 
 /// The correction that best explains where the speech falls in terms of where
@@ -280,6 +282,7 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
             agreement: fit.agreement,
             tightness: fit.tightness,
             from: candidate,
+            fit,
         });
     }
 
@@ -298,7 +301,7 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
     // film that does not, what comes of it is the difference between a file
     // somebody could correct and a file for a different picture.
     track.rebuild(cues, best.from.rate);
-    let misfit = misfit_of(chunks.readings(speech, &track, best.from.lag));
+    let misfit = misfit_of(chunks.readings(speech, &track, best.from.lag, best.fit));
 
     Alignment {
         correction: best.correction,
