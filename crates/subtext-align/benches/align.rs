@@ -1,13 +1,19 @@
 //! How long it takes to work out what a track is out by.
 //!
-//! Three numbers matter. Building the cue signal happens before anything else
-//! and has to disappear against the rest of the work, so it is measured at the
-//! five thousand cues a long film carries. And the whole search, being six rate
-//! candidates over a two hour film, has to come in under a second, since it runs
-//! while somebody waits and the audio it is measured against costs a great deal
-//! more than this does.
+//! Four numbers matter. Building the cue signal happens before anything else and
+//! has to disappear against the rest of the work, so it is measured at the five
+//! thousand cues a long film carries.
 //!
-//! The third is the landing figure, which the search reads twice, and which has
+//! Then the whole search, twice. It has two stages: a correlation over the whole
+//! film at each candidate stretch, which is held to a second, and then the film
+//! in stretches, each measured against each surviving candidate, which is held
+//! to two. The local stage has no caller of its own to be measured through, so
+//! what is timed here is an alignment end to end, once on a film that needs only
+//! shifting and once on a film that needs stretching. The second is the worst
+//! case: every candidate has to be carried through the local stage before any of
+//! them can be ruled out, which is the whole reason that stage exists.
+//!
+//! The fourth is the landing figure, which the search reads twice, and which has
 //! to stay small enough that checking an answer is never a reason not to check
 //! it. Five milliseconds over a three thousand line track is the bar.
 
@@ -29,6 +35,11 @@ const MEASURED: u32 = 3_000;
 /// How far the film's dialogue falls after the file claims it does.
 const LATE_MS: u32 = 2_500;
 
+/// The stretch a release taken from twenty five frames a second to 23.976
+/// carries, which is the largest of the candidates and the one that puts every
+/// other candidate furthest out.
+const STRETCH: f64 = 25.0 / 23.976;
+
 fn main() {
     let cues = dialogue(CUES);
     let speech = Signal::from_cues(&spoken(&cues));
@@ -41,9 +52,19 @@ fn main() {
 
     // The claim this crate's share of an alignment rests on. Everything above
     // it, the decoding in particular, is measured elsewhere.
-    criterion.bench_function("align two hours across six rate candidates", |bencher| {
+    criterion.bench_function("align two hours of a film that needs shifting", |bencher| {
         bencher.iter(|| black_box(align(black_box(&cues), black_box(&speech))));
     });
+
+    // The same again where the film needs stretching as well, which is the case
+    // no candidate can be ruled out of cheaply.
+    let stretched = Signal::from_cues(&spoken_at(&cues, STRETCH));
+    criterion.bench_function(
+        "align two hours of a film that needs stretching",
+        |bencher| {
+            bencher.iter(|| black_box(align(black_box(&cues), black_box(&stretched))));
+        },
+    );
 
     // Measured where it is worst. A line with an utterance under it is answered
     // by the first bin the search looks in; a line with nothing anywhere near it
@@ -94,10 +115,17 @@ fn talks_early(cues: &[Cue]) -> Signal {
 
 /// The same dialogue where the film actually says it.
 fn spoken(cues: &[Cue]) -> Vec<Cue> {
+    spoken_at(cues, 1.0)
+}
+
+/// The same again for a film running at a different framerate, which is the
+/// stretch a release taken from twenty five frames to 23.976 carries.
+fn spoken_at(cues: &[Cue], rate: f64) -> Vec<Cue> {
+    let late = Correction::new(i32::try_from(LATE_MS).unwrap_or_default(), rate);
     cues.iter()
         .map(|cue| Cue {
-            start: Timestamp::from_millis(cue.start.millis() + LATE_MS),
-            end: Timestamp::from_millis(cue.end.millis() + LATE_MS),
+            start: late.apply(cue.start),
+            end: late.apply(cue.end),
             ..cue.clone()
         })
         .collect()
