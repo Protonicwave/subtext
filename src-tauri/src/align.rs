@@ -20,9 +20,11 @@
 //! to somebody's library is a judgement about the product rather than a property
 //! of the correlation, so the engine reports its figures and this weighs them.
 //! There are two of those judgements and they ask different questions. The
-//! threshold asks how clearly the correlation chose its answer. The bar asks
-//! whether the answer it chose actually puts the lines where the dialogue is,
-//! which is the only question the correlation cannot mark its own work on.
+//! threshold asks how much of the film agrees about the answer. The bar asks
+//! whether the answer then puts the lines where the dialogue is, which is the
+//! one question no measurement can mark its own work on: a film can agree with
+//! itself about an answer that is wrong, and does whenever a subtitle belongs to
+//! a different cut of the same picture.
 
 use subtext_align::{Landing, Signal};
 use subtext_container::SubtitleCodec;
@@ -41,68 +43,58 @@ use crate::dto::{AlignmentView, Answer, Failure, ReferenceView};
 /// reason to suspect the tool rather than the file. So the number is set where
 /// a wrong answer is refused rather than where the most files are helped.
 ///
-/// Four measurements set it. Against a real film, a hundred and five minute
-/// AAC rip whose own subtitle runs two seconds early, that subtitle scores
-/// 0.027 and a transcript of the same density belonging to another film scores
-/// 0.0035. Against the fixture films below, whose speech is bursts against
-/// digital silence, the same two cases score 0.456 and 0.0074.
+/// Set from a run over a real library: nine films, a hundred and sixty one
+/// manufactured cases. Every one of the eight cases pairing one film's subtitle
+/// with another film's audio scored exactly nought, because the confidence is
+/// now three figures multiplied together and a wrong pairing fails all three at
+/// once. The lowest correct answer the bar below would let through scored 0.26,
+/// and the middle one 0.49. So there is a great deal of room and nothing in it,
+/// and this sits a factor of two and a half under the lowest correct answer with
+/// nothing at all beneath it.
 ///
-/// So the number has to sit above 0.0074 and below 0.027, and 0.015 is the
-/// middle of that in the sense that matters. Confidence is a ratio and moves by
-/// multiples, so the middle of a range is the geometric one: this is a factor of
-/// about two from either side, where a value placed halfway by subtraction would
-/// sit almost on top of the correct answer.
-///
-/// The two regimes are four hundredths apart at the top and a hundredth apart at
-/// the bottom, which is the useful thing to know about this number. Real audio
-/// carries music and effects through the gaps and the reading marks some of it,
-/// so a correct answer on a real film is a quarter of a perfect match rather
-/// than most of one, and everything shifts down with it. What separates a right
-/// answer from a wrong one in both regimes is the height of the peak rather than
-/// the score as a whole: 0.247 against 0.027 on the real film, where the margins
-/// were 0.110 and 0.130 and told the two apart not at all. Somebody revisiting
-/// this should look there first, and should measure a second real film before
-/// moving the number on the strength of one.
+/// It is deliberately not the number that decides the hard cases. A subtitle for
+/// a different cut of the same film correlates strongly, because most of the
+/// film really does line up, and refusing it is the bar's work rather than this
+/// one's. Pushing this up until it caught those would put it at 0.30, a
+/// hundredth above the strongest of them, and would refuse a whole film in the
+/// run whose answers were all correct and all scored 0.27. A number placed on
+/// the edge of one run's observations is how the trouble in this part began.
 ///
 /// Erring low would be worse than erring high. Refusing a file that could have
 /// been helped leaves somebody exactly where they were, with the keys they
 /// already had and a sentence saying why. Accepting one that could not leaves
 /// them watching a film that is wrong from beginning to end.
-const THRESHOLD: f32 = 0.015;
+const THRESHOLD: f32 = 0.10;
 
 /// How sure a measurement against another subtitle track has to be.
 ///
 /// A separate number from [`THRESHOLD`] rather than the same one, because the
 /// two are read off correlations of different kinds and the whole scale moves
-/// between them. Against a speech reading, one side of the correlation is an
-/// estimate: music and effects mark bins nobody spoke in, whispers and lines
-/// under a loud mix go unmarked, and a correct answer on a real film reaches
-/// about a quarter of a perfect match. Against another subtitle track both sides
-/// are authored timings, nothing is estimated, and a correct answer reaches most
-/// of one. Reusing 0.015 here would be reusing a number set for the noisier of
-/// the two regimes, where it would admit a pairing that in this regime is
-/// plainly wrong.
+/// between them. Against a speech reading, one side is an estimate: music and
+/// effects mark bins nobody spoke in, whispers and lines under a loud mix go
+/// unmarked, and stretches of the film disagree about the answer for reasons
+/// that have nothing to do with the answer. Against another subtitle track
+/// nothing is estimated and every stretch of the film agrees exactly.
 ///
-/// Two sets of numbers set it and they agree. The engine's own tests measure
-/// both ends of this regime and state them: a track measured against a reference
-/// describing the same film scores above 0.25, and one measured against a
-/// different film's timings scores below 0.025. Eight hundredths is the
-/// geometric middle of that, which is a factor of about three from either side,
-/// and the geometric middle is the right one because a confidence is a ratio and
-/// moves by multiples.
+/// The corpus measures both ends of this regime. On the one film in the run
+/// carrying a text track of its own, all seventeen correct answers scored
+/// exactly one, another film's subtitle scored nought, and a subtitle for a
+/// different cut of the same film scored 0.625. That last figure is the share of
+/// the film a single correction explains, and on this path it is read straight:
+/// with nothing estimated on either side, a film that agrees with an answer
+/// about five eighths of itself is a film the answer does not describe.
 ///
-/// The corpus then measured the same two ends on a real film, a Blu-ray rip
-/// carrying two English tracks of its own, over seventeen manufactured cases.
-/// Every correct answer scored between 0.454 and 0.455, and a subtitle belonging
-/// to a different film scored 0.0040. The observed gap is wider than the one the
-/// number was placed in, so this sits a factor of five below the lowest correct
-/// answer and twenty above the highest wrong one, and nothing in that range is
-/// close to deciding anything.
+/// Four fifths. It sits under every correct answer by a fifth of the scale and
+/// well above the one wrong one, and unlike the audio path this number rather
+/// than the bar is what refuses a file with breaks in it, because here it can.
 ///
-/// It errs the same way [`THRESHOLD`] does, and the cost of erring is lower
-/// here. A reference that does not settle the question is not reported as a
-/// refusal at all: the film itself is still there to be asked, and it is asked.
-const REFERENCE_THRESHOLD: f32 = 0.08;
+/// Erring high costs less here than anywhere else in this file. A reference that
+/// does not settle the question is not reported as a refusal at all: the film
+/// itself is still there to be asked, and it is asked. So the price of turning
+/// away a reference that would have been right is a soundtrack read that could
+/// have been skipped, which is seconds of somebody's afternoon rather than a
+/// film that plays wrongly from beginning to end.
+const REFERENCE_THRESHOLD: f32 = 0.80;
 
 /// How much of a track has to land on the dialogue before anything is written.
 ///
@@ -121,27 +113,39 @@ const REFERENCE_THRESHOLD: f32 = 0.08;
 /// well, because both readings being poor means the pairing is wrong rather than
 /// the timing.
 ///
-/// Four tenths is set from what chance gives. A track measured against a film it
-/// has nothing to do with lands wherever an utterance happens to fall inside the
-/// half second either side of a line, which on dialogue starting every four
-/// seconds or so is about an eighth of it. This sits at more than three times
-/// that, and well under what a correct answer reaches, since a track written for
-/// its own film lands nearly everywhere the reading found a voice. The room
-/// between those two is wide, and it has to be: no film scores one, because
-/// whispers, lines away from the microphone and dialogue under a loud mix are
-/// speech that the reading misses on every film there is.
+/// Set from a run over a real library of nine films and a hundred and sixty one
+/// manufactured cases, and it is this number rather than the threshold that
+/// decides the hard cases. Correct answers landed between 63 and 76 per cent of
+/// a track, with a middle of 70. A subtitle for a different cut of the same
+/// film, which is time cut into the middle of a picture and no single correction
+/// can answer, landed between 42 and 55. A subtitle for another film altogether
+/// landed between 21 and 29, which is what chance gives.
+///
+/// So this sits three points above the highest of the wrong answers and five
+/// below the lowest of the right ones. At that value nothing in the run was
+/// written wrongly, and nothing anywhere in the swept range from 55 to 60 per
+/// cent changes a single verdict, so it is not balanced on an observation.
+///
+/// It costs something and the cost is worth stating. Two of the nine films have
+/// subtitles that land on 53 per cent of their own talking untouched, so no
+/// correction to either could ever clear this and neither film can be helped.
+/// That is the price of leaving this number to catch a file with breaks in it,
+/// which is a job it is doing on someone else's behalf. Once such a file is
+/// refused on its own account, this can come down to where it belongs, which is
+/// somewhere near the two fifths that chance and a correct answer sit either
+/// side of.
 ///
 /// It errs the same way the threshold does, and for the same reason. Refusing a
 /// file that could have been helped leaves somebody where they were, with the
-/// keys they already had and a sentence saying why. This number should be
-/// settled against a run of real films rather than moved on the strength of one.
+/// keys they already had and a sentence saying why.
 ///
 /// One number rather than two, unlike the threshold above. Where the reference
 /// is another subtitle track this asks how many lines arrive when the reference
 /// says somebody speaks, which is a stricter question than the one it asks of a
-/// speech reading and which a right answer clears by further still. A floor both
+/// speech reading and which a right answer clears by further still: the same run
+/// put a correct answer against a film's own track at 81 per cent. A floor both
 /// regimes are well clear of does not need to be set twice.
-const BAR: f32 = 0.4;
+const BAR: f32 = 0.58;
 
 /// How many lines a track needs before it is worth measuring at all.
 ///
@@ -431,12 +435,19 @@ mod tests {
     /// itself apart from another, and a transcript of evenly spaced lines would
     /// line up equally well almost anywhere. What the lines say is of no
     /// interest to any of this: the measurement is of when somebody speaks.
+    ///
+    /// Uneven over the whole film rather than in a pattern that comes round
+    /// again. Spacing a line by the index modulo a small number reads as uneven
+    /// and repeats every few lines, which puts a moment of this film a minute
+    /// from a moment that looks exactly like it, and a film like that has two
+    /// answers rather than one. Real dialogue does not do that, and a fixture
+    /// that does would be testing the wrong thing.
     fn dialogue() -> Vec<Cue> {
         let mut cues = Vec::new();
         let mut at_ms = 20_000;
         while at_ms < LENGTH_MS - 20_000 {
             let index = u32::try_from(cues.len()).unwrap();
-            let length = 1_000 + (index % 5) * 400;
+            let length = 1_000 + (index * 613) % 2_000;
             cues.push(Cue {
                 index: index + 1,
                 start: Timestamp::from_millis(at_ms),
@@ -444,7 +455,7 @@ mod tests {
                 text: "line".to_owned(),
                 position: None,
             });
-            at_ms += length + 800 + (index % 11) * 500;
+            at_ms += length + 700 + (index * 977) % 4_100;
         }
         cues
     }
@@ -751,6 +762,7 @@ mod tests {
     fn a_film_that_is_out_by_a_known_amount_is_put_right() {
         let fixture = Fixture::mistimed();
 
+        let outcome = fixture.align();
         let AlignmentView::Aligned {
             previous,
             confidence,
@@ -758,9 +770,9 @@ mod tests {
             as_written,
             reference,
             ..
-        } = fixture.align()
+        } = outcome
         else {
-            panic!("a film measured against its own subtitle should line up");
+            panic!("a film measured against its own subtitle should line up: {outcome:?}");
         };
 
         assert_eq!(previous.offset_ms, 0);
@@ -935,8 +947,9 @@ mod tests {
     fn the_sounds_a_film_makes_are_measured_past_rather_than_thrown_away() {
         let fixture = Fixture::captioned();
 
-        let AlignmentView::Aligned { .. } = fixture.align() else {
-            panic!("a captioned track describes the film as well as a plain one");
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { .. } = outcome else {
+            panic!("a captioned track describes the film as well as a plain one: {outcome:?}");
         };
         let error = residual(fixture.correction());
         assert!(error <= SLACK, "out by {error}ms");

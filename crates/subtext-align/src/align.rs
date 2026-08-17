@@ -1,11 +1,13 @@
 //! The answer, and how much of it to believe.
 
-use subtext_core::{Correction, Cue};
+use subtext_core::{Correction, Cue, Timestamp};
 
-use crate::correlate::{Correlator, Peak};
 use crate::landing::{Landing, landing_of};
-use crate::rate::RATES;
+use crate::local::{Chunks, Fit};
+use crate::rate;
 use crate::signal::{self, BIN_MS, Signal};
+
+use crate::correlate::Correlator;
 
 /// How far either way a track may be moved to make it fit, in milliseconds.
 ///
@@ -15,52 +17,91 @@ use crate::signal::{self, BIN_MS, Signal};
 /// the search this way is also what makes it quick.
 const LAG_WINDOW_MS: u32 = 120_000;
 
-/// How sure the engine is, in two parts and one number.
+/// How many explanations of the film are measured against it in full.
+///
+/// The coarse pass ranks its candidates by the height of a peak, and the height
+/// of a peak is precisely the thing that cannot tell a stretch from a shift.
+/// Carrying only the winner forward would confirm the coarse ranking rather than
+/// check it, which is the mistake all of this exists to correct, so several go
+/// through. Six covers the five distinct ratios with room for a second reading
+/// of one of them, and costs a fraction of the time the audio behind it did.
+const CARRIED: usize = 6;
+
+/// How far apart two answers have to leave the lines to be different answers, in
+/// milliseconds.
+///
+/// A quarter of a second, somewhere in the film. Two candidates often converge:
+/// a stretch a thousandth away from the truth is measured across the film and
+/// comes back naming the truth, so the film has two candidates saying the same
+/// thing. That is agreement and not competition, and counting it as competition
+/// would report a film explained twice over as a film nobody could explain.
+const APART_MS: f64 = 250.0;
+
+/// How sure the engine is, in three parts and one number.
 ///
 /// Reported rather than acted on. What counts as sure enough is a judgement
 /// about when to touch somebody's file, which belongs with whoever is deciding
 /// to touch it and not with the arithmetic.
+///
+/// The parts are what the film said rather than what the correlation scored.
+/// Every one of them comes from measuring the answer against stretches of the
+/// film it claims to explain, which is why none of them is the peak that
+/// produced the answer in the first place.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Confidence {
-    peak: f32,
-    margin: f32,
+    agreement: f32,
+    tightness: f32,
+    separation: f32,
 }
 
 impl Confidence {
     /// Nothing was measurable, which is not the same as measuring badly.
     pub const NONE: Self = Self {
-        peak: 0.0,
-        margin: 0.0,
+        agreement: 0.0,
+        tightness: 0.0,
+        separation: 0.0,
     };
 
-    /// How well the two signals agree where they agree best, from nothing to a
-    /// perfect match.
+    /// How much of the film agrees with the answer, from none of it to all.
+    ///
+    /// The film is cut into stretches and each is asked how far its lines still
+    /// have to move once the answer is applied. This is the share of them that
+    /// said what the answer says they should.
     #[must_use]
-    pub fn peak(self) -> f32 {
-        self.peak
+    pub fn agreement(self) -> f32 {
+        self.agreement
     }
 
-    /// How far the answer stands above the next best explanation, from level
-    /// with it to alone.
+    /// How closely the stretches that agree sit to the answer, from barely to
+    /// exactly.
+    #[must_use]
+    pub fn tightness(self) -> f32 {
+        self.tightness
+    }
+
+    /// How far the answer stands above the next explanation that is not the same
+    /// answer said differently, from level with it to alone.
     ///
     /// This is the part that catches a subtitle belonging to a different film. A
-    /// wrong pairing still correlates a little at every lag, because dialogue is
+    /// wrong pairing still correlates a little everywhere, because dialogue is
     /// spread through a film the same way wherever it came from, so it produces
-    /// a shallow peak among many others of nearly the same size.
+    /// several explanations that each describe about as little of the film as
+    /// the others.
     #[must_use]
-    pub fn margin(self) -> f32 {
-        self.margin
+    pub fn separation(self) -> f32 {
+        self.separation
     }
 
-    /// The two parts as one number, for comparing against a threshold.
+    /// The three parts as one number, for comparing against a threshold.
     ///
-    /// Multiplied rather than averaged, so that a poor showing in either part
-    /// cannot be made up for by the other. A tall peak with rivals beside it and
-    /// a lonely shallow one are both doubtful, and an average would call one of
+    /// Multiplied rather than averaged, so that a poor showing in any part
+    /// cannot be made up for by the others. An answer most of the film ignores,
+    /// an answer the film agrees with loosely, and an answer with an equally
+    /// good rival beside it are all doubtful, and an average would call some of
     /// them respectable.
     #[must_use]
     pub fn score(self) -> f32 {
-        self.peak * self.margin
+        self.agreement * self.tightness * self.separation
     }
 }
 
@@ -87,10 +128,11 @@ impl Alignment {
     /// How the lines would sit against the talking with this correction
     /// applied.
     ///
-    /// The confidence above comes out of the same peak the correction does, so
-    /// it says how clearly the correlation chose, and nothing about whether the
-    /// answer it chose is any good. This says the second thing, and it says it
-    /// in the units somebody watching would use.
+    /// The confidence above says how much of the film agrees about where its
+    /// lines belong. This says whether they then arrive when somebody speaks,
+    /// which is a different question and the one somebody watching would ask. A
+    /// film can agree with itself about a wrong answer, and does whenever a
+    /// subtitle is for a different cut of the same picture.
     #[must_use]
     pub fn landing(self) -> Landing {
         self.landing
@@ -107,6 +149,26 @@ impl Alignment {
     }
 }
 
+/// One explanation of the film, as the coarse pass left it.
+#[derive(Clone, Copy, Debug)]
+struct Candidate {
+    rate: f64,
+    /// The shift, in bins, that the whole-film correlation found for that rate.
+    lag: isize,
+    /// What that correlation scored, which decides only which candidates go
+    /// through to be measured properly.
+    height: f64,
+}
+
+/// One explanation of the film, once the film has had its say about it.
+#[derive(Clone, Copy, Debug)]
+struct Measured {
+    correction: Correction,
+    score: f32,
+    agreement: f32,
+    tightness: f32,
+}
+
 /// The correction that best explains where the speech falls in terms of where
 /// the cues claim it does.
 ///
@@ -115,11 +177,19 @@ impl Alignment {
 /// already been corrected would return the residual of that correction and
 /// converge on nothing.
 ///
+/// Two stages. A correlation over the whole film at each candidate stretch,
+/// which is quick and which narrows the field; then, for each of the few that
+/// survive, the film in stretches, each asked what the candidate still leaves it
+/// needing, and a line fitted to the answers. The second stage is what picks the
+/// winner, because the first cannot: a stretch and a shift trade against each
+/// other and the tallest peak is as often the wrong pair as the right one.
+///
 /// There is always an answer, because there is no case where declining is more
 /// use to a caller than a measurement with the confidence attached to it. Cues
 /// that cannot be correlated at all, being none of them, or a speech signal with
 /// no shape, come back as the identity with [`Confidence::NONE`], which no
-/// threshold worth having will accept.
+/// threshold worth having will accept. So does a film that agrees with no
+/// explanation of itself.
 #[must_use]
 pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
     // Nothing measured, in every part of the answer. Where there is no shape to
@@ -133,65 +203,198 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         as_written: Landing::NONE,
     };
 
+    // Nothing settled, which is not nothing measured. The film was read and no
+    // explanation of it held up, so how the lines sit as written is still worth
+    // saying and the answer is to leave them alone.
+    let unsettled = || Alignment {
+        correction: Correction::IDENTITY,
+        confidence: Confidence::NONE,
+        landing: landing_of(cues, speech, Correction::IDENTITY),
+        as_written: landing_of(cues, speech, Correction::IDENTITY),
+    };
+
     let window = (LAG_WINDOW_MS / BIN_MS) as usize;
     // The buffers are sized for the longest the cues can reach at any candidate,
-    // so that the whole search runs through one set of them.
-    let longest = RATES
-        .iter()
-        .map(|rate| signal::span(cues, *rate))
+    // so that the whole coarse pass runs through one set of them.
+    let longest = rate::distinct()
+        .map(|rate| signal::span(cues, rate))
         .max()
         .unwrap_or(0);
     let Some(mut correlator) = Correlator::new(speech, longest, window) else {
         return nothing;
     };
 
-    let mut candidate = Signal::from_cues(cues);
-    let mut best: Option<(f64, Peak)> = None;
-    for rate in RATES {
-        candidate.rebuild(cues, rate);
-        let Some(peak) = correlator.correlate(&candidate) else {
-            continue;
-        };
-        // Strictly better, and the identity is tried first, so a track is only
-        // given a stretch by a candidate that plainly explains it better than
-        // leaving it alone does.
-        if best.is_none_or(|(_, found)| peak.height > found.height) {
-            best = Some((rate, peak));
-        }
+    let mut track = Signal::from_cues(cues);
+    let carried = coarse(&mut correlator, &mut track, cues);
+    if carried.is_empty() {
+        return nothing;
     }
 
-    let Some((rate, peak)) = best else {
+    let Some(mut chunks) = Chunks::over(speech.len()) else {
         return nothing;
     };
 
-    let offset_ms = peak
-        .lag
-        .saturating_mul(isize::try_from(BIN_MS).unwrap_or(1));
-    let correction = Correction::new(i32::try_from(offset_ms).unwrap_or(0), rate);
+    #[allow(clippy::cast_precision_loss)]
+    let film_ms = (speech.len() * BIN_MS as usize) as f64;
+    let mut measured: Vec<Measured> = Vec::with_capacity(carried.len());
+    for candidate in carried {
+        track.rebuild(cues, candidate.rate);
+        let Some(fit) = chunks.fit(speech, &track, candidate.lag) else {
+            continue;
+        };
+        let Some(correction) = settle(candidate, fit, film_ms) else {
+            continue;
+        };
+        measured.push(Measured {
+            correction,
+            score: fit.score(),
+            agreement: fit.agreement,
+            tightness: fit.tightness,
+        });
+    }
+
+    measured.sort_by(|one, other| other.score.total_cmp(&one.score));
+    let Some(best) = measured.first().copied() else {
+        return unsettled();
+    };
+    if best.score <= 0.0 {
+        return unsettled();
+    }
+
     Alignment {
-        correction,
-        confidence: confidence_of(&peak),
-        landing: landing_of(cues, speech, correction),
+        correction: best.correction,
+        confidence: Confidence {
+            agreement: best.agreement,
+            tightness: best.tightness,
+            separation: separation_of(&measured, film_ms),
+        },
+        landing: landing_of(cues, speech, best.correction),
         as_written: landing_of(cues, speech, Correction::IDENTITY),
     }
 }
 
-fn confidence_of(peak: &Peak) -> Confidence {
-    if peak.height <= 0.0 {
-        return Confidence::NONE;
+/// The explanations worth measuring properly.
+///
+/// One correlation over the whole film for each distinct stretch, and both of
+/// the two lags it can offer: the tallest, and the best anywhere clear of it.
+/// The second is there because a film whose dialogue falls into a repeating
+/// pattern has two answers the arithmetic cannot choose between, and the film
+/// itself can.
+fn coarse(correlator: &mut Correlator, track: &mut Signal, cues: &[Cue]) -> Vec<Candidate> {
+    let mut found: Vec<Candidate> = Vec::new();
+    for rate in rate::distinct() {
+        track.rebuild(cues, rate);
+        let Some(peak) = correlator.against(track.bins()) else {
+            continue;
+        };
+        found.push(Candidate {
+            rate,
+            lag: peak.lag,
+            height: peak.height,
+        });
+        if let Some((lag, height)) = peak.rival {
+            found.push(Candidate { rate, lag, height });
+        }
     }
 
-    // How far the peak stands clear of its nearest rival, as a fraction of
-    // itself. Scale free on purpose: what matters is that the answer is not one
-    // of several equally good ones, and that question has the same answer
-    // whether the film is loud or quiet.
-    let margin = ((peak.height - peak.runner_up) / peak.height).clamp(0.0, 1.0);
+    found.sort_by(|one, other| other.height.total_cmp(&one.height));
+
+    // Leaving the track alone goes through whatever it scored. Most files need
+    // no stretch at all, and a coarse ranking that put the identity seventh
+    // would be the one thing this stage cannot recover from: a stretch it never
+    // compared against no stretch.
+    if let Some(at) = found
+        .iter()
+        .position(|candidate| (candidate.rate - 1.0).abs() < f64::EPSILON)
+        .filter(|at| *at >= CARRIED)
+    {
+        found.swap(CARRIED - 1, at);
+    }
+
+    found.truncate(CARRIED);
+    found
+}
+
+/// The correction a candidate comes to once the film has corrected it.
+///
+/// A candidate maps an authored moment to a film moment. The line fitted across
+/// the chunks says how far that mapping is still out and how fast that error
+/// grows, so composing the two gives the mapping the film actually wants, and
+/// composing them is all this does.
+///
+/// The stretch that falls out is then named, and a stretch with no name is no
+/// answer. Nothing where it cannot be named: a ratio that is not one of the
+/// framerate conversions is far likelier to be a splice, a different cut or the
+/// wrong film than a real stretch, and a value nobody could have chosen by hand
+/// is one nobody can check either.
+fn settle(candidate: Candidate, fit: Fit, film_ms: f64) -> Option<Correction> {
+    #[allow(clippy::cast_precision_loss)]
+    let offset_ms = (candidate.lag * isize::try_from(BIN_MS).unwrap_or(1)) as f64;
+
+    let stretched = candidate.rate * (1.0 + fit.slope);
+    let moved = offset_ms.mul_add(1.0 + fit.slope, fit.intercept_ms);
+    let named = rate::nearest(stretched, film_ms)?;
+
+    // Naming the stretch moves it a little, so the shift takes up the
+    // difference, measured at the middle of the film. Keeping the middle where
+    // the fit put it spreads the change the naming makes across both halves
+    // rather than leaving it all at one end.
+    let middle = (film_ms / 2.0 - moved) / stretched;
+    let settled = (stretched - named).mul_add(middle, moved);
 
     #[allow(clippy::cast_possible_truncation)]
-    Confidence {
-        peak: peak.height.clamp(0.0, 1.0) as f32,
-        margin: margin as f32,
+    Some(Correction::new(
+        settled.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
+        named,
+    ))
+}
+
+/// How far the winner stands above the best explanation that is not itself.
+///
+/// Candidates converge. A stretch a thousandth away from the truth is measured
+/// across the film and comes back naming the truth, so two of them arrive at the
+/// same correction by different routes. That is the film agreeing with itself,
+/// and reporting it as a rival would say a film explained twice over could not
+/// be explained at all. So the runner up is the best candidate that actually
+/// puts the lines somewhere else.
+///
+/// A winner with no rival at all stands alone, and says so. Nothing else
+/// explained the film, which is the strongest thing the parts can say and the
+/// rarest.
+fn separation_of(measured: &[Measured], film_ms: f64) -> f32 {
+    let Some(best) = measured.first() else {
+        return 0.0;
+    };
+
+    let rival = measured
+        .iter()
+        .skip(1)
+        .find(|other| apart(best.correction, other.correction, film_ms));
+    let Some(rival) = rival else {
+        return 1.0;
+    };
+
+    if best.score <= 0.0 {
+        return 0.0;
     }
+    ((best.score - rival.score) / best.score).clamp(0.0, 1.0)
+}
+
+/// Whether two corrections put the lines in different places anywhere in the
+/// film.
+///
+/// Both are straight lines, so the furthest they ever get from each other is at
+/// one end or the other and there is nowhere else to look.
+fn apart(one: Correction, other: Correction, film_ms: f64) -> bool {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let end = film_ms.clamp(0.0, f64::from(u32::MAX)) as u32;
+    [0, end].iter().any(|at| {
+        let at = Timestamp::from_millis(*at);
+        let away = i64::from(one.apply(at).millis()) - i64::from(other.apply(at).millis());
+        #[allow(clippy::cast_precision_loss)]
+        let away = away.abs() as f64;
+        away > APART_MS
+    })
 }
 
 #[cfg(test)]
@@ -257,12 +460,16 @@ mod tests {
 
     /// Flips one bin in every `one_in`, which is what a speech detector getting
     /// it wrong here and there looks like.
-    fn noisier(signal: &Signal, one_in: usize) -> Signal {
+    ///
+    /// Scattered rather than at a fixed spacing. Flipping every second bin is a
+    /// transformation and not noise: it leaves the film's shape exactly where it
+    /// was, and a correlation would read straight through it. The pattern is
+    /// fixed all the same, so that a failing test fails the same way twice.
+    fn noisier(signal: &Signal, one_in: u64) -> Signal {
         let mut bins: Vec<bool> = signal.bins().to_vec();
-        // A fixed pattern rather than a random one, so a failing test fails the
-        // same way twice.
         for (at, bin) in bins.iter_mut().enumerate() {
-            if at % one_in == 0 {
+            let scattered = (at as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33;
+            if scattered.is_multiple_of(one_in) {
                 *bin = !*bin;
             }
         }
@@ -383,11 +590,13 @@ mod tests {
         let speech = speech_of(&cues, Correction::of_offset(1_800));
 
         // Confidence has to fall as the signal is spoiled, and end below what
-        // anybody would act on. Where exactly it crosses is not the claim.
+        // anybody would act on. Where exactly it crosses is not the claim, and
+        // it does not have to fall at every step: agreement is a share of two
+        // dozen chunks, so it comes in steps rather than smoothly.
         let mut previous = f32::MAX;
         for one_in in [40, 10, 5, 2] {
             let score = align(&cues, &noisier(&speech, one_in)).confidence().score();
-            assert!(score < previous, "confidence rose at one in {one_in}");
+            assert!(score <= previous, "confidence rose at one in {one_in}");
             previous = score;
         }
         assert!(previous < DEFENSIBLE, "still {previous} at one bin in two");
@@ -428,8 +637,9 @@ mod tests {
     fn dialogue_that_repeats_within_the_window_is_not_claimed_to_be_certain() {
         // Every line falls on the same pattern once a minute, so moving the
         // track a minute explains the film as well as leaving it where it is.
-        // The peak is genuinely tall and genuinely ambiguous, and the margin is
-        // the part that has to notice.
+        // Both answers describe every stretch of the film perfectly, so the
+        // agreement and the tightness are no use here and the separation is the
+        // part that has to notice.
         let cues: Vec<Cue> = (0..600)
             .map(|at| {
                 let start = 20_000 + (at / 10) * 60_000 + (at % 10) * 4_000;
@@ -444,8 +654,97 @@ mod tests {
             .collect();
 
         let found = align(&cues, &speech_of(&cues, Correction::of_offset(2_000)));
-        assert!(found.confidence().peak() > 0.9);
+        assert!(found.confidence().agreement() > 0.9);
+        assert!(found.confidence().tightness() > 0.9);
+        assert!(found.confidence().separation() < 0.1);
         assert!(found.confidence().score() < DEFENSIBLE);
+    }
+
+    /// The failure this whole stage exists to stop. A stretch and a shift trade
+    /// against each other, so the wrong stretch at a compensating lag scores
+    /// almost as well on one peak as the right one does, and a film given a
+    /// stretch it did not need is barely wrong for the first minutes and minutes
+    /// wrong by the end.
+    ///
+    /// A line across the film cannot be fooled that way, because a wrong stretch
+    /// leaves an error that grows and a shift leaves one that does not, and no
+    /// compensating lag makes a growing error look flat.
+    #[test]
+    fn a_film_that_needs_a_shift_is_not_given_a_stretch() {
+        let cues = dialogue(1_500);
+        let truth = Correction::of_offset(4_000);
+        let found = align(&cues, &speech_of(&cues, truth));
+
+        assert!(
+            (found.correction().rate() - 1.0).abs() < f64::EPSILON,
+            "stretched by {}",
+            found.correction().rate()
+        );
+        let error = (found.correction().offset_ms() - truth.offset_ms()).unsigned_abs();
+        assert!(error <= BIN_MS, "out by {error}ms");
+    }
+
+    /// The other way round, and the reason more than one candidate is carried.
+    /// Refining around whatever the coarse pass liked best would confirm its
+    /// ranking rather than check it, so every stretch the film could want is
+    /// measured across the whole of it.
+    #[test]
+    fn a_film_that_needs_a_stretch_is_not_answered_with_a_shift() {
+        let cues = dialogue(1_500);
+        let truth = Correction::new(0, RATES[1]);
+        let found = align(&cues, &speech_of(&cues, truth));
+        let correction = found.correction();
+
+        assert!((correction.rate() - truth.rate()).abs() < f64::EPSILON);
+        for cue in &cues {
+            let error = i64::from(correction.apply(cue.start).millis())
+                - i64::from(truth.apply(cue.start).millis());
+            assert!(error.abs() < 100, "out by {error}ms at {}", cue.start);
+        }
+    }
+
+    /// A stretch nobody could have chosen by hand is refused rather than
+    /// written. A film with time cut into the middle of it is out by nothing for
+    /// the first part and by a minute and a half for the rest, and the nearest
+    /// straight line through that is a stretch no framerate produces.
+    ///
+    /// Telling a file like this apart from one that merely needs shifting is not
+    /// asked of the engine here, and the correction it settles on does put most
+    /// of the film right. What is asked is that the answer is one somebody could
+    /// have arrived at by hand, and that the part of the film the answer leaves
+    /// behind shows up in the figure that would have to be cleared before
+    /// anything were written.
+    #[test]
+    fn a_film_with_time_cut_into_it_is_not_answered_with_a_stretch_nobody_can_name() {
+        let cues = dialogue(1_500);
+        let cut = cues[cues.len() * 2 / 5].start.millis();
+        let spliced: Vec<Cue> = cues
+            .iter()
+            .map(|cue| {
+                let moved = |at: u32| if at < cut { at } else { at + 90_000 };
+                Cue {
+                    start: Timestamp::from_millis(moved(cue.start.millis())),
+                    end: Timestamp::from_millis(moved(cue.end.millis())),
+                    ..cue.clone()
+                }
+            })
+            .collect();
+
+        let found = align(&cues, &Signal::from_cues(&spliced));
+        assert!(
+            RATES
+                .iter()
+                .any(|known| (known - found.correction().rate()).abs() < f64::EPSILON),
+            "answered with a rate of {}",
+            found.correction().rate()
+        );
+        // And the part of the film it cannot answer is missing from the figure,
+        // which is what stands between this and somebody's library.
+        assert!(
+            found.landing().fraction() < 0.75,
+            "{} of the film landed",
+            found.landing().fraction()
+        );
     }
 
     /// The figure the caller decides on, alongside the one it has to be
@@ -457,13 +756,23 @@ mod tests {
     /// running has nobody starting to speak under it. That is a property of
     /// every real transcript as well, and it is why the figure is compared with
     /// itself rather than against one.
+    ///
+    /// The figure for the file as written is well short of that and not nought,
+    /// which is the other half of the same point. A window near a second wide
+    /// catches a line here and there by chance, on a transcript whose gaps are a
+    /// second or two, and a track that lands on a fifth of the film by accident
+    /// is exactly why nobody should read this figure on its own.
     #[test]
     fn the_answer_says_how_the_lines_would_land_and_how_they_land_already() {
         let cues = dialogue(800);
         let found = align(&cues, &speech_of(&cues, Correction::of_offset(2_500)));
 
         assert!(found.landing().fraction() > 0.7);
-        assert!(found.as_written().fraction() < 0.1);
+        assert!(
+            found.as_written().fraction() < found.landing().fraction() / 3.0,
+            "{} landed already",
+            found.as_written().fraction()
+        );
         assert_eq!(found.landing().examined(), 800);
         assert_eq!(found.landing().median_ms(), 0);
     }

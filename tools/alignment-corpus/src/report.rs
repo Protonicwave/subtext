@@ -22,11 +22,11 @@ use crate::judge::{self, Bars, Figures, Outcome, Verdict};
 /// Spread by multiples rather than evenly, because confidence is a ratio: what
 /// is worth knowing is which factor of two the separation sits in, not which
 /// hundredth.
-const THRESHOLDS: [f32; 6] = [0.005, 0.010, 0.015, 0.025, 0.040, 0.060];
+const THRESHOLDS: [f32; 7] = [0.02, 0.05, 0.10, 0.20, 0.30, 0.45, 0.60];
 
 /// The bars a report is judged again at, from a quarter of a track landing to
-/// most of one.
-const BARS: [f32; 5] = [0.2, 0.3, 0.4, 0.5, 0.6];
+/// nearly all of one.
+const BARS: [f32; 6] = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7];
 
 /// How many films a report needs before its numbers are worth settling anything
 /// on.
@@ -190,7 +190,12 @@ impl Report {
         let mut worst = 0_i64;
         for row in &self.reference_rows {
             tally.count(row.verdict);
-            worst = worst.max(row.worst_error_ms.unwrap_or(0));
+            // Only the ones that were written. A refused case is allowed to be
+            // as far out as it likes, and counting it here would report the
+            // error of a file the run correctly declined to touch.
+            if row.outcome == Outcome::Accepted {
+                worst = worst.max(row.worst_error_ms.unwrap_or(0));
+            }
         }
         let films = self
             .films
@@ -443,12 +448,13 @@ mod tests {
             worst_error_ms,
             figures: Figures {
                 confidence,
-                peak: 0.25,
-                margin: 0.12,
-                landed_before: 0.08,
+                agreement: 0.9,
+                tightness: 0.8,
+                separation: 0.68,
+                landed_before: 0.30,
                 landed_after,
                 median_before_ms: 1_900,
-                median_after_ms: 30,
+                median_after_ms: 340,
                 examined: 1_200,
             },
         }
@@ -459,25 +465,25 @@ mod tests {
     /// decision is for.
     #[test]
     fn a_row_is_judged_again_at_another_threshold_and_bar() {
-        let row = row(0.03, 0.85, Some(20));
+        let row = row(0.49, 0.85, Some(20));
 
         assert_eq!(
             row.verdict_at(Bars {
-                threshold: 0.015,
-                bar: 0.4
+                threshold: 0.10,
+                bar: 0.58
             }),
             Verdict::Right
         );
         assert_eq!(
             row.verdict_at(Bars {
-                threshold: 0.05,
-                bar: 0.4
+                threshold: 0.60,
+                bar: 0.58
             }),
             Verdict::Missed
         );
         assert_eq!(
             row.verdict_at(Bars {
-                threshold: 0.015,
+                threshold: 0.10,
                 bar: 0.9
             }),
             Verdict::Missed
@@ -489,11 +495,11 @@ mod tests {
     /// that would still accept it.
     #[test]
     fn an_answer_left_far_from_where_it_belongs_is_wrong_at_any_bar_that_takes_it() {
-        let row = row(0.03, 0.85, Some(4_000));
+        let row = row(0.49, 0.85, Some(4_000));
         for bar in [0.2, 0.4, 0.6] {
             assert_eq!(
                 row.verdict_at(Bars {
-                    threshold: 0.015,
+                    threshold: 0.10,
                     bar
                 }),
                 Verdict::Wrong,
