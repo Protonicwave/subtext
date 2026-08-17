@@ -359,6 +359,7 @@ describe('the film sheet', () => {
           confidence: 0.9,
           landing: landing(0.94),
           asWritten: landing(0.14),
+          reference: { against: 'speech' },
         }),
       );
       open();

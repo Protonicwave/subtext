@@ -432,6 +432,38 @@ impl LandingView {
     }
 }
 
+/// What a measurement was made against.
+///
+/// There are two things in a film that say where its dialogue falls, and they
+/// are not equally good. The soundtrack is always there and has to be decoded
+/// and read, which takes seconds and is only ever an estimate of where somebody
+/// is talking. Another text subtitle track of the same film is authored timings
+/// on both sides, needs no decoder, and is accurate to the bin, but most films
+/// do not carry one.
+///
+/// Which of the two answered is worth saying, because it is the difference
+/// between a measurement to the millisecond and one to the fraction of a second,
+/// and somebody reading the sentence should know which they have been handed.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(
+    tag = "against",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub(crate) enum ReferenceView {
+    /// The talking in the film's own soundtrack.
+    Speech,
+    /// Another text subtitle track of the same film.
+    Track {
+        /// What language it is in, where the file says.
+        language: Option<String>,
+        /// Whether it came from inside the film rather than from beside it. A
+        /// track inside the film was muxed against these exact frames, which is
+        /// why it is preferred and why it is worth naming.
+        inside: bool,
+    },
+}
+
 /// How an attempt to line a subtitle track up with its film ended.
 ///
 /// One shape covering every ending, so that the front end matches on this and
@@ -446,7 +478,7 @@ impl LandingView {
     rename_all_fields = "camelCase"
 )]
 pub(crate) enum AlignmentView {
-    /// The track has been moved to where the speech in the film actually is.
+    /// The track has been moved to where the dialogue in the film actually is.
     Aligned {
         correction: CorrectionView,
         /// What was in force beforehand, so that it can be put back.
@@ -459,6 +491,9 @@ pub(crate) enum AlignmentView {
         /// How they landed before, which is what makes the figure above mean
         /// something.
         as_written: LandingView,
+        /// What the track was measured against, since the two answers are not
+        /// of the same quality and the figures above read differently for each.
+        reference: ReferenceView,
     },
     /// The track carries too few lines to be correlated with anything.
     ///
@@ -517,13 +552,19 @@ pub(crate) enum AlignmentView {
 }
 
 impl AlignmentView {
-    pub(crate) fn aligned(found: &Alignment, previous: Correction, confidence: f32) -> Self {
+    pub(crate) fn aligned(
+        found: &Alignment,
+        previous: Correction,
+        confidence: f32,
+        reference: ReferenceView,
+    ) -> Self {
         Self::Aligned {
             correction: CorrectionView::of(found.correction()),
             previous: CorrectionView::of(previous),
             confidence,
             landing: LandingView::of(found.landing()),
             as_written: LandingView::of(found.as_written()),
+            reference,
         }
     }
 

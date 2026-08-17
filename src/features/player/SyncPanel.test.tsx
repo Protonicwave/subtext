@@ -167,6 +167,7 @@ describe('lining a subtitle up by listening to the film', () => {
       confidence: 0.6,
       landing: landing(0.94),
       asWritten: landing(0.14),
+      reference: { against: 'speech' },
     });
 
     expect(screen.getByText('Lined up')).toBeInTheDocument();
@@ -188,10 +189,59 @@ describe('lining a subtitle up by listening to the film', () => {
       confidence: 0.6,
       landing: landing(0.94),
       asWritten: landing(0.14),
+      reference: { against: 'speech' },
     });
 
     expect(screen.getByRole('status')).toHaveTextContent(
       /94 lines in a hundred land on the talking, against 14 before/,
+    );
+  });
+
+  /*
+   * A film that carries its own text subtitle track is measured against those
+   * timings instead of against its audio, which is a different kind of answer:
+   * authored timings on both sides, accurate to the bin, and arrived at without
+   * a sample being decoded. The sentence names the reference, because somebody
+   * reading it should be able to tell which of the two they have been handed,
+   * and it does not call another subtitle track a sound.
+   */
+  it('names the subtitle track it measured against, where it used one', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: 3_500, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.6,
+      landing: landing(0.94),
+      asWritten: landing(0.14),
+      reference: { against: 'track', language: 'en', inside: true },
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /measured against the English subtitles inside the film/,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /94 lines in a hundred line up with it, against 14 before/,
+    );
+  });
+
+  /*
+   * The other side of the same sentence. A reference paired to the film by name
+   * is a weaker claim than one muxed into it, and a track whose file says
+   * nothing about its language cannot be given one.
+   */
+  it('says where a reference came from, and does not invent a language for it', () => {
+    ended({
+      outcome: 'aligned',
+      correction: { offsetMs: -900, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      confidence: 0.5,
+      landing: landing(0.91),
+      asWritten: landing(0.2),
+      reference: { against: 'track', language: null, inside: false },
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /measured against the subtitles beside the film/,
     );
   });
 
@@ -226,6 +276,7 @@ describe('lining a subtitle up by listening to the film', () => {
       confidence: 0.6,
       landing: landing(0.94),
       asWritten: landing(0.14),
+      reference: { against: 'speech' },
     });
 
     expect(screen.getByText(/stretched 23.976 to 25 fps/)).toBeInTheDocument();
@@ -239,6 +290,7 @@ describe('lining a subtitle up by listening to the film', () => {
       confidence: 0.6,
       landing: landing(0.94),
       asWritten: landing(0.14),
+      reference: { against: 'speech' },
     });
 
     await userEvent.click(screen.getByRole('button', { name: /put it back to −0.80s/i }));
@@ -258,6 +310,7 @@ describe('lining a subtitle up by listening to the film', () => {
           confidence: 0.6,
           landing: landing(0.94),
           asWritten: landing(0.14),
+          reference: { against: 'speech' },
         },
       },
     );
@@ -273,6 +326,7 @@ describe('lining a subtitle up by listening to the film', () => {
       confidence: 0.6,
       landing: landing(0.94),
       asWritten: landing(0.14),
+      reference: { against: 'speech' },
     });
 
     expect(screen.getByRole('button', { name: 'Put it back as written' })).toBeInTheDocument();
