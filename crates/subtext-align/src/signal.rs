@@ -1,4 +1,4 @@
-//! Where there is activity, on a fixed time base.
+﻿//! Where there is activity, on a fixed time base.
 
 use core::fmt;
 
@@ -91,15 +91,6 @@ impl Signal {
 
     pub(crate) fn bins(&self) -> &[bool] {
         &self.bins
-    }
-
-    /// Whether the signal says the same thing everywhere.
-    ///
-    /// A run that is entirely set, entirely clear, or empty has no shape to line
-    /// anything up against. Correlating it would divide by zero and the answer
-    /// would mean nothing if it did not.
-    pub(crate) fn is_flat(&self) -> bool {
-        self.active == 0 || self.active == self.bins.len()
     }
 
     /// Rewrites the signal as the cues would fall at `rate`.
@@ -239,7 +230,7 @@ mod tests {
     fn no_cues_give_an_empty_signal() {
         let signal = Signal::from_cues(&[]);
         assert!(signal.is_empty());
-        assert!(signal.is_flat());
+        assert_eq!(signal.active(), 0);
     }
 
     /// The cue is still in the slice the caller holds. It is left out of the
@@ -263,7 +254,6 @@ mod tests {
         let signal = Signal::from_cues(&[described(1_000, 3_000), described(9_000, 11_000)]);
 
         assert_eq!(signal.active(), 0);
-        assert!(signal.is_flat());
     }
 
     /// The buffers are sized from [`span`] and filled by [`Signal::rebuild`],
@@ -303,16 +293,5 @@ mod tests {
         let signal = Signal::from_bins(vec![true; MAX_BINS + 1_000]);
         assert_eq!(signal.len(), MAX_BINS);
         assert_eq!(signal.active(), MAX_BINS);
-        assert!(signal.is_flat());
-    }
-
-    #[test]
-    fn a_signal_saying_the_same_thing_everywhere_is_flat() {
-        assert!(Signal::from_bins(vec![false; 100]).is_flat());
-        assert!(Signal::from_bins(vec![true; 100]).is_flat());
-
-        let mut bins = vec![false; 100];
-        bins[50] = true;
-        assert!(!Signal::from_bins(bins).is_flat());
     }
 }

@@ -15,13 +15,21 @@
 //! knows nothing about where either signal came from, which is what lets it be
 //! tested on signals made up on the spot.
 //!
+//! The answer is arrived at by asking the film about it. A correlation over the
+//! whole film narrows the field to a few explanations; then the film is cut into
+//! stretches and each is asked what each explanation still leaves it needing,
+//! and a line through those answers is what chooses between them. A stretch and
+//! a shift trade against each other, so one peak cannot separate them and a line
+//! across two dozen points can: its slope is the stretch and its intercept the
+//! shift. The [`Confidence`] that comes back is the shape of that line, in
+//! parts, and not the height of any peak.
+//!
 //! The answer comes with a second figure beside it, and the two say different
-//! things. The confidence is read off the same peak the correction is, so it
-//! describes how clearly the correlation chose rather than whether what it chose
-//! is any good. The [`Landing`] figure is the other question, put to the film
-//! rather than to the arithmetic: with this correction applied, how many lines
-//! arrive when somebody starts speaking, against how many do already? Nothing
-//! else here can tell a right answer from a well-correlated wrong one.
+//! things. The confidence says how much of the film agrees about where its lines
+//! belong. The [`Landing`] figure asks whether they then arrive when somebody
+//! speaks: with this correction applied, how many lines land on the start of an
+//! utterance, against how many do already? A film can agree with itself about an
+//! answer that is wrong, and nothing but this can tell the two apart.
 //!
 //! Both figures are measured against speech, so what goes into a cue signal is
 //! the lines somebody speaks in. A cue captioning a door slamming marks a moment
@@ -76,11 +84,12 @@
 mod align;
 mod correlate;
 mod landing;
+mod local;
 mod rate;
 mod signal;
 mod spoken;
 
 pub use crate::align::{Alignment, Confidence, align};
-pub use crate::landing::{Landing, TOLERANCE_MS, landing_of};
+pub use crate::landing::{LATE_TOLERANCE_MS, LEAD_TOLERANCE_MS, Landing, landing_of};
 pub use crate::rate::RATES;
 pub use crate::signal::{BIN_MS, Signal};
