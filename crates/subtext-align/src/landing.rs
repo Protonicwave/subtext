@@ -12,6 +12,13 @@
 //! that has the speech reading close the quiet inside an utterance: what is
 //! being compared is the moment somebody starts talking.
 //!
+//! Only the lines somebody speaks in are measured, which is the same rule the
+//! signal is built by and is here for the same reason. A cue captioning a door
+//! slamming marks a moment of no speech, so it was never going to arrive as
+//! somebody started talking, and counting it as a line that failed to would
+//! score a track written for the hearing impaired below one written for
+//! everybody else for describing the film more fully.
+//!
 //! A correct alignment does not score one, and nothing here should be read as
 //! though it might. Whispers, lines away from the microphone and dialogue under
 //! a loud mix are all speech that the reading misses, on every film, however
@@ -24,14 +31,34 @@
 use subtext_core::{Correction, Cue};
 
 use crate::signal::{BIN_MS, Signal};
+use crate::spoken::is_spoken;
 
-/// How near the start of an utterance a line has to arrive to have landed.
+/// How far ahead of an utterance a line may arrive and still have landed.
 ///
-/// A quarter of a second. That is roughly the length of a spoken word, and it is
-/// wide enough to cover both the lead a broadcast subtitle is written with and
-/// the smearing the speech reading leaves on the edge of an utterance, while
-/// staying inside what somebody watching would call together.
-pub const TOLERANCE_MS: u32 = 250;
+/// Seven tenths of a second, and much wider than the bound below it, because
+/// arriving early and arriving late are not the same thing. Reading is slower
+/// than hearing, so broadcast practice puts a line on screen a little before the
+/// words are said, and a subtitle written that way is right rather than early. A
+/// speech reading also finds the front edge of an utterance late as often as
+/// not, since a line that opens quietly is not marked until it is loud enough to
+/// be, and that error points this way too.
+///
+/// The number is what a run over real films showed. On nine of the ten films the
+/// corpus could measure, the engine's own answer for the untouched file was
+/// early, by between twenty and six hundred and thirty milliseconds, and the
+/// middle line of a correctly aligned track sat three hundred milliseconds from
+/// the nearest utterance. A quarter of a second either way, which is what this
+/// used to be, therefore counted more than half of every correctly placed track
+/// as missing, and the figure was measuring its own tolerance.
+pub const LEAD_TOLERANCE_MS: u32 = 700;
+
+/// How far behind an utterance a line may arrive and still have landed.
+///
+/// A quarter of a second, which is roughly the length of a spoken word. This is
+/// the side somebody notices: a line that appears after the words have started
+/// is the complaint the whole feature exists to answer, so it is held to what a
+/// viewer would call together and no further.
+pub const LATE_TOLERANCE_MS: u32 = 250;
 
 /// How far either side of a line the search looks before giving up on it.
 ///
@@ -43,7 +70,8 @@ pub const TOLERANCE_MS: u32 = 250;
 const REACH_MS: u32 = 2_000;
 
 const REACH_BINS: usize = (REACH_MS / BIN_MS) as usize;
-const TOLERANCE_BINS: usize = (TOLERANCE_MS / BIN_MS) as usize;
+const LEAD_BINS: usize = (LEAD_TOLERANCE_MS / BIN_MS) as usize;
+const LATE_BINS: usize = (LATE_TOLERANCE_MS / BIN_MS) as usize;
 
 /// One slot for each distance the search can report, and one for further away.
 const SLOTS: usize = REACH_BINS + 2;
@@ -69,8 +97,11 @@ impl Landing {
         median_ms: 0,
     };
 
-    /// How many lines arrived within [`TOLERANCE_MS`] of somebody starting to
-    /// speak.
+    /// How many lines arrived near enough to somebody starting to speak.
+    ///
+    /// Near enough is [`LEAD_TOLERANCE_MS`] ahead of them or
+    /// [`LATE_TOLERANCE_MS`] behind, which is not the same distance either way
+    /// and is not meant to be.
     #[must_use]
     pub fn landed(self) -> u32 {
         self.landed
@@ -81,6 +112,14 @@ impl Landing {
     /// Lines falling past the end of the film are not among them. There is
     /// nothing there for them to land on, and counting them as misses would
     /// score a track for the length of its film rather than for its timing.
+    ///
+    /// Neither are the cues nobody speaks in. A line reading that a door slams
+    /// marks a moment of no speech, so it was never going to arrive as somebody
+    /// started talking, and counting it as a line that failed to would score a
+    /// track written for the hearing impaired below one written for everybody
+    /// else for describing the film more fully. It is the same rule that keeps
+    /// those cues out of the signal, applied to the figure the signal is judged
+    /// by, and for the same reason.
     #[must_use]
     pub fn examined(self) -> u32 {
         self.examined
@@ -136,7 +175,10 @@ pub fn landing_of(cues: &[Cue], speech: &Signal, correction: Correction) -> Land
     let mut examined = 0_u32;
     let mut landed = 0_u32;
 
-    for cue in cues {
+    // The lines somebody speaks in and no others, which is the rule the signal
+    // is built by. A track is otherwise scored down for captioning the sounds a
+    // film makes, on exactly the tracks most likely to want putting right.
+    for cue in cues.iter().filter(|cue| is_spoken(cue)) {
         let at = usize::try_from(correction.apply(cue.start).millis()).unwrap_or(usize::MAX)
             / BIN_MS as usize;
         if at >= speech.len() {
@@ -144,9 +186,9 @@ pub fn landing_of(cues: &[Cue], speech: &Signal, correction: Correction) -> Land
         }
 
         examined += 1;
-        let away = distance_to_utterance(speech, at);
+        let (away, near_enough) = nearest_utterance(speech, at);
         counts[away] += 1;
-        if away <= TOLERANCE_BINS {
+        if near_enough {
             landed += 1;
         }
     }
@@ -162,21 +204,43 @@ pub fn landing_of(cues: &[Cue], speech: &Signal, correction: Correction) -> Land
     }
 }
 
-/// How many bins from `at` the nearest utterance starts, out to [`REACH_BINS`].
+/// How many bins from `at` the nearest utterance starts, and whether any
+/// utterance is near enough for the line to have landed.
+///
+/// Two answers rather than one, because the window is not the same width either
+/// way and the nearest utterance is therefore not always the one that decides.
+/// A line six hundred milliseconds ahead of somebody speaking has landed; the
+/// same line three hundred milliseconds behind a different utterance has not,
+/// and that second utterance is the nearer of the two.
 ///
 /// Searching outwards from the line rather than walking the film, so that a
 /// track whose cues arrive out of order, which the parser allows and files
-/// contain, is measured the same as one whose cues are in order.
-fn distance_to_utterance(speech: &Signal, at: usize) -> usize {
-    for away in 0..=REACH_BINS {
-        if starts_speaking(speech, at + away) {
-            return away;
+/// contain, is measured the same as one whose cues are in order. The search
+/// stops as soon as it has both answers: once something has landed there is
+/// nothing nearer to find, and once the search is past the wider bound with a
+/// distance in hand nothing further out can land.
+fn nearest_utterance(speech: &Signal, at: usize) -> (usize, bool) {
+    let outermost = LEAD_BINS.max(LATE_BINS);
+    let mut away = None;
+
+    for distance in 0..=REACH_BINS {
+        // Ahead of the line is a line that arrived early, which is what a
+        // subtitle written to be read looks like.
+        let early = starts_speaking(speech, at + distance);
+        let late = distance <= at && starts_speaking(speech, at - distance);
+
+        if early || late {
+            let first = *away.get_or_insert(distance);
+            if (early && distance <= LEAD_BINS) || (late && distance <= LATE_BINS) {
+                return (first, true);
+            }
         }
-        if away <= at && starts_speaking(speech, at - away) {
-            return away;
+        if away.is_some() && distance > outermost {
+            break;
         }
     }
-    REACH_BINS + 1
+
+    (away.unwrap_or(REACH_BINS + 1), false)
 }
 
 /// Whether somebody starts talking at this bin, as opposed to carrying on.
@@ -202,7 +266,7 @@ fn median_of(counts: &[u32; SLOTS], examined: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Landing, REACH_MS, TOLERANCE_MS, landing_of};
+    use super::{LATE_TOLERANCE_MS, LEAD_TOLERANCE_MS, Landing, REACH_MS, landing_of};
     use crate::signal::{BIN_MS, Signal};
     use subtext_core::{Correction, Cue, Timestamp};
 
@@ -267,23 +331,72 @@ mod tests {
     fn a_line_just_inside_the_tolerance_lands_and_one_just_outside_does_not() {
         let film = talking(100);
 
-        // Either way round, since a line that arrives early and a line that
-        // arrives late are equally out and a viewer notices both.
         for out_by in [
-            i64::from(TOLERANCE_MS) - i64::from(BIN_MS),
-            i64::from(BIN_MS) - i64::from(TOLERANCE_MS),
+            i64::from(LATE_TOLERANCE_MS) - i64::from(BIN_MS),
+            i64::from(BIN_MS) - i64::from(LEAD_TOLERANCE_MS),
         ] {
             let found = landing_of(&lines(100, out_by), &film, Correction::IDENTITY);
             assert_eq!(found.landed(), 100, "at {out_by}ms");
         }
 
         for out_by in [
-            i64::from(TOLERANCE_MS) + i64::from(BIN_MS),
-            -i64::from(TOLERANCE_MS) - i64::from(BIN_MS),
+            i64::from(LATE_TOLERANCE_MS) + i64::from(BIN_MS),
+            -i64::from(LEAD_TOLERANCE_MS) - i64::from(BIN_MS),
         ] {
             let found = landing_of(&lines(100, out_by), &film, Correction::IDENTITY);
             assert_eq!(found.landed(), 0, "at {out_by}ms");
         }
+    }
+
+    /// Arriving early and arriving late are not the same thing, and the figure
+    /// is not the same width either way. Reading is slower than hearing, so a
+    /// line put on screen before the words are said is right rather than early,
+    /// which is what broadcast practice produces and what most of the files this
+    /// measures were written to.
+    #[test]
+    fn a_line_that_leads_its_utterance_is_given_more_room_than_one_that_trails() {
+        let film = talking(100);
+        let leading = i64::from(LEAD_TOLERANCE_MS) - i64::from(BIN_MS);
+
+        assert_eq!(
+            landing_of(&lines(100, -leading), &film, Correction::IDENTITY).landed(),
+            100
+        );
+        // The same distance the other way, where somebody has already started
+        // talking, and the line has not landed.
+        assert_eq!(
+            landing_of(&lines(100, leading), &film, Correction::IDENTITY).landed(),
+            0
+        );
+    }
+
+    /// The nearest utterance is not always the one that decides. A line can lead
+    /// one utterance by more than it trails another, and still have landed on
+    /// the first, so the search cannot stop at whichever it meets first.
+    #[test]
+    fn a_line_lands_on_an_utterance_it_leads_even_where_a_nearer_one_is_behind_it() {
+        // A film that says something at ten seconds and again at ten point
+        // eight, and a line arriving between the two: three hundred
+        // milliseconds after the first, which is too late to have landed on it,
+        // and five hundred before the second, which is not.
+        let mut bins = vec![false; 3_000];
+        bins[1_000..1_030].fill(true);
+        bins[1_080..1_110].fill(true);
+        let film = Signal::from_bins(bins);
+
+        let cue = Cue {
+            index: 1,
+            start: Timestamp::from_millis(10_300),
+            end: Timestamp::from_millis(11_300),
+            text: "line".to_owned(),
+            position: None,
+        };
+        let found = landing_of(&[cue], &film, Correction::IDENTITY);
+
+        assert_eq!(found.landed(), 1);
+        // And the distance reported is still the nearest one, which is the
+        // utterance it did not land on.
+        assert_eq!(found.median_ms(), 300);
     }
 
     #[test]
@@ -355,6 +468,35 @@ mod tests {
             assert!(!found.is_measured());
             assert!(found.fraction() < f32::EPSILON);
         }
+    }
+
+    /// The same rule that keeps a cue nobody speaks in out of the signal keeps
+    /// it out of the figure the signal is judged by. A track that captions the
+    /// sounds of a film as well as its words describes the same film as a plain
+    /// one, and has to measure the same.
+    #[test]
+    fn a_cue_nobody_speaks_in_is_not_a_line_that_failed_to_land() {
+        let film = talking(100);
+        let plain = lines(100, 0);
+
+        // The same track with the sounds of the film captioned in the quiet
+        // between the lines, which is where a door slams and where a reading
+        // looking for voices finds nothing.
+        let mut captioned = plain.clone();
+        for at in 0..100 {
+            captioned.push(Cue {
+                index: 1_000 + at,
+                start: Timestamp::from_millis(12_000 + at * 4_000),
+                end: Timestamp::from_millis(12_900 + at * 4_000),
+                text: "[DOOR SLAMS]".to_owned(),
+                position: None,
+            });
+        }
+
+        assert_eq!(
+            landing_of(&captioned, &film, Correction::IDENTITY),
+            landing_of(&plain, &film, Correction::IDENTITY)
+        );
     }
 
     /// A track that runs past the end of the film it is paired with, which is
