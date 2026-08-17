@@ -192,13 +192,15 @@ impl Report {
             tally.count(row.verdict);
             worst = worst.max(row.worst_error_ms.unwrap_or(0));
         }
+        let films = self
+            .films
+            .iter()
+            .filter(|film| film.truth_from == crate::films::Origin::Inside.name())
+            .count();
         println!(
-            "  {} cases over {} films, judged at a threshold of {:.4} and a bar of {:.2}",
+            "  {} cases over {films} film{}, judged at a threshold of {:.4} and a bar of {:.2}",
             tally.cases,
-            self.films
-                .iter()
-                .filter(|film| film.truth_from == crate::films::Origin::Inside.name())
-                .count(),
+            if films == 1 { "" } else { "s" },
             self.reference_threshold,
             self.bars.bar
         );

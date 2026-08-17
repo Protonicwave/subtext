@@ -83,12 +83,21 @@ const THRESHOLD: f32 = 0.015;
 /// the two regimes, where it would admit a pairing that in this regime is
 /// plainly wrong.
 ///
-/// The engine's own tests measure both ends of this regime and state them: a
-/// track measured against a reference describing the same film scores above
-/// 0.25, and one measured against a different film's timings scores below 0.025.
-/// Eight hundredths is the geometric middle of that, which is a factor of about
-/// three from either side, and the geometric middle is the right one because a
-/// confidence is a ratio and moves by multiples.
+/// Two sets of numbers set it and they agree. The engine's own tests measure
+/// both ends of this regime and state them: a track measured against a reference
+/// describing the same film scores above 0.25, and one measured against a
+/// different film's timings scores below 0.025. Eight hundredths is the
+/// geometric middle of that, which is a factor of about three from either side,
+/// and the geometric middle is the right one because a confidence is a ratio and
+/// moves by multiples.
+///
+/// The corpus then measured the same two ends on a real film, a Blu-ray rip
+/// carrying two English tracks of its own, over seventeen manufactured cases.
+/// Every correct answer scored between 0.454 and 0.455, and a subtitle belonging
+/// to a different film scored 0.0040. The observed gap is wider than the one the
+/// number was placed in, so this sits a factor of five below the lowest correct
+/// answer and twenty above the highest wrong one, and nothing in that range is
+/// close to deciding anything.
 ///
 /// It errs the same way [`THRESHOLD`] does, and the cost of erring is lower
 /// here. A reference that does not settle the question is not reported as a
@@ -181,8 +190,8 @@ pub(crate) fn run(
         .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
     // The exact path first, where the film carries something to be exact
-    // against. It costs one query and no decoding at all, so trying it and
-    // falling through is cheaper than the cheapest thing below.
+    // against. It reads two tracks and decodes nothing, so trying it and falling
+    // through costs a fraction of the reading it would otherwise go straight to.
     let mut authored = None;
     if let Some(reference) = reference_for(database, &track)? {
         let cues = database
