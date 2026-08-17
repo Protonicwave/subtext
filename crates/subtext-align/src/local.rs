@@ -22,7 +22,8 @@
 //! measured in a narrow window until the candidate has been applied to it, which
 //! is why this runs per candidate rather than once.
 
-use crate::correlate::Correlator;
+use crate::correlate::{Correlator, Peak};
+use crate::misfit::{Reading, Said, borne_out};
 use crate::signal::{BIN_MS, Signal};
 
 /// How much film one chunk covers at most, in milliseconds.
@@ -65,11 +66,28 @@ const LOCAL_WINDOW_MS: u32 = 10_000;
 /// the difference between a film explained by one correction and a film that
 /// merely correlates, so it is set where a chunk that genuinely fits the line
 /// clears it and a chunk that happens to fall near it does not.
-const AGREE_MS: f64 = 150.0;
+pub(crate) const AGREE_MS: f64 = 150.0;
+
+/// How far either way a stretch is searched a second time, in milliseconds.
+///
+/// Two minutes, the same as the whole film is searched by, and capped at half a
+/// chunk so that what is being compared is still mostly overlap rather than
+/// padding.
+///
+/// This is not part of the fit and never enters it. A stretch of film that
+/// answers from the edge of the narrow window has said only that the candidate
+/// does not describe it, and there are two reasons for that: the film has time
+/// inserted into it, so this stretch has been moved further than the candidate
+/// accounts for, or the lines being looked for are not spoken here at all.
+/// Looking again over a window this wide is what tells those apart, and telling
+/// them apart is the difference between a file somebody could correct and a file
+/// for a different cut.
+const WIDE_WINDOW_MS: u32 = 120_000;
 
 const LONGEST_CHUNK_BINS: usize = (LONGEST_CHUNK_MS / BIN_MS) as usize;
 const SHORTEST_CHUNK_BINS: usize = (SHORTEST_CHUNK_MS / BIN_MS) as usize;
 const LOCAL_WINDOW_BINS: usize = (LOCAL_WINDOW_MS / BIN_MS) as usize;
+const WIDE_WINDOW_BINS: usize = (WIDE_WINDOW_MS / BIN_MS) as usize;
 
 /// What one stretch of the film had to say about a candidate.
 #[derive(Clone, Copy, Debug)]
@@ -115,6 +133,9 @@ impl Fit {
 /// several hundred times over.
 pub(crate) struct Chunks {
     correlator: Correlator,
+    /// The same stretches searched a great deal further, for the one pass that
+    /// asks why a stretch could not be placed rather than where it sits.
+    wide: Correlator,
     /// The cues over one chunk of film, gathered where the candidate puts them.
     cues: Vec<bool>,
     /// What the chunks said, cleared and refilled for each candidate.
@@ -123,6 +144,11 @@ pub(crate) struct Chunks {
     slopes: Vec<f64>,
     /// How far each chunk sits from the fitted line, likewise.
     residuals: Vec<f64>,
+    /// What every chunk said about the answer, including the chunks the fit
+    /// could not use. Filled once, for the candidate that won.
+    readings: Vec<Reading>,
+    /// The chunks the narrow search could not place, waiting for the wide one.
+    pending: Vec<usize>,
     chunk_bins: usize,
     count: usize,
 }
@@ -147,10 +173,13 @@ impl Chunks {
 
         Some(Self {
             correlator: Correlator::sized(chunk_bins, LOCAL_WINDOW_BINS),
+            wide: Correlator::sized(chunk_bins, WIDE_WINDOW_BINS.min(chunk_bins / 2)),
             cues: vec![false; chunk_bins],
             seen: Vec::with_capacity(count),
             slopes: Vec::with_capacity(count * count),
             residuals: Vec::with_capacity(count),
+            readings: Vec::with_capacity(count),
+            pending: Vec::with_capacity(count),
             chunk_bins,
             count,
         })
@@ -213,6 +242,114 @@ impl Chunks {
         }
 
         self.line()
+    }
+
+    /// What every stretch of the film said about a candidate, including the
+    /// stretches the fit had to leave out.
+    ///
+    /// The fit wants only the stretches that were placed, because a bound
+    /// reported as a measurement would pull the line. Reading a film for the ways
+    /// it does not fit wants the opposite: the stretches that could not be placed
+    /// are the evidence, and what has to be said about each of them is why.
+    ///
+    /// So this runs once, for the candidate that won, and asks a second question
+    /// of every stretch the narrow search turned away. Searched over two minutes
+    /// rather than ten seconds, does the stretch find one answer that stands above
+    /// the rest? Then the film has been moved further here than the answer
+    /// accounts for, which is what time cut into a film does. Does it still find
+    /// nothing in particular? Then these lines are not spoken in this stretch of
+    /// this film, which is what a subtitle for a different cut looks like and what
+    /// no correction can put right.
+    ///
+    /// A stretch is turned away for finding nothing rather than for finding
+    /// something distant, which is why the test is a ratio and not a position.
+    /// Dialogue falls every few seconds, so a correlation over a stretch of film
+    /// almost always peaks somewhere inside a ten second window whether the lines
+    /// are spoken there or not. What tells a found answer from a chance one is that
+    /// it stands clear of every other answer for the same stretch.
+    ///
+    /// Nothing is allocated. The wide search runs over the buffers it was given
+    /// when the film was cut up, and on an ordinary film it runs not at all.
+    pub(crate) fn readings(
+        &mut self,
+        speech: &Signal,
+        cues: &Signal,
+        lag_bins: isize,
+    ) -> &[Reading] {
+        let Self {
+            correlator,
+            wide,
+            cues: gathered,
+            readings,
+            pending,
+            chunk_bins,
+            count,
+            ..
+        } = self;
+
+        readings.clear();
+        pending.clear();
+
+        for chunk in 0..*count {
+            let from = chunk * *chunk_bins;
+            let said = match speech.bins().get(from..from + *chunk_bins) {
+                Some(film) if correlator.measuring(film) => {
+                    gather(
+                        gathered,
+                        cues.bins(),
+                        isize::try_from(from).unwrap_or(isize::MAX) - lag_bins,
+                    );
+                    match correlator.against(gathered) {
+                        Some(peak) if answered(&peak, correlator.window()) => residual_of(peak.lag),
+                        // Nothing inside a window this narrow, which a stretch
+                        // moved further than the answer accounts for cannot have.
+                        _ => Said::Nothing,
+                    }
+                }
+                // Either the film says nothing here or there is no film here.
+                // Silence is no evidence about a subtitle, so it is not counted
+                // as a stretch that found nothing.
+                _ => Said::Quiet,
+            };
+
+            #[allow(clippy::cast_precision_loss)]
+            let at_ms = (from + *chunk_bins / 2) as f64 * f64::from(BIN_MS);
+            readings.push(Reading { at_ms, said });
+        }
+
+        // Which stretches to look at again: the ones that found nothing inside a
+        // ten second window, and the ones whose answer nothing around them bears
+        // out. The second is the larger half of it. A stretch moved half a minute
+        // by a break still peaks somewhere inside ten seconds, by chance, and the
+        // chance is different in the next stretch along, so what marks it out is
+        // not that it failed but that it disagrees with its neighbours.
+        pending.extend((0..readings.len()).filter(|at| !borne_out(readings, *at)));
+
+        for chunk in pending.iter().copied() {
+            let from = chunk * *chunk_bins;
+            let Some(film) = speech.bins().get(from..from + *chunk_bins) else {
+                continue;
+            };
+            if !wide.measuring(film) {
+                continue;
+            }
+            gather(
+                gathered,
+                cues.bins(),
+                isize::try_from(from).unwrap_or(isize::MAX) - lag_bins,
+            );
+            let Some(peak) = wide.against(gathered) else {
+                continue;
+            };
+            if !answered(&peak, wide.window()) {
+                continue;
+            }
+            if let Some(reading) = readings.get_mut(chunk) {
+                reading.said = residual_of(peak.lag);
+            }
+        }
+
+        readings
     }
 
     /// The line through what the chunks said.
@@ -300,6 +437,27 @@ impl Chunks {
     }
 }
 
+/// Whether a stretch of film came back with an answer at all.
+///
+/// Inside the window rather than at the edge of it, since the edge is where a
+/// stretch says it has run out of room rather than where it says its lines are.
+/// And above nothing, since a correlation whose best offering is worse than
+/// nothing has found nothing.
+///
+/// Whether the answer is any good is not asked here and cannot be: the height a
+/// correlation reaches depends on the mix, the language and how much of the film
+/// is talking, so there is no level to compare it against. That question is put to
+/// the stretches either side instead, in [`crate::misfit::borne_out`].
+fn answered(peak: &Peak, window: isize) -> bool {
+    peak.lag.abs() < window && peak.height > 0.0
+}
+
+/// How far a stretch says its lines still have to move.
+#[allow(clippy::cast_precision_loss)]
+fn residual_of(lag: isize) -> Said {
+    Said::Where(lag as f64 * f64::from(BIN_MS))
+}
+
 /// Copies the bins of `from` that fall over a chunk into `dest`, padding with
 /// quiet where the chunk reaches past either end.
 ///
@@ -329,7 +487,7 @@ fn gather(dest: &mut [bool], from: &[bool], at: isize) {
 ///
 /// The lower of the two middles where the count is even, which is a difference
 /// of half a bin in a figure that is already an estimate.
-fn middle_of(values: &mut [f64]) -> Option<f64> {
+pub(crate) fn middle_of(values: &mut [f64]) -> Option<f64> {
     if values.is_empty() {
         return None;
     }
@@ -343,10 +501,12 @@ mod tests {
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
         clippy::cast_sign_loss,
-        clippy::expect_used
+        clippy::expect_used,
+        clippy::panic
     )]
 
     use super::{AGREE_MS, Chunks, Fit, Observation, gather, middle_of};
+    use crate::misfit::Said;
     use crate::signal::{BIN_MS, Signal};
 
     /// Two hours, which is a film.
@@ -553,6 +713,112 @@ mod tests {
         let settled = chunks.fit(&speech, &early, 100).expect("measures again");
         assert!(settled.intercept_ms.abs() <= f64::from(BIN_MS));
         assert!(settled.score() > 0.9);
+    }
+
+    /// When somebody starts talking, at bins across a film, unevenly enough that
+    /// one moment of it tells itself apart from another.
+    ///
+    /// The unevenness has to be over the whole film rather than in a pattern that
+    /// comes round again. A spacing taken from the position modulo a small number
+    /// reads as uneven and repeats every few lines, which puts a moment of this
+    /// film seven seconds from a moment that looks exactly like it, and a stretch
+    /// of a film like that has two answers rather than one. Real dialogue does not
+    /// do that. The spread here is scattered by a multiply instead, and fixed, so
+    /// that a failing test fails the same way twice.
+    fn exchanges(length: usize) -> Vec<usize> {
+        let mut at = 3_000;
+        let mut starts = Vec::new();
+        while at + 200 < length {
+            starts.push(at);
+            let scattered = (at as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 40;
+            at += 300 + (scattered as usize % 611);
+        }
+        starts
+    }
+
+    /// A film that talks at those moments.
+    fn talking(starts: &[usize], length: usize) -> Signal {
+        let mut bins = vec![false; length];
+        for start in starts {
+            let end = (start + 90).min(length);
+            if *start < end {
+                bins[*start..end].fill(true);
+            }
+        }
+        Signal::from_bins(bins)
+    }
+
+    /// The reading the two misfit shapes are told apart by, taken through the
+    /// correlator rather than written down by hand.
+    ///
+    /// A film with half a minute cut into the middle of it. The first half of the
+    /// track sits where the film says, and the second half is out by thirty
+    /// seconds, which is three times further than a stretch is searched by at
+    /// first. What the reading has to do is place that second half anyway, because
+    /// a stretch that says nothing and a stretch that says thirty seconds are the
+    /// difference between a subtitle for another cut and a film with breaks in it.
+    #[test]
+    fn a_stretch_moved_further_than_the_narrow_window_is_still_placed() {
+        let length = (FILM_MS / BIN_MS) as usize;
+        let starts = exchanges(length);
+        let break_at = length / 2;
+        let moved: Vec<usize> = starts
+            .iter()
+            .map(|start| {
+                if *start < break_at {
+                    *start
+                } else {
+                    start - 3_000
+                }
+            })
+            .collect();
+
+        let mut chunks = chunks();
+        let readings = chunks.readings(&talking(&starts, length), &talking(&moved, length), 0);
+
+        assert_eq!(readings.len(), 24);
+        for reading in readings {
+            let Said::Where(residual_ms) = reading.said else {
+                panic!("every stretch of this film knows where its lines are: {reading:?}");
+            };
+            let wanted = if reading.at_ms < f64::from(break_at as u32 * BIN_MS) {
+                0.0
+            } else {
+                30_000.0
+            };
+            assert!(
+                (residual_ms - wanted).abs() <= f64::from(BIN_MS),
+                "the stretch at {}ms read as {residual_ms}ms",
+                reading.at_ms
+            );
+        }
+    }
+
+    /// A film with nothing to hear in it says nothing about a subtitle either
+    /// way, so a stretch of silence is neither placed nor held against the track.
+    #[test]
+    fn a_silent_stretch_of_film_is_read_as_silence() {
+        let length = (FILM_MS / BIN_MS) as usize;
+        let starts = exchanges(length);
+        let track = talking(&starts, length);
+
+        // The same film with the last third of its soundtrack missing, which is
+        // what a recording that stopped early sounds like.
+        let mut quietened = track.bins().to_vec();
+        quietened[length * 2 / 3..].fill(false);
+
+        let mut chunks = chunks();
+        let readings = chunks.readings(&Signal::from_bins(quietened), &track, 0);
+
+        let quiet = readings
+            .iter()
+            .filter(|reading| reading.said == Said::Quiet)
+            .count();
+        assert!(quiet >= 7, "only {quiet} stretches read as silent");
+        assert!(
+            readings.iter().all(|reading| reading.said != Said::Nothing),
+            "silence was counted against the subtitle"
+        );
     }
 
     #[test]
