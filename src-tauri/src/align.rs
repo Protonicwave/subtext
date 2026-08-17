@@ -1,25 +1,36 @@
-//! Putting a subtitle track where the speech in its film actually is.
+//! Putting a subtitle track where the dialogue in its film actually is.
 //!
-//! Coordination and nothing else. Reading the authored cues, asking
-//! `subtext-speech` where the talking is, asking `subtext-align` what would
-//! explain one in terms of the other, and writing the answer down are four
-//! things that happen in an order, with no arithmetic of their own. The order
-//! is the only judgement here, and it is to refuse cheaply: a track nothing
-//! could be made of is turned away before a byte of audio is read.
+//! Coordination and nothing else. Finding something that says where the dialogue
+//! falls, reading the authored cues, asking `subtext-align` what would explain
+//! one in terms of the other, and writing the answer down are four things that
+//! happen in an order, with no arithmetic of their own. The order is the only
+//! judgement here, and it is to refuse cheaply: a track nothing could be made of
+//! is turned away before a byte of audio is read.
+//!
+//! There are two things in a film that say where its dialogue falls, and the
+//! cheaper one is also the better one. Where the film carries another text
+//! subtitle track, that track was written against these frames, so the
+//! comparison is authored timings on both sides: no decoder, no detector, and an
+//! answer accurate to the bin in a tenth of a second. Where it does not, the
+//! soundtrack is read, which takes seconds and produces an estimate of where
+//! somebody is talking. The exact path is tried first and the audio is the
+//! fallback, not the default.
 //!
 //! What is not coordination is deciding. Whether a measurement is worth writing
 //! to somebody's library is a judgement about the product rather than a property
 //! of the correlation, so the engine reports its figures and this weighs them.
 //! There are two of those judgements and they ask different questions. The
 //! threshold asks how clearly the correlation chose its answer. The bar asks
-//! whether the answer it chose actually puts the lines on the talking, which is
-//! the only question the correlation cannot mark its own work on.
+//! whether the answer it chose actually puts the lines where the dialogue is,
+//! which is the only question the correlation cannot mark its own work on.
 
-use subtext_align::Landing;
-use subtext_index::Database;
+use subtext_align::{Landing, Signal};
+use subtext_container::SubtitleCodec;
+use subtext_core::Cue;
+use subtext_index::{Database, TrackOrigin, TrackRecord};
 use subtext_speech::{Progress, Refusal};
 
-use crate::dto::{AlignmentView, Answer, Failure};
+use crate::dto::{AlignmentView, Answer, Failure, ReferenceView};
 
 /// How sure the measurement has to be before a correction is written.
 ///
@@ -59,7 +70,32 @@ use crate::dto::{AlignmentView, Answer, Failure};
 /// them watching a film that is wrong from beginning to end.
 const THRESHOLD: f32 = 0.015;
 
-/// How much of a track has to land on the talking before anything is written.
+/// How sure a measurement against another subtitle track has to be.
+///
+/// A separate number from [`THRESHOLD`] rather than the same one, because the
+/// two are read off correlations of different kinds and the whole scale moves
+/// between them. Against a speech reading, one side of the correlation is an
+/// estimate: music and effects mark bins nobody spoke in, whispers and lines
+/// under a loud mix go unmarked, and a correct answer on a real film reaches
+/// about a quarter of a perfect match. Against another subtitle track both sides
+/// are authored timings, nothing is estimated, and a correct answer reaches most
+/// of one. Reusing 0.015 here would be reusing a number set for the noisier of
+/// the two regimes, where it would admit a pairing that in this regime is
+/// plainly wrong.
+///
+/// The engine's own tests measure both ends of this regime and state them: a
+/// track measured against a reference describing the same film scores above
+/// 0.25, and one measured against a different film's timings scores below 0.025.
+/// Eight hundredths is the geometric middle of that, which is a factor of about
+/// three from either side, and the geometric middle is the right one because a
+/// confidence is a ratio and moves by multiples.
+///
+/// It errs the same way [`THRESHOLD`] does, and the cost of erring is lower
+/// here. A reference that does not settle the question is not reported as a
+/// refusal at all: the film itself is still there to be asked, and it is asked.
+const REFERENCE_THRESHOLD: f32 = 0.08;
+
+/// How much of a track has to land on the dialogue before anything is written.
 ///
 /// The confidence above is read off the same peak the correction is, so a
 /// measurement that is confidently wrong has nothing left to catch it. This is
@@ -90,6 +126,12 @@ const THRESHOLD: f32 = 0.015;
 /// file that could have been helped leaves somebody where they were, with the
 /// keys they already had and a sentence saying why. This number should be
 /// settled against a run of real films rather than moved on the strength of one.
+///
+/// One number rather than two, unlike the threshold above. Where the reference
+/// is another subtitle track this asks how many lines arrive when the reference
+/// says somebody speaks, which is a stricter question than the one it asks of a
+/// speech reading and which a right answer clears by further still. A floor both
+/// regimes are well clear of does not need to be set twice.
 const BAR: f32 = 0.4;
 
 /// How many lines a track needs before it is worth measuring at all.
@@ -138,8 +180,28 @@ pub(crate) fn run(
         .map_err(Failure::of)?
         .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
-    // Before the cues, so that a film whose audio cannot be read costs the
-    // header of one file rather than the whole of a transcript as well.
+    // The exact path first, where the film carries something to be exact
+    // against. It costs one query and no decoding at all, so trying it and
+    // falling through is cheaper than the cheapest thing below.
+    let mut authored = None;
+    if let Some(reference) = reference_for(database, &track)? {
+        let cues = database
+            .tracks()
+            .authored_cues(track.id)
+            .map_err(Failure::of)?;
+        if let Some(settled) = against(database, &track, &cues, &reference)? {
+            return Ok(settled);
+        }
+        // The reference did not settle it, and that is not a refusal to report:
+        // it says the two tracks disagree without saying which of them is wrong,
+        // and the film is the authority on that. The cues are the same either
+        // way, so they are carried down rather than read twice.
+        authored = Some(cues);
+    }
+
+    // Before the cues, where they have not already been read, so that a film
+    // whose audio cannot be read costs the header of one file rather than the
+    // whole of a transcript as well.
     let speech = match subtext_speech::speech_of_with(&film.path, progress) {
         Ok(speech) => speech,
         Err(refusal) => return Ok(refused(refusal)),
@@ -147,10 +209,13 @@ pub(crate) fn run(
 
     // As the file wrote them. Corrected timings would measure this track
     // against its own last answer rather than against the film.
-    let cues = database
-        .tracks()
-        .authored_cues(track.id)
-        .map_err(Failure::of)?;
+    let cues = match authored {
+        Some(cues) => cues,
+        None => database
+            .tracks()
+            .authored_cues(track.id)
+            .map_err(Failure::of)?,
+    };
 
     let found = subtext_align::align(&cues, &speech);
     let confidence = found.confidence().score();
@@ -169,7 +234,121 @@ pub(crate) fn run(
         .set_correction(track.id, found.correction())
         .map_err(Failure::of)?;
 
-    Ok(AlignmentView::aligned(&found, track.correction, confidence))
+    Ok(AlignmentView::aligned(
+        &found,
+        track.correction,
+        confidence,
+        ReferenceView::Speech,
+    ))
+}
+
+/// Another text track of the same film, standing in for its speech.
+///
+/// The signal is built the way a cue signal always is, so everything downstream
+/// of it, the correlation and the landing figure alike, is the same code
+/// measuring the same shapes. What has changed is only what the shapes came
+/// from.
+struct Reference {
+    dialogue: Signal,
+    language: Option<String>,
+    inside: bool,
+}
+
+impl Reference {
+    fn named(&self) -> ReferenceView {
+        ReferenceView::Track {
+            language: self.language.clone(),
+            inside: self.inside,
+        }
+    }
+}
+
+/// The best track of this film to measure another one against, where there is
+/// one.
+///
+/// Three conditions and then an order. It has to be text, since a track of
+/// pictures carries nothing to read and no amount of correlation will change
+/// that. It has to be a different track, since measuring a file against itself
+/// answers the identity every time. And it has to carry enough lines for the
+/// same reason the track being measured does: a few dozen cannot tell one moment
+/// of a film from another, whichever side of the comparison they sit on.
+///
+/// Of what is left, a track from inside the film comes first. It was muxed by
+/// whoever produced this encode and is therefore on these frames' own clock,
+/// where a file beside the film is a pairing made by name and is exactly the
+/// kind of thing this whole feature exists to put right. Then the fullest, since
+/// more lines is more to line up on. Then the lowest identifier, so that a film
+/// with two equally good candidates chooses the same one twice.
+fn reference_for(database: &Database, track: &TrackRecord) -> Result<Option<Reference>, Failure> {
+    let mut candidates: Vec<TrackRecord> = database
+        .tracks()
+        .for_film(track.film_id)
+        .map_err(Failure::of)?
+        .into_iter()
+        .filter(|other| other.id != track.id)
+        .filter(|other| SubtitleCodec::from_stored(&other.codec).is_text())
+        .filter(|other| other.cue_count >= FEWEST_CUES)
+        .collect();
+
+    candidates.sort_by(|one, other| {
+        inside(other)
+            .cmp(&inside(one))
+            .then(other.cue_count.cmp(&one.cue_count))
+            .then(one.id.cmp(&other.id))
+    });
+
+    let Some(chosen) = candidates.first() else {
+        return Ok(None);
+    };
+
+    // Corrected, which is the opposite of how the track being measured is read
+    // and is right for the same reason. What a reference has to say is where the
+    // dialogue falls in the film as it plays, and a correction is precisely the
+    // arithmetic that turns one into the other. A track from inside the film has
+    // none and takes the identity, which is what makes it the better reference.
+    let cues = database.tracks().cues(chosen.id).map_err(Failure::of)?;
+    Ok(Some(Reference {
+        dialogue: Signal::from_cues(&cues),
+        language: chosen.language.clone(),
+        inside: inside(chosen),
+    }))
+}
+
+fn inside(track: &TrackRecord) -> bool {
+    matches!(track.origin, TrackOrigin::Stream)
+}
+
+/// The measurement against a reference, where it settled the question.
+///
+/// Nothing where it did not, rather than an outcome saying so. A reference that
+/// disagrees with the track being measured has said that the two do not describe
+/// the same moments, and it has not said which of them is at fault: the
+/// reference may itself be a mispaired file, or for a different cut. Reporting
+/// that to somebody as a refusal would be reporting a doubt about a track they
+/// did not ask about, while the film that could settle it went unread.
+fn against(
+    database: &Database,
+    track: &TrackRecord,
+    cues: &[Cue],
+    reference: &Reference,
+) -> Result<Option<AlignmentView>, Failure> {
+    let found = subtext_align::align(cues, &reference.dialogue);
+    let confidence = found.confidence().score();
+    if confidence < REFERENCE_THRESHOLD || !worth_writing(found.landing(), found.as_written()) {
+        return Ok(None);
+    }
+
+    database
+        .tracks()
+        .set_correction(track.id, found.correction())
+        .map_err(Failure::of)?;
+
+    Ok(Some(AlignmentView::aligned(
+        &found,
+        track.correction,
+        confidence,
+        reference.named(),
+    )))
 }
 
 /// Whether a measurement earns the right to be written over what is there.
@@ -209,7 +388,7 @@ mod tests {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use subtext_align::{Landing, Signal, landing_of};
+    use subtext_align::{BIN_MS, Landing, Signal, landing_of};
     use subtext_core::{Correction, Cue, SubtitleLabel, Timestamp};
     use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
     use subtext_speech::fixture::Film;
@@ -217,7 +396,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{BAR, FEWEST_CUES, THRESHOLD, run, worth_writing};
-    use crate::dto::AlignmentView;
+    use crate::dto::{AlignmentView, ReferenceView};
 
     /// How long the film the measurements are made against runs for.
     ///
@@ -283,6 +462,23 @@ mod tests {
         cues
     }
 
+    /// The dialogue above where the film actually says it, which is
+    /// [`TRUTH`] milliseconds after the subtitle claims.
+    ///
+    /// What a track written against these frames holds, and therefore what a
+    /// reference has to say to be any use.
+    fn spoken() -> Vec<Cue> {
+        let late = Correction::of_offset(TRUTH);
+        dialogue()
+            .iter()
+            .map(|cue| Cue {
+                start: late.apply(cue.start),
+                end: late.apply(cue.end),
+                ..cue.clone()
+            })
+            .collect()
+    }
+
     /// The dialogue above with the sounds of the film captioned alongside it,
     /// which is what a track written for the hearing impaired holds.
     ///
@@ -333,6 +529,7 @@ mod tests {
     /// A library holding one film and one subtitle track for it.
     struct Fixture {
         database: Database,
+        film_id: i64,
         track_id: i64,
         root: PathBuf,
         // Held so that the directory outlasts the database inside it.
@@ -390,6 +587,7 @@ mod tests {
 
             Self {
                 database,
+                film_id,
                 track_id,
                 root,
                 _directory: directory,
@@ -399,33 +597,66 @@ mod tests {
         /// A film whose dialogue falls [`TRUTH`] milliseconds after its
         /// subtitle says it does.
         fn mistimed() -> Self {
-            let cues = dialogue();
-            let late = Correction::of_offset(TRUTH);
-            let spoken: Vec<Cue> = cues
-                .iter()
-                .map(|cue| Cue {
-                    start: late.apply(cue.start),
-                    end: late.apply(cue.end),
-                    ..cue.clone()
-                })
-                .collect();
-            Self::written(soundtrack(&spoken), &cues)
+            Self::written(soundtrack(&spoken()), &dialogue())
         }
 
         /// The same film with the same timings, captioned for somebody who
         /// cannot hear it: every line of the dialogue, and a description of the
         /// sounds in the quiet between them.
         fn captioned() -> Self {
-            let late = Correction::of_offset(TRUTH);
-            let spoken: Vec<Cue> = dialogue()
-                .iter()
-                .map(|cue| Cue {
-                    start: late.apply(cue.start),
-                    end: late.apply(cue.end),
-                    ..cue.clone()
+            Self::written(soundtrack(&spoken()), &captioned_cues())
+        }
+
+        /// Another subtitle track for the same film, of the kind a reference is
+        /// chosen from.
+        ///
+        /// A track inside the film shares the film's own path and is told apart
+        /// by its stream number, which is how one is stored, so the number is
+        /// what keeps these from colliding whichever kind they are.
+        fn add_track(
+            &self,
+            origin: TrackOrigin,
+            stream_number: u64,
+            language: &'static str,
+            codec: &str,
+            cues: &[Cue],
+        ) -> i64 {
+            let path = match origin {
+                TrackOrigin::Stream => self.root.join("Heat.mkv"),
+                TrackOrigin::Sidecar => self.root.join(format!("Heat.{language}.srt")),
+            };
+            let id = self
+                .database
+                .tracks()
+                .upsert(&NewTrack {
+                    film_id: self.film_id,
+                    path: &path,
+                    label: SubtitleLabel {
+                        language: Some(language),
+                        forced: false,
+                        hearing_impaired: false,
+                    },
+                    origin,
+                    stream_number,
+                    codec,
+                    match_kind: TrackMatch::Exact,
+                    encoding: "UTF-8",
+                    size_bytes: 60_000,
+                    modified_at: 1_700_000_000_000,
                 })
-                .collect();
-            Self::written(soundtrack(&spoken), &captioned_cues())
+                .unwrap()
+                .id;
+            self.database.tracks().replace_cues(id, cues).unwrap();
+            id
+        }
+
+        /// Takes the film off the disk.
+        ///
+        /// What the reference tests are built on. Anything that opened the film
+        /// would come back unreadable, so an answer at all is proof that no part
+        /// of it was read.
+        fn take_the_film_away(&self) {
+            std::fs::remove_file(self.root.join("Heat.mkv")).unwrap();
         }
 
         /// A film that speaks only the first third of what its subtitle claims,
@@ -516,6 +747,7 @@ mod tests {
             confidence,
             landing,
             as_written,
+            reference,
             ..
         } = fixture.align()
         else {
@@ -524,6 +756,10 @@ mod tests {
 
         assert_eq!(previous.offset_ms, 0);
         assert!(confidence >= THRESHOLD, "only {confidence} sure");
+        // A film carrying nothing else to be measured against is measured
+        // against its own soundtrack, which is what every film could do before
+        // there was a second way and what most films still do.
+        assert!(matches!(reference, ReferenceView::Speech));
 
         // And the evidence for it, which is the part that did not come out of
         // the correlation that produced the answer.
@@ -533,6 +769,153 @@ mod tests {
 
         let error = residual(fixture.correction());
         assert!(error <= SLACK, "out by {error}ms");
+    }
+
+    /// The exact path, and the whole reason it is worth having. A film that
+    /// carries its own text subtitle track carries timings written against these
+    /// frames, so the comparison is authored timings on both sides: no decoder,
+    /// no detector, and an answer good to the bin.
+    ///
+    /// The film is taken off the disk first, so that reading a single byte of it
+    /// would end this as unreadable. An answer is therefore proof that none was
+    /// read, which is the claim in section 24.3 and the one the timing figure
+    /// rests on.
+    #[test]
+    fn a_film_that_carries_its_own_timings_is_lined_up_without_being_listened_to() {
+        let fixture = Fixture::mistimed();
+        fixture.add_track(TrackOrigin::Stream, 1, "en", "subrip", &spoken());
+        fixture.take_the_film_away();
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { reference, .. } = &outcome else {
+            panic!("a track measured against the film's own timings should line up: {outcome:?}");
+        };
+        assert!(matches!(
+            reference,
+            ReferenceView::Track {
+                inside: true,
+                language: Some(name),
+            } if name == "en"
+        ));
+
+        // To the bin rather than to the fifty milliseconds the audio path is
+        // held to. Nothing here was estimated.
+        let error = residual(fixture.correction());
+        assert!(error <= i64::from(BIN_MS), "out by {error}ms");
+    }
+
+    /// A film with several tracks to choose between. The one inside the film
+    /// comes first, because it was muxed against this encode rather than paired
+    /// to it by name, and among those the fullest wins, because more lines is
+    /// more to line up on.
+    ///
+    /// All three describe the film correctly, so nothing but the order decides
+    /// this, and the language is what says which was taken.
+    #[test]
+    fn the_fullest_track_inside_the_film_is_the_one_measured_against() {
+        let fixture = Fixture::mistimed();
+        let spoken = spoken();
+        fixture.add_track(TrackOrigin::Sidecar, 0, "en", "subrip", &spoken);
+        fixture.add_track(TrackOrigin::Stream, 1, "fr", "subrip", &spoken[..120]);
+        fixture.add_track(TrackOrigin::Stream, 2, "de", "subrip", &spoken);
+        fixture.take_the_film_away();
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { reference, .. } = &outcome else {
+            panic!("a film with three references should use one of them: {outcome:?}");
+        };
+        assert!(matches!(
+            reference,
+            ReferenceView::Track {
+                inside: true,
+                language: Some(name),
+            } if name == "de"
+        ));
+    }
+
+    /// A track of pictures carries nothing to read, and no amount of correlation
+    /// changes that. It is given cues it could never have, so that what turns it
+    /// down is plainly its codec rather than an empty track.
+    #[test]
+    fn a_film_whose_only_other_track_is_pictures_is_measured_against_its_audio() {
+        let fixture = Fixture::mistimed();
+        fixture.add_track(TrackOrigin::Stream, 1, "en", "pgs", &spoken());
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { reference, .. } = &outcome else {
+            panic!("a film with no readable reference should fall back to its audio: {outcome:?}");
+        };
+        assert!(matches!(reference, ReferenceView::Speech));
+        assert!(residual(fixture.correction()) <= SLACK);
+    }
+
+    /// A forced or signs-only track is no better as a reference than it is as a
+    /// track to be measured, and for the same reason: a few dozen lines cannot
+    /// tell one moment of a film from another whichever side they sit on.
+    #[test]
+    fn a_reference_with_too_few_lines_is_not_used() {
+        let fixture = Fixture::mistimed();
+        let spoken = spoken();
+        fixture.add_track(
+            TrackOrigin::Stream,
+            1,
+            "en",
+            "subrip",
+            &spoken[..FEWEST_CUES - 1],
+        );
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { reference, .. } = &outcome else {
+            panic!("a reference too short to use should leave the audio to it: {outcome:?}");
+        };
+        assert!(matches!(reference, ReferenceView::Speech));
+        assert!(residual(fixture.correction()) <= SLACK);
+    }
+
+    /// A reference that disagrees has said the two tracks do not describe the
+    /// same moments, and it has not said which of them is at fault. Reporting
+    /// that as a refusal would be reporting a doubt about a track nobody asked
+    /// about while the film that settles it went unread, so the film is read.
+    #[test]
+    fn a_reference_that_does_not_describe_the_film_is_set_aside_for_the_audio() {
+        let fixture = Fixture::mistimed();
+        fixture.add_track(TrackOrigin::Stream, 1, "en", "subrip", &another_film());
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { reference, .. } = &outcome else {
+            panic!("a reference that disagrees should leave the audio to it: {outcome:?}");
+        };
+        assert!(matches!(reference, ReferenceView::Speech));
+        assert!(residual(fixture.correction()) <= SLACK);
+    }
+
+    /// A reference is read as the film plays it, which is the opposite of how
+    /// the track being measured is read and is right for the same reason. What a
+    /// reference has to say is where the dialogue falls in the film, and a
+    /// correction is exactly the arithmetic that turns an authored timing into
+    /// one.
+    ///
+    /// The reference here is written to the same clock as the track being
+    /// measured and put onto the film by a correction. Ignoring that correction
+    /// would make the two identical, and the answer would come back as the
+    /// identity rather than as the shift the film actually needs.
+    #[test]
+    fn a_reference_is_read_as_the_film_plays_it_rather_than_as_its_file_wrote_it() {
+        let fixture = Fixture::mistimed();
+        let reference = fixture.add_track(TrackOrigin::Stream, 1, "en", "subrip", &dialogue());
+        fixture
+            .database
+            .tracks()
+            .set_correction(reference, Correction::of_offset(TRUTH))
+            .unwrap();
+        fixture.take_the_film_away();
+
+        let outcome = fixture.align();
+        let AlignmentView::Aligned { .. } = &outcome else {
+            panic!("a corrected reference should still describe its film: {outcome:?}");
+        };
+        let error = residual(fixture.correction());
+        assert!(error <= i64::from(BIN_MS), "out by {error}ms");
     }
 
     /// A captioned track describes the same film as a plain one and has to be

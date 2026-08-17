@@ -97,6 +97,7 @@ const ALIGNED: AlignmentView = {
   confidence: 0.61,
   landing: landing(0.94),
   asWritten: landing(0.14),
+  reference: { against: 'speech' },
 };
 
 function progress(fraction: number): AlignProgressed {

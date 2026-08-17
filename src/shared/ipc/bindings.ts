@@ -313,7 +313,7 @@ export type AlignStageView =
  *  answer, and each of these says plainly which it is.
  */
 export type AlignmentView = 
-/**  The track has been moved to where the speech in the film actually is. */
+/**  The track has been moved to where the dialogue in the film actually is. */
 { outcome: "aligned"; correction: CorrectionView; 
 /**  What was in force beforehand, so that it can be put back. */
 previous: CorrectionView; 
@@ -325,7 +325,12 @@ landing: LandingView;
  *  How they landed before, which is what makes the figure above mean
  *  something.
  */
-asWritten: LandingView } | 
+asWritten: LandingView; 
+/**
+ *  What the track was measured against, since the two answers are not
+ *  of the same quality and the figures above read differently for each.
+ */
+reference: ReferenceView } | 
 /**
  *  The track carries too few lines to be correlated with anything.
  * 
@@ -617,6 +622,34 @@ export type PreferenceView = {
 	key: string,
 	value: string,
 };
+
+/**
+ *  What a measurement was made against.
+ * 
+ *  There are two things in a film that say where its dialogue falls, and they
+ *  are not equally good. The soundtrack is always there and has to be decoded
+ *  and read, which takes seconds and is only ever an estimate of where somebody
+ *  is talking. Another text subtitle track of the same film is authored timings
+ *  on both sides, needs no decoder, and is accurate to the bin, but most films
+ *  do not carry one.
+ * 
+ *  Which of the two answered is worth saying, because it is the difference
+ *  between a measurement to the millisecond and one to the fraction of a second,
+ *  and somebody reading the sentence should know which they have been handed.
+ */
+export type ReferenceView = 
+/**  The talking in the film's own soundtrack. */
+{ against: "speech" } | 
+/**  Another text subtitle track of the same film. */
+{ against: "track"; 
+/**  What language it is in, where the file says. */
+language: string | null; 
+/**
+ *  Whether it came from inside the film rather than from beside it. A
+ *  track inside the film was muxed against these exact frames, which is
+ *  why it is preferred and why it is worth naming.
+ */
+inside: boolean };
 
 /**
  *  A scan that stopped part way through, and why.

@@ -1,4 +1,10 @@
-import type { AlignStageView, AlignmentView, LandingView } from '@/shared/ipc/bindings';
+import type {
+  AlignStageView,
+  AlignmentView,
+  LandingView,
+  ReferenceView,
+} from '@/shared/ipc/bindings';
+import { languageNamed } from '@/shared/media/languages';
 import { RATES, asWritten, offsetLabel, sameRate } from './useSync';
 
 /**
@@ -52,9 +58,9 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
         title: 'Lined up',
         sentence: `The subtitles now run ${offsetLabel(outcome.correction.offsetMs)}${rateSaid(
           outcome.correction.rate,
-        )}. ${landed(outcome.landing)} land on the talking, against ${inHundred(
-          outcome.asWritten,
-        )} before.`,
+        )}${measuredAgainst(outcome.reference)}. ${landed(outcome.landing)} ${lineUpWith(
+          outcome.reference,
+        )}, against ${inHundred(outcome.asWritten)} before.`,
       };
     case 'no-better':
       return {
@@ -145,6 +151,53 @@ function wouldLand(landing: LandingView, asWritten: LandingView): string {
 function measured(asWritten: LandingView): string {
   if (asWritten.examined === 0) return '';
   return ` As the file stands, ${landed(asWritten)} land on the talking.`;
+}
+
+/**
+ * What the measurement was made against, where it was not the soundtrack.
+ *
+ * Said only for the answer that came from another subtitle track, because that
+ * is the one somebody would not otherwise expect. Listening to the film is what
+ * the action says it does and what every refusal already talks about, so naming
+ * it again would be repeating the button back at the person who pressed it.
+ *
+ * The two answers are not of the same quality and the sentence should not
+ * pretend they are. A track written against these frames gives a figure accurate
+ * to a hundredth of a second; a speech reading gives an estimate. Naming the
+ * reference is what lets somebody tell which they have.
+ */
+function measuredAgainst(reference: ReferenceView): string {
+  if (reference.against === 'speech') return '';
+  return `, measured against ${namedTrack(reference)}`;
+}
+
+/**
+ * What a reference track is called, in the terms the subtitle menu uses.
+ *
+ * Where it came from as well as what language it is in, since inside the film
+ * and beside the film are the difference between timings written for this encode
+ * and timings paired to it by name.
+ */
+function namedTrack(reference: Extract<ReferenceView, { against: 'track' }>): string {
+  const subtitles =
+    reference.language === null
+      ? 'the subtitles'
+      : `the ${languageNamed(reference.language)} subtitles`;
+  return `${subtitles} ${reference.inside ? 'inside the film' : 'beside the film'}`;
+}
+
+/**
+ * What the lines were found to land on.
+ *
+ * The landing figure counts a line as having landed when it arrives as an
+ * utterance starts, and what counts as an utterance is whatever the measurement
+ * was made against. Against a soundtrack that is somebody talking. Against
+ * another subtitle track it is that track saying somebody talks, which is a
+ * claim rather than a sound, and the sentence says so rather than calling one
+ * the other.
+ */
+function lineUpWith(reference: ReferenceView): string {
+  return reference.against === 'speech' ? 'land on the talking' : 'line up with it';
 }
 
 /** The stretch, where there is one, named as the list names it. */
