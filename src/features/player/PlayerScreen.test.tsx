@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BindingsModule from '@/shared/ipc/bindings';
@@ -27,6 +27,7 @@ const { ipc } = vi.hoisted(() => ({
     ),
     cancelAlignment: vi.fn(() => Promise.resolve(null)),
     savePosition: vi.fn(() => Promise.resolve(null)),
+    writePreference: vi.fn(() => Promise.resolve(null)),
     listFolders: vi.fn(() => Promise.resolve([])),
     listLibrary: vi.fn(() => Promise.resolve([])),
     continueWatching: vi.fn(() => Promise.resolve([])),
@@ -529,5 +530,50 @@ describe('playing a film', () => {
     await typing.keyboard(']');
 
     expect(screen.queryByText(/Subtitles/)).not.toBeInTheDocument();
+  });
+
+  it('lists the dialogue beside the picture when it has been asked for', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 62_000, text: 'I take scores.', position: null },
+      { index: 2, startMs: 64_000, endMs: 68_000, text: 'I rob banks.', position: null },
+    ]);
+    useSettings.setState({ settings: { ...DEFAULTS, transcript: 'shown' }, problem: null });
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await dialogueArrives();
+
+    const panel = screen.getByRole('complementary', { name: /dialogue/i });
+    expect(within(panel).getByText('I rob banks.')).toBeInTheDocument();
+
+    // The same lines the renderer draws, put where a line was chosen from.
+    await userEvent.click(within(panel).getByText('I rob banks.'));
+    expect(positionOf(video())).toBe(64_000 - LEAD);
+  });
+
+  it('offers no panel to a film with nothing to read', () => {
+    useSettings.setState({ settings: { ...DEFAULTS, transcript: 'shown' }, problem: null });
+
+    const { video } = open({ tracks: [] });
+    opens(video(), RUNS);
+
+    expect(screen.queryByRole('complementary', { name: /dialogue/i })).not.toBeInTheDocument();
+  });
+
+  it('puts the dialogue away again, and keeps it away', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 60_000, endMs: 64_000, text: 'I take scores.', position: null },
+    ]);
+    useSettings.setState({ settings: { ...DEFAULTS, transcript: 'shown' }, problem: null });
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await dialogueArrives();
+
+    await userEvent.click(screen.getByRole('button', { name: /hide the dialogue/i }));
+
+    expect(screen.queryByRole('complementary', { name: /dialogue/i })).not.toBeInTheDocument();
+    // Remembered, so the next film opens the way this one was left.
+    expect(useSettings.getState().settings.transcript).toBe('hidden');
   });
 });

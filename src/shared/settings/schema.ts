@@ -191,6 +191,15 @@ export const FIELDS = {
    */
   subtitleMinimumMs: amount('subtitles.minimum', { least: 0, most: 2_000, step: 50 }, 850),
 
+  /*
+   * Whether the dialogue is listed beside the picture. Hidden until it is
+   * asked for, because a film opens as a film, and remembered from then on:
+   * somebody who watches with the lines beside them wants them beside them for
+   * the next film as well, and the key that shows them is the same key that
+   * puts them away.
+   */
+  transcript: choice('player.transcript', ['shown', 'hidden'], 'hidden'),
+
   resume: choice('playback.resume', ['carry-on', 'beginning'], 'carry-on'),
   hardwareDecoding: toggle('playback.hardware', true),
 

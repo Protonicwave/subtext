@@ -9,10 +9,11 @@ import { useFilmAccent, useFilmPalette } from '@/features/library/accent';
 import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { appearanceOf, comfortOf } from '@/shared/settings/schema';
-import { useSettings } from '@/shared/settings/useSettings';
+import { useSetting, useSettings } from '@/shared/settings/useSettings';
 import { REWIND_MS } from './intervals';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
+import { Transcript } from './Transcript';
 import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
@@ -152,6 +153,15 @@ function Film({
     watchIt();
   }, [watchIt]);
 
+  // The dialogue beside the picture, which is one setting and one key: the
+  // panel is put away the same way it was brought out, and a film opened after
+  // it is opened with it there.
+  const reading = useSetting('transcript') === 'shown';
+  const change = useSettings((state) => state.change);
+  const hideTranscript = useCallback(() => {
+    change('transcript', 'hidden');
+  }, [change]);
+
   const [choosing, setChoosing] = useState(false);
   const toggleTracks = useCallback(() => {
     setChoosing((showing) => !showing);
@@ -264,6 +274,20 @@ function Film({
           </div>
         )}
       </motion.div>
+
+      {/*
+       * A film with nothing to read offers no panel rather than an empty one.
+       * There is no subtitle to list, and a column saying so beside the picture
+       * would be a column of apology taking a quarter of the window.
+       */}
+      {reading && timeline.cues.length > 0 && (
+        <Transcript
+          cues={timeline.cues}
+          active={active}
+          onSeek={transport.seekTo}
+          onClose={hideTranscript}
+        />
+      )}
     </div>
   );
 }
