@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AlignmentView } from '@/shared/ipc/bindings';
-import { landing, nothingMeasured } from '@/test/alignment';
+import { grounds, landing, nothingMeasured } from '@/test/alignment';
 import { SyncPanel } from './SyncPanel';
 import type { Alignment, AlignState } from './useAlignment';
 import { RATES, STEP_MS, type Sync } from './useSync';
@@ -38,6 +38,17 @@ function show(state: Partial<Sync> = {}, phase: AlignState = { phase: 'idle' }) 
 function ended(outcome: AlignmentView, sync: Partial<Sync> = {}) {
   return show(sync, { phase: 'outcome', outcome, undone: false });
 }
+
+/** A measurement that was written, which is the only kind worth checking. */
+const written: AlignmentView = {
+  outcome: 'aligned',
+  correction: { offsetMs: 2_400, rate: 1 },
+  previous: { offsetMs: 0, rate: 1 },
+  grounds: grounds(0.6),
+  landing: landing(0.93),
+  asWritten: landing(0.12),
+  reference: { against: 'speech' },
+};
 
 describe('the subtitle timing controls', () => {
   it('says which way the subtitles have been moved and by how much', () => {
@@ -164,7 +175,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'speech' },
@@ -186,7 +197,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'speech' },
@@ -210,7 +221,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'track', language: 'en', inside: true },
@@ -234,7 +245,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: -900, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.5,
+      grounds: grounds(0.5),
       landing: landing(0.91),
       asWritten: landing(0.2),
       reference: { against: 'track', language: null, inside: false },
@@ -273,7 +284,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 0, rate: RATES[1]?.value ?? 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'speech' },
@@ -287,7 +298,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: -800, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'speech' },
@@ -307,7 +318,7 @@ describe('lining a subtitle up by listening to the film', () => {
           outcome: 'aligned',
           correction: { offsetMs: 3_500, rate: 1 },
           previous: { offsetMs: -800, rate: 1 },
-          confidence: 0.6,
+          grounds: grounds(0.6),
           landing: landing(0.94),
           asWritten: landing(0.14),
           reference: { against: 'speech' },
@@ -323,7 +334,7 @@ describe('lining a subtitle up by listening to the film', () => {
       outcome: 'aligned',
       correction: { offsetMs: 3_500, rate: 1 },
       previous: { offsetMs: 0, rate: 1 },
-      confidence: 0.6,
+      grounds: grounds(0.6),
       landing: landing(0.94),
       asWritten: landing(0.14),
       reference: { against: 'speech' },
@@ -450,5 +461,26 @@ describe('lining a subtitle up by listening to the film', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Later' }));
     expect(sync.nudge).toHaveBeenCalledWith(STEP_MS);
+  });
+
+  /*
+   * The grounds rather than the verdict. A measurement that says only how sure
+   * it is cannot be argued with; one that says how much of the film agreed, out
+   * of how much there was, and how far the middle of it sat, has shown its
+   * working and can be weighed.
+   */
+  it('says how much of the film bore the answer out, and how closely', () => {
+    ended(written);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /18 of the 20 stretches of film it was measured across agreed, the middle one 40 milliseconds off/,
+    );
+  });
+
+  it('quotes no stretches for a film that was measured in none', () => {
+    ended({ ...written, grounds: { agreed: 0, across: 0, spreadMs: 0, score: 0.4 } });
+
+    expect(screen.getByRole('status')).not.toHaveTextContent(/stretches/);
+    expect(screen.getByRole('status')).not.toHaveTextContent(/agreed/);
   });
 });

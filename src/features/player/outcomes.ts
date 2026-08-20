@@ -1,6 +1,7 @@
 import type {
   AlignStageView,
   AlignmentView,
+  GroundsView,
   LandingView,
   ReferenceView,
 } from '@/shared/ipc/bindings';
@@ -61,7 +62,7 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
           outcome.correction.rate,
         )}${measuredAgainst(outcome.reference)}. ${landed(outcome.landing)} ${lineUpWith(
           outcome.reference,
-        )}, against ${inHundred(outcome.asWritten)} before.`,
+        )}, against ${inHundred(outcome.asWritten)} before.${borneOutBy(outcome.grounds)}`,
       };
     case 'no-better':
       return {
@@ -121,6 +122,27 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
     case 'stopped':
       return { title: 'Stopped', sentence: 'The subtitles have been left as they were.' };
   }
+}
+
+/**
+ * What the film said about the answer, which is the grounds for believing it.
+ *
+ * The counts rather than the figure they come to. Somebody told a measurement is
+ * nine tenths sure can only believe it or not; somebody told that the film was
+ * measured in twenty stretches and that eighteen of them said the same thing has
+ * been shown the working, and can go and watch one of them.
+ *
+ * Left out where nothing could be measured, for the same reason the landing
+ * figures are: none out of none is an absence rather than a number.
+ */
+function borneOutBy(grounds: GroundsView): string {
+  if (grounds.across === 0) return '';
+  const stretches = grounds.across === 1 ? 'stretch' : 'stretches';
+  return ` ${String(grounds.agreed)} of the ${String(
+    grounds.across,
+  )} ${stretches} of film it was measured across agreed, the middle one ${String(
+    grounds.spreadMs,
+  )} milliseconds off.`;
 }
 
 /**

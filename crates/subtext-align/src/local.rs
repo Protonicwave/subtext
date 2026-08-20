@@ -98,20 +98,46 @@ struct Observation {
 }
 
 /// A line through what the chunks said, and how well it describes them.
-#[derive(Clone, Copy, Debug)]
+///
+/// The counts rather than the shares, because the two parts of how well a line
+/// describes a film are also the two things somebody deciding whether to believe
+/// it would ask for: how many stretches of the film said so, and how far from
+/// the line the middle of them sits. The shares are read off them below, and are
+/// what the ranking uses; the counts are what a sentence can be written from.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Fit {
     /// The stretch the candidate still has to be multiplied by.
     pub(crate) slope: f64,
     /// The shift the candidate still has to be moved by, in milliseconds.
     pub(crate) intercept_ms: f64,
-    /// How much of the film agrees with the line, from none of it to all.
-    pub(crate) agreement: f32,
-    /// How closely the chunks that agree sit to it, from level with the bound to
-    /// exactly on the line.
-    pub(crate) tightness: f32,
+    /// How many stretches sit near enough the line to be said to agree with it.
+    pub(crate) agreed: u32,
+    /// How many the film was cut into, which is what the count above is out of.
+    pub(crate) across: u32,
+    /// How far the middle stretch sits from the line, in milliseconds.
+    pub(crate) spread_ms: f32,
 }
 
 impl Fit {
+    /// How much of the film agrees with the line, from none of it to all.
+    pub(crate) fn agreement(self) -> f32 {
+        if self.across == 0 {
+            return 0.0;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        {
+            self.agreed as f32 / self.across as f32
+        }
+    }
+
+    /// How closely the chunks that agree sit to it, from level with the bound to
+    /// exactly on the line.
+    pub(crate) fn tightness(self) -> f32 {
+        #[allow(clippy::cast_possible_truncation)]
+        let bound = AGREE_MS as f32;
+        (1.0 - self.spread_ms / bound).clamp(0.0, 1.0)
+    }
+
     /// The two parts as one number, for ranking candidates against each other.
     ///
     /// Multiplied rather than averaged, so that a poor showing in either part
@@ -119,7 +145,7 @@ impl Fit {
     /// line three chunks sit exactly on are both poor explanations, and an
     /// average would call one of them respectable.
     pub(crate) fn score(self) -> f32 {
-        self.agreement * self.tightness
+        self.agreement() * self.tightness()
     }
 }
 
@@ -428,23 +454,20 @@ impl Chunks {
         );
 
         let agreed = residuals.iter().filter(|away| **away <= AGREE_MS).count();
+        let spread = middle_of(residuals).unwrap_or(AGREE_MS);
+
         // Out of every chunk the film was cut into rather than out of the ones
         // that answered. A chunk with nothing to say about a candidate is
         // evidence against it, and counting only the chunks that spoke would let
         // a candidate two thirds of a film ignores score as well as one that
         // explains all of it.
-        #[allow(clippy::cast_precision_loss)]
-        let agreement = agreed as f32 / count as f32;
-
-        let spread = middle_of(residuals).unwrap_or(AGREE_MS);
         #[allow(clippy::cast_possible_truncation)]
-        let tightness = (1.0 - spread / AGREE_MS).clamp(0.0, 1.0) as f32;
-
         Fit {
             slope,
             intercept_ms,
-            agreement,
-            tightness,
+            agreed: agreed.try_into().unwrap_or(u32::MAX),
+            across: count.try_into().unwrap_or(u32::MAX),
+            spread_ms: spread as f32,
         }
     }
 }
@@ -563,8 +586,8 @@ mod tests {
 
         assert!((found.slope - 0.001).abs() < 1e-9, "slope {}", found.slope);
         assert!((found.intercept_ms + 2_000.0).abs() < 1.0);
-        assert!((found.agreement - 1.0).abs() < f32::EPSILON);
-        assert!((found.tightness - 1.0).abs() < f32::EPSILON);
+        assert!((found.agreement() - 1.0).abs() < f32::EPSILON);
+        assert!((found.tightness() - 1.0).abs() < f32::EPSILON);
     }
 
     /// A candidate that needs nothing further is the commonest answer there is,
@@ -594,8 +617,8 @@ mod tests {
         assert!((found.intercept_ms + 2_000.0).abs() < 1.0);
         // The chunks that agree are exactly on the line, and the ones that do
         // not are counted against it.
-        assert!(found.agreement > 0.8 && found.agreement < 1.0);
-        assert!((found.tightness - 1.0).abs() < f32::EPSILON);
+        assert!(found.agreement() > 0.8 && found.agreement() < 1.0);
+        assert!((found.tightness() - 1.0).abs() < f32::EPSILON);
     }
 
     /// A film with time cut into the middle of it, which no line can describe.
@@ -609,7 +632,7 @@ mod tests {
         }
         let found = through(&readings);
 
-        assert!(found.agreement <= 0.55, "agreement {}", found.agreement);
+        assert!(found.agreement() <= 0.55, "agreement {}", found.agreement());
         assert!(found.score() < 0.6, "score {}", found.score());
     }
 
@@ -628,7 +651,7 @@ mod tests {
             .collect();
         let found = through(&readings);
 
-        assert!(found.agreement < 0.3, "agreement {}", found.agreement);
+        assert!(found.agreement() < 0.3, "agreement {}", found.agreement());
         assert!(found.score() < 0.1, "score {}", found.score());
     }
 
@@ -647,8 +670,8 @@ mod tests {
         chunks.count = 24;
 
         let found = chunks.line().expect("four readings make a line");
-        assert!((found.tightness - 1.0).abs() < f32::EPSILON);
-        assert!(found.agreement < 0.2, "agreement {}", found.agreement);
+        assert!((found.tightness() - 1.0).abs() < f32::EPSILON);
+        assert!(found.agreement() < 0.2, "agreement {}", found.agreement());
     }
 
     #[test]
@@ -758,8 +781,9 @@ mod tests {
         Fit {
             slope: 0.0,
             intercept_ms: 0.0,
-            agreement: 1.0,
-            tightness: 1.0,
+            agreed: 24,
+            across: 24,
+            spread_ms: 0.0,
         }
     }
 
@@ -861,6 +885,6 @@ mod tests {
             (600_000.0, 0.0),
             (900_000.0, 0.0),
         ]);
-        assert!((found.agreement - 1.0).abs() < f32::EPSILON);
+        assert!((found.agreement() - 1.0).abs() < f32::EPSILON);
     }
 }

@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Number;
-use subtext_align::{Alignment, Landing, Misfit};
+use subtext_align::{Alignment, Confidence, Landing, Misfit};
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
 use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
@@ -464,6 +464,51 @@ pub(crate) enum ReferenceView {
     },
 }
 
+/// What the film itself said about the answer it was handed.
+///
+/// The parts rather than the number they come to. A single figure is a verdict,
+/// and a verdict is exactly what somebody cannot check: told that a measurement
+/// is nine tenths sure, there is nothing to do but believe it or not. Told that
+/// the film was measured in twenty stretches, that eighteen of them agreed, and
+/// that the middle one sits forty milliseconds from the answer, somebody can
+/// weigh it, and can watch a minute of the film and see whether it is so.
+///
+/// The score comes too, because it is the number the bar was cleared on and
+/// leaving it out would mean the front end could not say what was decided, only
+/// what was seen.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GroundsView {
+    /// How many stretches of the film agreed with the answer.
+    pub(crate) agreed: u32,
+    /// How many stretches it was measured in, which is what the count above is
+    /// out of. Nought where there was nothing to measure.
+    pub(crate) across: u32,
+    /// How far the middle stretch sits from the answer, in milliseconds.
+    pub(crate) spread_ms: u32,
+    /// The parts as one number, which is what an answer is accepted on.
+    #[specta(type = Number)]
+    pub(crate) score: f32,
+}
+
+impl GroundsView {
+    fn of(confidence: Confidence) -> Self {
+        Self {
+            agreed: confidence.agreed(),
+            across: confidence.across(),
+            // A stretch nothing could be measured in reports a distance of
+            // everything, which is not a figure to send to a screen.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            spread_ms: if confidence.across() == 0 {
+                0
+            } else {
+                confidence.spread_ms().round() as u32
+            },
+            score: confidence.score(),
+        }
+    }
+}
+
 /// How an attempt to line a subtitle track up with its film ended.
 ///
 /// One shape covering every ending, so that the front end matches on this and
@@ -483,9 +528,9 @@ pub(crate) enum AlignmentView {
         correction: CorrectionView,
         /// What was in force beforehand, so that it can be put back.
         previous: CorrectionView,
-        /// How sure the measurement was, from nothing to certain.
-        #[specta(type = Number)]
-        confidence: f32,
+        /// What the film said about the answer: how many of its stretches
+        /// agreed, out of how many, and how closely.
+        grounds: GroundsView,
         /// How the lines land now.
         landing: LandingView,
         /// How they landed before, which is what makes the figure above mean
@@ -583,13 +628,12 @@ impl AlignmentView {
     pub(crate) fn aligned(
         found: &Alignment,
         previous: Correction,
-        confidence: f32,
         reference: ReferenceView,
     ) -> Self {
         Self::Aligned {
             correction: CorrectionView::of(found.correction()),
             previous: CorrectionView::of(previous),
-            confidence,
+            grounds: GroundsView::of(found.confidence()),
             landing: LandingView::of(found.landing()),
             as_written: LandingView::of(found.as_written()),
             reference,

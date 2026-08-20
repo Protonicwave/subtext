@@ -265,7 +265,6 @@ pub(crate) fn run(
     Ok(AlignmentView::aligned(
         &found,
         track.correction,
-        confidence,
         ReferenceView::Speech,
     ))
 }
@@ -382,7 +381,6 @@ fn against(
     Ok(Some(AlignmentView::aligned(
         &found,
         track.correction,
-        confidence,
         reference.named(),
     )))
 }
@@ -869,7 +867,7 @@ mod tests {
         let outcome = fixture.align();
         let AlignmentView::Aligned {
             previous,
-            confidence,
+            grounds,
             landing,
             as_written,
             reference,
@@ -880,7 +878,12 @@ mod tests {
         };
 
         assert_eq!(previous.offset_ms, 0);
-        assert!(confidence >= THRESHOLD, "only {confidence} sure");
+        assert!(grounds.score >= THRESHOLD, "only {} sure", grounds.score);
+        // What the figure above was read off, which is what somebody is shown
+        // instead of the figure. A film that was accepted was measured in
+        // stretches and most of them agreed, or it would not have been.
+        assert!(grounds.across > 1, "measured in {}", grounds.across);
+        assert!(grounds.agreed > grounds.across / 2, "{grounds:?}");
         // A film carrying nothing else to be measured against is measured
         // against its own soundtrack, which is what every film could do before
         // there was a second way and what most films still do.
