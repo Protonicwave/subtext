@@ -1,13 +1,6 @@
-import {
-  useEffect,
-  useRef,
-  type CSSProperties,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { motion } from 'motion/react';
-import type { AudioView, FilmView, Id, TrackView } from '@/shared/ipc/bindings';
+import type { FilmView, Id } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { sourceOf } from '@/shared/media/source';
 import { useSetting } from '@/shared/settings/useSettings';
@@ -17,7 +10,7 @@ import { classes } from '@/shared/ui/classes';
 import { useNavigation } from '@/app/routes';
 import { busiestMomentOf } from '@/features/player/check';
 import { CHECK, backTo, replacing, said, working } from '@/features/player/outcomes';
-import { activeTrackOf, trackNameOf, trackProblemOf } from '@/features/player/tracks';
+import { activeTrackOf, trackNameOf } from '@/features/player/tracks';
 import { useAlignment } from '@/features/player/useAlignment';
 import { useSync } from '@/features/player/useSync';
 import { useFilmPalette } from './accent';
@@ -30,19 +23,25 @@ import { useFrames } from './frames';
 import { pictureFor } from './picture';
 import { remainingOf } from './remaining';
 import { resolutionOf, runtimeOf } from './runtime';
+import { trackRowsOf } from './trackRows';
 import { useLibrary } from './useLibrary';
 import { useSheet } from './useSheet';
 import { frameId } from './transition';
 import styles from './FilmSheet.module.css';
 
 /**
- * A film's page, which is where Subtext shows what it read.
+ * A film's page, which is a catalogue card for an object on the disk.
  *
  * Everything on it was written when the film was scanned, so opening it reads
  * nothing from disk and costs a lookup in the library already in memory. That
- * is the whole reason the technical block can be this dense: none of it is
+ * is the whole reason the plate of facts can be this dense: none of it is
  * fetched, and none of it is guessed at either. A fact the file did not state
  * is left out.
+ *
+ * It is the one screen no streaming service can draw, because it is about the
+ * file rather than about the title, and it is set to say so: the values in the
+ * figures face and the labels in the interface one, which is what makes a
+ * reference read as a reference rather than as a settings dialogue.
  *
  * It comes forward over the library rather than being a screen of its own,
  * because it is a look at one film on the way to watching it and going back
@@ -69,7 +68,7 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
 
   useReturningFocus(panel);
 
-  // Behind the sheet, where a wide picture is wanted: the frame from where the
+  // Behind the card, where a wide picture is wanted: the frame from where the
   // film was stopped if one has been taken, and the poster otherwise.
   const frame = useFrames((held) => held.frames[film.id]?.url);
   const still = frame ?? (film.posterPath === null ? null : sourceOf(film.posterPath));
@@ -127,17 +126,19 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
         ref={panel}
         onKeyDown={onKeyDown}
       >
+        {/* Outside the scrolling area, so it stays where it was put on a page
+            long enough to scroll. */}
+        <button type="button" className={styles.close} aria-label="Close" onClick={onClose}>
+          <CloseIcon size={12} />
+        </button>
+
         <div className={styles.scroll}>
-          <div className={styles.top}>
-            <span className={styles.art} aria-hidden="true">
-              {still !== null && <img className={styles.still} src={still} alt="" />}
-            </span>
+          <span className={styles.art} aria-hidden="true">
+            {still !== null && <img className={styles.still} src={still} alt="" />}
+          </span>
 
-            <button type="button" className={styles.close} aria-label="Close" onClick={onClose}>
-              <CloseIcon size={12} />
-            </button>
-
-            <div className={styles.picture}>
+          <article className={styles.card}>
+            <div className={styles.aside}>
               <motion.span layoutId={frameId(film.id)} className={styles.cover}>
                 {picture.kind === 'composed' && <ComposedCover film={film} />}
                 {picture.kind === 'frame' && (
@@ -156,11 +157,12 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
               <CoverChoice film={film} />
             </div>
 
-            <div className={styles.head}>
+            <div className={styles.main}>
               <h2 className={styles.title} id={`film-sheet-${String(film.id)}`}>
                 {film.title}
               </h2>
-              <p className={styles.sub}>{headlineOf(film)}</p>
+
+              <Facts film={film} />
 
               {film.position !== null && (
                 <div className={styles.resume}>
@@ -189,61 +191,141 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
                   </>
                 )}
               </div>
-            </div>
-          </div>
 
-          <div className={styles.body}>
-            <section className={styles.block}>
-              <h3 className={styles.heading}>The file</h3>
-              <dl className={styles.facts}>
-                {fileFactsOf(film).map((row) => (
-                  <div className={styles.fact} key={row.label}>
-                    <dt>{row.label}</dt>
-                    <dd
-                      className={classes(row.path === true && styles.path)}
-                      title={row.path === true ? row.value : undefined}
-                    >
-                      {row.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
+              <section className={styles.section}>
+                <h3 className={styles.heading}>What the file is</h3>
+                <FilePlate film={film} />
+              </section>
 
-            <section className={styles.block}>
-              <h3 className={styles.heading}>Sound</h3>
-              {film.details === null || film.details.audio.length === 0 ? (
-                <p className={styles.none}>Nothing recorded</p>
-              ) : (
-                film.details.audio.map((audio, at) => (
-                  <Row key={`${audio.codec}-${String(at)}`} language={audio.language}>
-                    <span className={styles.what}>{soundOf(audio)}</span>
-                  </Row>
-                ))
-              )}
-
-              <h3 className={classes(styles.heading, styles.second)}>Subtitles</h3>
-              {film.tracks.length === 0 ? (
-                <p className={styles.none}>None found</p>
-              ) : (
-                film.tracks.map((track) => (
-                  <Row key={track.id} language={track.language}>
-                    <span className={styles.what}>{subtitleOf(track)}</span>
-                    {tagsOf(track).map((tag) => (
-                      <span key={tag.name} className={classes(styles.tag, tag.warn && styles.warn)}>
-                        {tag.name}
-                      </span>
-                    ))}
-                  </Row>
-                ))
-              )}
+              <section className={styles.section}>
+                <h3 className={styles.heading}>Tracks</h3>
+                <Tracks film={film} />
+              </section>
 
               <AlignOffer film={film} onWatch={watch} />
-            </section>
-          </div>
+            </div>
+          </article>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The line under the title: the year, how long it runs and what the picture is.
+ *
+ * The shorthand rather than the figures, since the plate below carries the
+ * exact ones. A film nobody has opened and whose container was never read knows
+ * none of the three, and then the line is left out rather than drawn empty.
+ */
+function Facts({ film }: { film: FilmView }) {
+  const facts = factsOf(film);
+  if (facts.length === 0) return null;
+
+  return (
+    <p className={styles.under}>
+      {facts.map((fact, at) => (
+        <span key={fact} className={styles.fact}>
+          {at > 0 && <i className={styles.dot} aria-hidden="true" />}
+          {fact}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/**
+ * What the file is, as a plate of values.
+ *
+ * Every value in the figures face and every label in the interface one, which
+ * is the whole of why this reads as a catalogue entry. A fact the file did not
+ * state has no row at all, so an MP4, which this application does not parse,
+ * shows a shorter plate rather than a full one with holes in it.
+ *
+ * The path takes the width, because it is the one value long enough that a
+ * column would leave nothing of it but the drive.
+ */
+function FilePlate({ film }: { film: FilmView }) {
+  return (
+    <dl className={styles.plate}>
+      {fileFactsOf(film).map((row) => (
+        <div className={classes(styles.value, row.path === true && styles.wide)} key={row.label}>
+          <dt>{row.label}</dt>
+          <dd
+            className={classes(row.path === true && styles.path)}
+            title={row.path === true ? row.value : undefined}
+          >
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * Everything the film carries, sound and subtitles in one table.
+ *
+ * Reading them against each other is the point: a Japanese film with English
+ * subtitles beside it is one glance down two columns, and two separate blocks
+ * would make it a scroll. A cell the film view does not carry is empty, in the
+ * same way a fact the file did not state has no row in the plate above.
+ *
+ * A kind with no rows at all is said under the table rather than left to be
+ * noticed, because an absence is what somebody looking for subtitles, or
+ * wondering why a film has no sound, came to the table to find out.
+ */
+function Tracks({ film }: { film: FilmView }) {
+  const rows = trackRowsOf(film, useSetting('subtitleLanguage'));
+
+  if (rows.length === 0) return <p className={styles.none}>Nothing recorded</p>;
+
+  const missing = [
+    rows.some((row) => row.kind === 'Sound') ? null : 'No sound recorded',
+    rows.some((row) => row.kind === 'Subtitle') ? null : 'No subtitles found',
+  ].filter((note) => note !== null);
+
+  return (
+    <>
+      <table className={styles.tracks}>
+        <thead>
+          <tr>
+            <th scope="col">Kind</th>
+            <th scope="col">Language</th>
+            <th scope="col">Codec</th>
+            <th scope="col">What it is</th>
+            {/* The state, which is a mark rather than a value and reads better
+                without a heading over a column that is mostly empty. */}
+            <th scope="col">
+              <span className={styles.away}>State</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} data-in-use={row.state !== null && !row.state.warn}>
+              <td>{row.kind}</td>
+              <td>{row.language}</td>
+              <td className={styles.mono}>{row.codec}</td>
+              <td>{row.what}</td>
+              <td>
+                {row.state !== null && (
+                  <span className={classes(styles.pill, row.state.warn && styles.warn)}>
+                    {row.state.name}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {missing.map((note) => (
+        <p className={styles.none} key={note}>
+          {note}
+        </p>
+      ))}
+    </>
   );
 }
 
@@ -264,7 +346,10 @@ function CoverChoice({ film }: { film: FilmView }) {
 
   return (
     <div className={styles.source}>
-      <p className={styles.sourceName}>{coverNameOf(film.coverSource)}</p>
+      <p className={styles.sourceName}>
+        <i className={styles.mark} aria-hidden="true" />
+        {coverNameOf(film.coverSource)}
+      </p>
       <p className={styles.sourceNote}>{coverStatementOf(film.coverSource)}</p>
 
       <div className={styles.sourceActions}>
@@ -283,16 +368,6 @@ function CoverChoice({ film }: { film: FilmView }) {
           {cover.problem}
         </p>
       )}
-    </div>
-  );
-}
-
-/** One track, sound or subtitle, with what it says it is in front of it. */
-function Row({ language, children }: { language: string | null; children: ReactNode }) {
-  return (
-    <div className={styles.track}>
-      <span className={styles.lang}>{language ?? '—'}</span>
-      {children}
     </div>
   );
 }
@@ -321,7 +396,7 @@ function AlignOffer({ film, onWatch }: { film: FilmView; onWatch: (atMs: number)
   const { state } = alignment;
 
   // A film with only pictures for subtitles has nothing to measure, and saying
-  // so is the subtitle row's job rather than an offer that would decline.
+  // so is the table's job rather than an offer that would decline.
   if (track === null || film.missing) return null;
 
   if (state.phase === 'confirming') {
@@ -450,20 +525,17 @@ function ShowInFolder({ film }: { film: FilmView }) {
   );
 }
 
-/**
- * The line under the title: what somebody choosing a film would say about it.
- *
- * The shorthand rather than the figures, since the block below carries the
- * exact ones. A fact that is not known is left out, so a film nobody has opened
- * and whose container was never read is its year alone.
- */
-function headlineOf(film: FilmView): string {
+/** The three, leaving out whichever of them the film does not know. */
+function factsOf(film: FilmView): string[] {
   const video = film.details?.video;
-  const picture = [resolutionOf(film), video?.codec].filter((part) => part != null).join(' ');
+  const said = [resolutionOf(film), video?.codec].filter((part) => part != null).join(' ');
+  const picture = said === '' ? null : said;
 
-  return [film.year === null ? null : String(film.year), runtimeOf(film.durationMs), picture]
-    .filter((part) => part !== null && part !== '')
-    .join(' · ');
+  return [
+    film.year === null ? null : String(film.year),
+    runtimeOf(film.durationMs),
+    picture,
+  ].filter((part) => part !== null);
 }
 
 /** How far through the film somebody is, as a whole number. */
@@ -472,35 +544,6 @@ function watchedPercent(film: FilmView): number {
   if (position === null) return 0;
   if (position.finished) return 100;
   return Math.round((position.progress ?? 0) * 100);
-}
-
-/** What a sound track is, which is its codec and how many speakers it is for. */
-function soundOf(audio: AudioView): string {
-  return [audio.codec, audio.layout].filter((part) => part !== null).join(' ');
-}
-
-/** Where a subtitle track came from, and how much of it there is. */
-function subtitleOf(track: TrackView): string {
-  const where = track.origin === 'stream' ? 'Inside the film' : 'Beside the film';
-  if (track.cueCount === 0) return where;
-  return `${where} · ${track.cueCount.toLocaleString('en-GB')} lines`;
-}
-
-/**
- * What else is worth saying about a track.
- *
- * A track of pictures is named and marked as one Subtext cannot read, in the
- * words the README uses about them. It is still listed: a film whose only
- * subtitles are pictures should say so rather than appear to have none.
- */
-function tagsOf(track: TrackView): { name: string; warn?: boolean }[] {
-  const problem = trackProblemOf(track);
-
-  return [
-    track.forced ? { name: 'Forced' } : null,
-    track.hearingImpaired ? { name: 'For the hard of hearing' } : null,
-    problem === null ? null : { name: problem, warn: true },
-  ].filter((tag) => tag !== null);
 }
 
 /**

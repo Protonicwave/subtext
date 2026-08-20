@@ -103,10 +103,20 @@ function open(changes: Partial<FilmView> = {}) {
   return showing;
 }
 
-/** What one row of the file block says. */
+/** What one row of the plate of facts says. */
 function factOf(label: string): string {
   const term = screen.getByText(label);
   return term.nextElementSibling?.textContent ?? '';
+}
+
+/** The cells of the first track of a kind, in the order they are read. */
+function rowOf(kind: 'Sound' | 'Subtitle'): string[] {
+  const row = screen
+    .getAllByRole('row')
+    .find((candidate) => candidate.firstElementChild?.textContent === kind);
+  if (row === undefined) throw new Error(`no ${kind} row in the table`);
+
+  return [...row.children].map((cell) => cell.textContent);
 }
 
 describe('the film sheet', () => {
@@ -133,7 +143,9 @@ describe('the film sheet', () => {
     open();
 
     expect(screen.getByRole('dialog', { name: 'Heat' })).toBeInTheDocument();
-    expect(screen.getByText('1995 · 2 hr 50 min · 1080p H.264')).toBeInTheDocument();
+    for (const fact of ['1995', '2 hr 50 min', '1080p H.264']) {
+      expect(screen.getByText(fact)).toBeInTheDocument();
+    }
   });
 
   /*
@@ -206,12 +218,39 @@ describe('the film sheet', () => {
     expect(factOf('Container')).toBe('MP4');
     expect(screen.queryByText('Resolution')).not.toBeInTheDocument();
     expect(screen.queryByText('Frame rate')).not.toBeInTheDocument();
-    expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
+    expect(screen.getByText('No sound recorded')).toBeInTheDocument();
   });
 
-  it('lists the sound the film carries', () => {
+  /*
+   * A fact the file did not state has no row, so nothing on the plate is ever
+   * drawn as a label with nothing after it.
+   */
+  it('draws no value it does not have', () => {
+    open({
+      path: '/films/Crime/Heat.1995.mp4',
+      details: {
+        container: 'MP4',
+        sizeBytes: 4_100_000_000,
+        averageBitrate: null,
+        video: null,
+        audio: [],
+      },
+    });
+
+    for (const value of screen.getByRole('dialog').querySelectorAll('dd')) {
+      expect(value.textContent.trim()).not.toBe('');
+    }
+  });
+
+  /*
+   * Sound and subtitles in one table, so that what a film is in and what it can
+   * be read in sit under each other rather than in two blocks.
+   */
+  it('lists the sound the film carries, and says which will be heard', () => {
     open();
-    expect(screen.getByText('DTS-HD MA 5.1')).toBeInTheDocument();
+
+    const sound = rowOf('Sound');
+    expect(sound).toEqual(['Sound', 'English', 'DTS-HD MA', '5.1', 'Default']);
   });
 
   it('says where each subtitle came from and how much of it there is', () => {
@@ -223,14 +262,35 @@ describe('the film sheet', () => {
     });
 
     expect(screen.getByText('Beside the film · 1,402 lines')).toBeInTheDocument();
-    expect(screen.getByText('Inside the film · 1,402 lines')).toBeInTheDocument();
-    expect(screen.getByText('Forced')).toBeInTheDocument();
+    expect(screen.getByText('Inside the film · 1,402 lines · Forced')).toBeInTheDocument();
+  });
+
+  /*
+   * The one the player would draw, marked. A film in three languages otherwise
+   * says nothing about which of them is about to be read.
+   */
+  it('marks the subtitle the film is watched with', () => {
+    open({ tracks: [track, { ...track, id: 4, language: 'fr' }] });
+
+    expect(rowOf('Subtitle')).toContain('Chosen');
+    expect(screen.getAllByText('Chosen')).toHaveLength(1);
+  });
+
+  /*
+   * A film recorded before this build described such things, and never scanned
+   * since. There is no table to draw and nothing to say about it beyond that.
+   */
+  it('says nothing was recorded for a film with no tracks at all', () => {
+    open({ details: null, tracks: [] });
+
+    expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('says plainly when a film has no subtitles at all', () => {
     open({ tracks: [] });
 
-    expect(screen.getByText('None found')).toBeInTheDocument();
+    expect(screen.getByText('No subtitles found')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /listen and line up/i })).not.toBeInTheDocument();
   });
 
