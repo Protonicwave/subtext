@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "alignment-corpus"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3498,7 +3498,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "subtext"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "percent-encoding",
  "serde",
@@ -3520,7 +3520,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-align"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "realfft",
@@ -3529,7 +3529,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-container"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "subtext-core",
@@ -3538,7 +3538,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "chardetng",
  "criterion",
@@ -3547,7 +3547,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-index"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "rusqlite",
@@ -3557,7 +3557,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-scan"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "notify",
@@ -3571,7 +3571,7 @@ dependencies = [
 
 [[package]]
 name = "subtext-speech"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "memory-stats",
