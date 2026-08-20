@@ -29,6 +29,11 @@ pub struct Discovery {
     pub subtitles: Vec<FoundFile>,
     /// Pictures, one of which may be the cover somebody put beside a film.
     pub images: Vec<FoundFile>,
+    /// Files another tool wrote about a film, which may name a picture.
+    ///
+    /// Collected by name here and opened nowhere, since only a film that has
+    /// found no better artwork is worth reading one for.
+    pub sidecars: Vec<FoundFile>,
     /// Every file the walk looked at, including the ones it had no use for.
     pub files_seen: usize,
     /// Places the walk was not allowed into, or that vanished underneath it.
@@ -92,6 +97,7 @@ pub fn discover(root: &Path) -> Discovery {
             FileKind::Film => discovery.films.push(found),
             FileKind::Subtitle => discovery.subtitles.push(found),
             FileKind::Image => discovery.images.push(found),
+            FileKind::Sidecar => discovery.sidecars.push(found),
         }
     }
 

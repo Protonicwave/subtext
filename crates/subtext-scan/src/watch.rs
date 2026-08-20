@@ -174,7 +174,7 @@ mod tests {
     use crate::debounce::{PATIENCE, Settling};
 
     #[test]
-    fn only_changes_to_films_and_subtitles_count() {
+    fn only_changes_a_scan_could_act_on_count() {
         let mut settling = Settling::new(Duration::from_millis(1), PATIENCE);
         let created = |path: &str| Event {
             kind: EventKind::Create(CreateKind::File),
@@ -182,11 +182,13 @@ mod tests {
             attrs: notify::event::EventAttributes::default(),
         };
 
-        note(&mut settling, &created("/films/Heat.nfo"));
+        note(&mut settling, &created("/films/Heat.txt"));
         note(&mut settling, &created("/films/.DS_Store"));
         assert!(settling.take_if_settled(Instant::now()).is_none());
 
         note(&mut settling, &created("/films/Heat.mkv"));
+        // A sidecar, which can bring a film a cover it did not have.
+        note(&mut settling, &created("/films/Heat.nfo"));
         note(
             &mut settling,
             &Event {
@@ -199,7 +201,13 @@ mod tests {
         let settled = settling
             .take_if_settled(Instant::now() + Duration::from_secs(1))
             .unwrap_or_default();
-        assert_eq!(settled, [PathBuf::from("/films/Heat.mkv")]);
+        assert_eq!(
+            settled,
+            [
+                PathBuf::from("/films/Heat.mkv"),
+                PathBuf::from("/films/Heat.nfo")
+            ]
+        );
     }
 
     #[test]

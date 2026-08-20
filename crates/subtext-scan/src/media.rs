@@ -27,6 +27,14 @@ const SUBTITLE_EXTENSIONS: &[&str] = &["srt"];
 /// will draw.
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp"];
 
+/// What a media manager writes beside a film to record what it worked out
+/// about it.
+///
+/// The file is not a picture and is never shown. It is read for one thing: the
+/// path of the artwork the tool that wrote it settled on, which is somebody's
+/// earlier decision about this film sitting unread on their own disk.
+const SIDECAR_EXTENSIONS: &[&str] = &["nfo"];
+
 /// Folders that hold no films and cost real time to walk.
 ///
 /// Recycle bins are the important ones: a deleted film still sits in there,
@@ -48,6 +56,8 @@ pub(crate) enum FileKind {
     Subtitle,
     /// A picture, which may turn out to be the cover somebody put beside a film.
     Image,
+    /// A file another tool wrote about a film, which may name a picture.
+    Sidecar,
 }
 
 /// Whether a file is one of the two kinds a scan cares about.
@@ -76,7 +86,21 @@ pub(crate) fn classify(file_name: &str) -> Option<FileKind> {
     {
         return Some(FileKind::Image);
     }
+    if SIDECAR_EXTENSIONS
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(extension))
+    {
+        return Some(FileKind::Sidecar);
+    }
     None
+}
+
+/// Whether a file is a picture the webview could draw.
+///
+/// Asked of a name read out of a sidecar, which can say anything at all, and
+/// so has to be held to the same list as a name found by the walk.
+pub(crate) fn is_image(file_name: &str) -> bool {
+    classify(file_name) == Some(FileKind::Image)
 }
 
 /// What container a film is in, by the name of its file.
@@ -123,14 +147,14 @@ pub(crate) fn might_matter(path: &Path) -> bool {
 mod tests {
     use std::path::Path;
 
-    use super::{FileKind, classify, container_of, is_worth_walking, might_matter};
+    use super::{FileKind, classify, container_of, is_image, is_worth_walking, might_matter};
 
     #[test]
     fn recognises_films_and_subtitles() {
         assert_eq!(classify("Heat.1995.mkv"), Some(FileKind::Film));
         assert_eq!(classify("Heat.1995.MP4"), Some(FileKind::Film));
         assert_eq!(classify("Heat.1995.en.srt"), Some(FileKind::Subtitle));
-        assert_eq!(classify("Heat.1995.nfo"), None);
+        assert_eq!(classify("Heat.1995.nfo"), Some(FileKind::Sidecar));
         assert_eq!(classify("Heat"), None);
     }
 
@@ -140,6 +164,10 @@ mod tests {
         assert_eq!(classify("Heat.1995.PNG"), Some(FileKind::Image));
         assert_eq!(classify("cover.webp"), Some(FileKind::Image));
         assert_eq!(classify("fanart.bmp"), None);
+
+        assert!(is_image("poster.jpg"));
+        assert!(!is_image("movie.nfo"));
+        assert!(!is_image("Heat.1995.mkv"));
     }
 
     #[test]
@@ -177,7 +205,10 @@ mod tests {
         // A folder being renamed or deleted, which cannot be inspected.
         assert!(might_matter(Path::new("/films/Nineteen Nineties")));
 
-        assert!(!might_matter(Path::new("/films/Heat.1995.nfo")));
+        // A sidecar another tool wrote, which can bring a film a cover.
+        assert!(might_matter(Path::new("/films/movie.nfo")));
+
+        assert!(!might_matter(Path::new("/films/Heat.1995.txt")));
         assert!(!might_matter(Path::new("/films/.DS_Store")));
     }
 }
