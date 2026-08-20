@@ -437,10 +437,11 @@ fn file_label(file: &FoundFile) -> SubtitleLabel {
 /// Where each film's cover comes from, once the scan knows everything it is
 /// going to know.
 ///
-/// Three things have to meet for this: the pictures found beside the films,
-/// which is a question about names; what the films that were opened turned out
-/// to carry inside them; and what the row already said about the films that
-/// were not opened, since those have not changed and so neither has the answer.
+/// Three things have to meet for this: what the pictures and sidecars on the
+/// disk claim, which is a question about names; what the films that were opened
+/// turned out to carry inside them; and what the row already said about the
+/// films that were not opened, since those have not changed and so neither has
+/// the answer.
 fn chosen_covers(
     found: &walk::Discovery,
     names: &[subtext_core::ParsedName],
@@ -449,7 +450,7 @@ fn chosen_covers(
     carry_artwork: &HashSet<i64>,
     recorded: &[(i64, Option<Cover>)],
 ) -> Vec<(i64, Option<Cover>)> {
-    let beside = covers::beside(&found.films, names, &found.images);
+    let on_disk = covers::on_disk(&found.films, names, &found.images, &found.sidecars);
     let opened: HashSet<i64> = opened.iter().map(|job| job.film_id).collect();
     let recorded: HashMap<i64, &Cover> = recorded
         .iter()
@@ -460,15 +461,15 @@ fn chosen_covers(
         .films
         .iter()
         .zip(stored)
-        .zip(beside)
-        .map(|((file, stored), beside)| {
+        .zip(on_disk)
+        .map(|((file, stored), on_disk)| {
             let cover = covers::decide(
                 &file.path,
                 opened
                     .contains(&stored.id)
                     .then(|| carry_artwork.contains(&stored.id)),
                 recorded.get(&stored.id).copied(),
-                beside.as_ref(),
+                &on_disk,
             );
             (stored.id, cover)
         })

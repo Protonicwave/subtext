@@ -30,12 +30,14 @@ mod debounce;
 mod error;
 mod ingest;
 mod media;
+mod nfo;
 mod progress;
 mod scanner;
 mod walk;
 mod watch;
 
 pub use crate::attach::{Attached, attach_subtitle};
+pub use crate::covers::{OnDisk, on_disk};
 pub use crate::error::{Error, Result};
 pub use crate::ingest::{ScanOutcome, TrackWarnings, scan_folder};
 pub use crate::progress::{ProgressSink, ScanProgress, ScanStage, Silent};
