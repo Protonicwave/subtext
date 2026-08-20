@@ -6,6 +6,7 @@
 //! tested and benchmarked without an application around it.
 
 mod correction;
+mod cover;
 mod cue;
 mod film;
 pub mod pairing;
@@ -15,6 +16,7 @@ mod time;
 mod track;
 
 pub use crate::correction::Correction;
+pub use crate::cover::{Cover, CoverSource};
 pub use crate::cue::{Cue, CuePosition};
 pub use crate::film::Film;
 pub use crate::pairing::{
