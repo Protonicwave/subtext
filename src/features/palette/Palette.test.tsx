@@ -130,6 +130,7 @@ describe('the palette', () => {
     expect(rows()).toEqual([
       expect.stringContaining('Choose a folder to watch'),
       expect.stringContaining('Show the library as covers or as a list'),
+      expect.stringContaining('Show or hide the dialogue beside the film'),
       expect.stringContaining('Read the watched folders again'),
       expect.stringContaining('Open settings'),
     ]);
@@ -182,13 +183,14 @@ describe('the palette', () => {
     expect(rows()).toEqual([
       expect.stringContaining('The Third Man'),
       expect.stringContaining('Show the library as covers or as a list'),
+      expect.stringContaining('Show or hide the dialogue beside the film'),
       expect.stringContaining('Read the watched folders again'),
     ]);
 
     await userEvent.keyboard('{ArrowDown}');
     expect(selected()).toContain('Show the library as covers or as a list');
 
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
     expect(selected()).toContain('Read the watched folders again');
 
     await userEvent.keyboard('{ArrowDown}');

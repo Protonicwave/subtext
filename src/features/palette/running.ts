@@ -25,6 +25,11 @@ export function runCommand(id: ActionId) {
       settings.change('libraryView', settings.settings.libraryView === 'list' ? 'covers' : 'list');
       return;
     }
+    case 'transcript': {
+      const settings = useSettings.getState();
+      settings.change('transcript', settings.settings.transcript === 'shown' ? 'hidden' : 'shown');
+      return;
+    }
     case 'rescan':
       void useImport.getState().reread();
       return;
