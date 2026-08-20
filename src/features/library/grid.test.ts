@@ -6,6 +6,8 @@ import {
   railTileFor,
   rowHeight,
   rowsOf,
+  SPINE_GAP,
+  SPINE_WIDTH,
   wallTileFor,
 } from './grid';
 
@@ -63,5 +65,17 @@ describe('the grid', () => {
     expect(columnsFor(1_600, wallTileFor('small'))).toBe(10);
     expect(columnsFor(1_600, wallTileFor('medium'))).toBe(8);
     expect(columnsFor(1_600, wallTileFor('large'))).toBe(6);
+  });
+
+  /*
+   * The spines are the same arithmetic as the wall at a different width, which
+   * is why there is no second function for them. What is worth asserting is the
+   * property the view exists for: that a window holds a few hundred of them.
+   */
+  it('puts a few hundred spines in an ordinary window', () => {
+    const across = columnsFor(1_400, SPINE_WIDTH, SPINE_GAP);
+
+    expect(across).toBe(40);
+    expect(across * 5).toBeGreaterThan(150);
   });
 });

@@ -75,6 +75,17 @@ export function ListIcon(props: IconProps) {
   );
 }
 
+/** The library as spines, which is what the same films look like on a shelf. */
+export function SpinesIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={1.8}>
+      <rect x="3" y="4" width="3.4" height="16" rx="1" />
+      <rect x="9" y="4" width="3.4" height="16" rx="1" />
+      <rect x="15" y="4" width="3.4" height="16" rx="1" />
+    </Icon>
+  );
+}
+
 /** Which way a column is sorted. Drawn pointing down and turned for the other. */
 export function CaretIcon(props: IconProps) {
   return (
