@@ -1,9 +1,10 @@
 //! Where a scan decides each film's cover comes from.
 //!
-//! Three sources in a fixed order: the artwork inside the film, the picture
-//! beside it, and then nothing, which leaves a frame from the film itself for
-//! the front end to take. What is asserted here is which of them wins in a real
-//! folder, and that a film keeps the answer once it has one.
+//! The sources come in a fixed order: a cover somebody picked, the artwork
+//! inside the film, the picture beside it, and then nothing, which leaves a
+//! frame from the film itself for the front end to take. What is asserted here
+//! is which of them wins in a real folder, that a film keeps the answer once it
+//! has one, and that a choice is never taken away by a scan.
 
 // The fixture stops a test outright when the library does not hold what the
 // test is about to ask it for.
@@ -14,6 +15,7 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use subtext_container::fixture::Entry;
+use subtext_core::{Cover, CoverSource};
 
 use crate::common::{ARTWORK, Fixture};
 
@@ -22,14 +24,20 @@ fn entries() -> Vec<Entry> {
 }
 
 /// Where a film's cover comes from, as the row records it.
-fn cover_of(library: &Fixture, relative: &str) -> Option<PathBuf> {
+fn cover_of(library: &Fixture, relative: &str) -> Option<Cover> {
     library
         .database()
         .films()
         .by_id(library.film_id(relative))
         .unwrap()
         .expect("the film to be in the library")
-        .cover_path
+        .cover
+}
+
+/// The same, as a path alone, for a test about which file won rather than
+/// about what kind of claim it had.
+fn cover_path_of(library: &Fixture, relative: &str) -> Option<PathBuf> {
+    cover_of(library, relative).map(|cover| cover.path)
 }
 
 #[test]
@@ -38,7 +46,10 @@ fn a_film_carrying_its_own_artwork_is_its_own_cover() {
     let path = library.matroska_carrying("Heat.1995.mkv", entries(), "cover.jpg");
 
     library.scan();
-    assert_eq!(cover_of(&library, "Heat.1995.mkv"), Some(path));
+    assert_eq!(
+        cover_of(&library, "Heat.1995.mkv"),
+        Some(Cover::new(path, CoverSource::InFile))
+    );
 }
 
 #[test]
@@ -48,7 +59,10 @@ fn a_picture_beside_a_film_is_its_cover() {
     let image = library.write("Heat.1995.jpg", ARTWORK);
 
     library.scan();
-    assert_eq!(cover_of(&library, "Heat.1995.mkv"), Some(image));
+    assert_eq!(
+        cover_of(&library, "Heat.1995.mkv"),
+        Some(Cover::new(image, CoverSource::Beside))
+    );
 }
 
 #[test]
@@ -72,7 +86,10 @@ fn what_is_inside_the_film_comes_before_what_is_beside_it() {
     library.write("Heat (1995)/poster.jpg", ARTWORK);
 
     library.scan();
-    assert_eq!(cover_of(&library, "Heat (1995)/Heat.mkv"), Some(path));
+    assert_eq!(
+        cover_of(&library, "Heat (1995)/Heat.mkv"),
+        Some(Cover::new(path, CoverSource::InFile))
+    );
 }
 
 /// The reason the answer is written down rather than worked out afresh: a film
@@ -90,7 +107,34 @@ fn a_rescan_leaves_a_films_own_artwork_where_it_is() {
         outcome.films_probed, 0,
         "an unchanged film is not opened again"
     );
-    assert_eq!(cover_of(&library, "Heat.1995.mkv"), Some(path));
+    assert_eq!(
+        cover_of(&library, "Heat.1995.mkv"),
+        Some(Cover::new(path, CoverSource::InFile))
+    );
+}
+
+/// A choice is a statement about this film that no scan is entitled to
+/// revisit, whatever it finds in the folder afterwards.
+#[test]
+fn a_cover_somebody_picked_is_left_alone_by_every_later_scan() {
+    let library = Fixture::new();
+    library.matroska_carrying("Heat.1995.mkv", entries(), "cover.jpg");
+    library.scan();
+
+    let picked = library.write("Chosen.png", ARTWORK);
+    let chosen = Cover::new(picked, CoverSource::Chosen);
+    library
+        .database()
+        .films()
+        .set_covers(&[(library.film_id("Heat.1995.mkv"), Some(&chosen))])
+        .unwrap();
+
+    // A picture named after the film, added after the choice was made, which
+    // is exactly what would have won had nobody chosen.
+    library.write("Heat.1995.jpg", ARTWORK);
+    library.scan();
+
+    assert_eq!(cover_of(&library, "Heat.1995.mkv"), Some(chosen));
 }
 
 #[test]
@@ -103,7 +147,10 @@ fn a_picture_added_later_becomes_the_cover_of_a_film_that_had_none() {
 
     let image = library.write("Heat.1995.png", ARTWORK);
     library.scan();
-    assert_eq!(cover_of(&library, "Heat.1995.mkv"), Some(image));
+    assert_eq!(
+        cover_of(&library, "Heat.1995.mkv"),
+        Some(Cover::new(image, CoverSource::Beside))
+    );
 
     // And taking it away again leaves the film where it started.
     library.remove("Heat.1995.png");
@@ -133,7 +180,10 @@ fn a_film_that_is_not_matroska_carries_no_artwork_and_is_no_trouble() {
     let image = library.write("Heat.1995.jpg", ARTWORK);
 
     library.scan();
-    assert_eq!(cover_of(&library, "Heat.1995.mp4"), Some(image));
+    assert_eq!(
+        cover_of(&library, "Heat.1995.mp4"),
+        Some(Cover::new(image, CoverSource::Beside))
+    );
 }
 
 #[test]
@@ -142,7 +192,7 @@ fn the_cover_a_film_keeps_is_a_path_the_application_can_use() {
     library.matroska_carrying("Heat.1995.mkv", entries(), "cover.jpg");
 
     library.scan();
-    let cover = cover_of(&library, "Heat.1995.mkv").expect("a cover");
+    let cover = cover_path_of(&library, "Heat.1995.mkv").expect("a cover");
 
     // The film's own file, which is what says the image is inside it.
     assert_eq!(cover, library.path("Heat.1995.mkv"));

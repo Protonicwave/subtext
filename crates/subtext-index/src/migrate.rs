@@ -59,6 +59,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "media details",
         sql: include_str!("migrations/0008_media_details.sql"),
     },
+    Migration {
+        version: 9,
+        name: "cover source",
+        sql: include_str!("migrations/0009_cover_source.sql"),
+    },
 ];
 
 /// The schema version this build understands.
@@ -450,6 +455,64 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(preferences, ["subtitles.size"]);
+    }
+
+    /// The covers a library already has, brought forward with a source each.
+    ///
+    /// The release before this one recorded a path and nothing else, so what
+    /// the path is standing next to is the only evidence of what it was: the
+    /// film's own file means the artwork is inside it, any other file means the
+    /// picture beside it, and no file means nothing was found. Reading it that
+    /// way is what lets such a library open unchanged and stay unchanged.
+    #[test]
+    fn every_cover_a_previous_release_recorded_gains_the_source_it_implies() {
+        let mut connection = Connection::open_in_memory().unwrap();
+
+        connection
+            .execute_batch("PRAGMA foreign_keys = OFF;")
+            .unwrap();
+        for migration in MIGRATIONS.iter().take_while(|it| it.version <= 8) {
+            connection.execute_batch(migration.sql).unwrap();
+        }
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migration (
+                     version    INTEGER PRIMARY KEY,
+                     name       TEXT    NOT NULL,
+                     applied_at INTEGER NOT NULL
+                 ) STRICT;
+                 INSERT INTO schema_migration (version, name, applied_at)
+                 VALUES (1, 'a', 0), (2, 'b', 0), (3, 'c', 0), (4, 'd', 0),
+                        (5, 'e', 0), (6, 'f', 0), (7, 'g', 0), (8, 'h', 0);
+
+                 INSERT INTO watched_folder (id, path, added_at) VALUES (1, '/films', 0);
+                 INSERT INTO film
+                     (id, folder_id, path, title, size_bytes, modified_at, added_at, cover_path)
+                 VALUES
+                     (1, 1, '/films/Heat.mkv', 'Heat', 4000, 0, 0, '/films/Heat.mkv'),
+                     (2, 1, '/films/Ronin.mkv', 'Ronin', 4000, 0, 0, '/films/Ronin.jpg'),
+                     (3, 1, '/films/Thief.mkv', 'Thief', 4000, 0, 0, NULL);",
+            )
+            .unwrap();
+
+        assert_eq!(apply(&mut connection).unwrap(), supported_version());
+
+        let covers: Vec<(i64, Option<String>, String)> = connection
+            .prepare("SELECT id, cover_path, cover_source FROM film ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(
+            covers,
+            [
+                (1, Some("/films/Heat.mkv".to_owned()), "in-file".to_owned()),
+                (2, Some("/films/Ronin.jpg".to_owned()), "beside".to_owned()),
+                (3, None, "none".to_owned()),
+            ]
+        );
     }
 
     #[test]

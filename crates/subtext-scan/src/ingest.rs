@@ -16,7 +16,7 @@ use std::sync::mpsc::{self, Receiver};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use subtext_container::{EmbeddedTrack, MediaStreams, SubtitleCodec};
 use subtext_core::{
-    Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, Timestamp, pair_with, parse_srt,
+    Cover, Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, Timestamp, pair_with, parse_srt,
 };
 use subtext_index::{
     AudioDetails, Database, FilmStreams, MediaDetails, NewFilm, NewTrack, Stored, StreamEntry,
@@ -171,9 +171,9 @@ pub fn scan_folder(
         &written.carry_artwork,
         &database.films().covers(folder.id)?,
     );
-    let covers: Vec<(i64, Option<&Path>)> = chosen
+    let covers: Vec<(i64, Option<&Cover>)> = chosen
         .iter()
-        .map(|(id, cover)| (*id, cover.as_deref()))
+        .map(|(id, cover)| (*id, cover.as_ref()))
         .collect();
     database.films().set_covers(&covers)?;
 
@@ -447,13 +447,13 @@ fn chosen_covers(
     stored: &[Stored],
     opened: &[FilmJob],
     carry_artwork: &HashSet<i64>,
-    recorded: &[(i64, Option<PathBuf>)],
-) -> Vec<(i64, Option<PathBuf>)> {
+    recorded: &[(i64, Option<Cover>)],
+) -> Vec<(i64, Option<Cover>)> {
     let beside = covers::beside(&found.films, names, &found.images);
     let opened: HashSet<i64> = opened.iter().map(|job| job.film_id).collect();
-    let recorded: HashMap<i64, &Path> = recorded
+    let recorded: HashMap<i64, &Cover> = recorded
         .iter()
-        .filter_map(|(id, cover)| Some((*id, cover.as_deref()?)))
+        .filter_map(|(id, cover)| Some((*id, cover.as_ref()?)))
         .collect();
 
     found
@@ -468,7 +468,7 @@ fn chosen_covers(
                     .contains(&stored.id)
                     .then(|| carry_artwork.contains(&stored.id)),
                 recorded.get(&stored.id).copied(),
-                beside.as_deref(),
+                beside.as_ref(),
             );
             (stored.id, cover)
         })

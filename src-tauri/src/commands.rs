@@ -330,14 +330,14 @@ pub(crate) async fn posters_wanted(app: AppHandle) -> Answer<Vec<PosterWanted>> 
             let wanted = directory.join(posters::file_name(
                 &film.path,
                 film.modified_at,
-                film.cover_path.as_deref(),
+                film.cover.as_ref().map(|cover| cover.path.as_path()),
             ));
             film.poster_path.as_deref() != Some(wanted.as_path()) || !wanted.is_file()
         })
         .map(|film| PosterWanted {
             id: Id::of(film.id),
             path: film.path.display().to_string(),
-            cover: film.cover_path.is_some(),
+            cover: film.cover.is_some(),
         })
         .collect())
 }
@@ -364,7 +364,8 @@ pub(crate) async fn cover_image(app: AppHandle, film_id: Id) -> Answer<Vec<u8>> 
             .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
         let cover = film
-            .cover_path
+            .cover
+            .map(|cover| cover.path)
             .ok_or_else(|| Failure::saying("that film has no cover to read"))?;
 
         // The film's own path says the image is attached inside it, which is
@@ -418,7 +419,7 @@ pub(crate) async fn save_poster(
         let poster = directory.join(posters::file_name(
             &film.path,
             film.modified_at,
-            film.cover_path.as_deref(),
+            film.cover.as_ref().map(|cover| cover.path.as_path()),
         ));
         std::fs::write(&poster, &image).map_err(Failure::of)?;
 

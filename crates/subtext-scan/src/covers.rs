@@ -13,9 +13,9 @@
 //! same film.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use subtext_core::ParsedName;
+use subtext_core::{Cover, CoverSource, ParsedName};
 
 use crate::walk::FoundFile;
 
@@ -40,11 +40,13 @@ enum Claim {
 
 /// Where one film's cover comes from, which is the only place that is decided.
 ///
-/// Three answers, tried in order. The artwork the film carries inside it wins,
-/// then the picture somebody put beside it, and then nothing, which leaves a
-/// frame taken from the film itself as the only answer left. The first two were
-/// chosen by a person and the third is a guess, which is the whole reason for
-/// the order.
+/// The candidates are compared by the claim each has, so the order is the
+/// ordering on [`CoverSource`] rather than a sequence of returns here. What is
+/// decided elsewhere is what the candidates are: this weighs them.
+///
+/// A cover somebody picked is not weighed at all. It is kept whatever a scan
+/// has found, because the one thing a chosen cover means is that no scan is to
+/// have another opinion about it.
 ///
 /// Whether a film carries its own artwork is known only when the film was
 /// opened during this scan. A film that has not changed is not opened again, so
@@ -53,15 +55,21 @@ enum Claim {
 pub(crate) fn decide(
     film: &Path,
     opened: Option<bool>,
-    recorded: Option<&Path>,
-    beside: Option<&Path>,
-) -> Option<PathBuf> {
-    let carries_its_own = opened.unwrap_or_else(|| recorded == Some(film));
-
-    if carries_its_own {
-        return Some(film.to_path_buf());
+    recorded: Option<&Cover>,
+    beside: Option<&Cover>,
+) -> Option<Cover> {
+    if recorded.is_some_and(|cover| cover.source.is_chosen()) {
+        return recorded.cloned();
     }
-    beside.map(Path::to_path_buf)
+
+    let carries_its_own =
+        opened.unwrap_or_else(|| recorded.is_some_and(|cover| cover.source == CoverSource::InFile));
+    let inside = carries_its_own.then(|| Cover::new(film, CoverSource::InFile));
+
+    [inside, beside.cloned()]
+        .into_iter()
+        .flatten()
+        .min_by_key(|cover| cover.source)
 }
 
 /// The cover beside each film, in the order the films were given.
@@ -72,7 +80,7 @@ pub(crate) fn beside(
     films: &[FoundFile],
     names: &[ParsedName],
     images: &[FoundFile],
-) -> Vec<Option<PathBuf>> {
+) -> Vec<Option<Cover>> {
     let films_in_folder = films_per_folder(films);
 
     films
@@ -93,7 +101,7 @@ fn best_for(
     name: &ParsedName,
     images: &[FoundFile],
     films_in_folder: &HashMap<&Path, usize>,
-) -> Option<PathBuf> {
+) -> Option<Cover> {
     let folder = film.path.parent()?;
     let alone = films_in_folder.get(folder).copied().unwrap_or_default() == 1;
 
@@ -105,7 +113,7 @@ fn best_for(
         // come to the same answer rather than to whichever the filesystem
         // happened to hand over first.
         .min_by_key(|(claim, _)| *claim)
-        .map(|(_, image)| image.path.clone())
+        .map(|(_, image)| Cover::new(image.path.clone(), CoverSource::Beside))
 }
 
 /// What claim one image has on one film.
@@ -170,7 +178,7 @@ fn films_per_folder(films: &[FoundFile]) -> HashMap<&Path, usize> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use subtext_core::ParsedName;
+    use subtext_core::{Cover, CoverSource, ParsedName};
 
     use super::{beside, decide, without_suffix};
     use crate::walk::FoundFile;
@@ -201,8 +209,13 @@ mod tests {
 
         beside(&films, &names, &images)
             .into_iter()
-            .map(|found| found.map(|path| path.display().to_string()))
+            .map(|found| found.map(|cover| cover.path.display().to_string()))
             .collect()
+    }
+
+    /// A cover taken from the row, as a scan reads one back.
+    fn recorded(path: &str, source: CoverSource) -> Cover {
+        Cover::new(path, source)
     }
 
     /// Every level of the order, on one film that has all three answers
@@ -210,17 +223,17 @@ mod tests {
     #[test]
     fn the_artwork_a_film_carries_comes_before_anything_beside_it() {
         let film = Path::new("/films/Heat.1995.mkv");
-        let beside = Path::new("/films/Heat.1995.jpg");
+        let beside = recorded("/films/Heat.1995.jpg", CoverSource::Beside);
 
-        // Carries its own, so the picture beside it is not reached.
+        // Carries its own, so the picture beside it is outranked.
         assert_eq!(
-            decide(film, Some(true), None, Some(beside)),
-            Some(film.to_path_buf())
+            decide(film, Some(true), None, Some(&beside)),
+            Some(Cover::new(film, CoverSource::InFile))
         );
         // Carries none, so the picture beside it is the cover.
         assert_eq!(
-            decide(film, Some(false), None, Some(beside)),
-            Some(beside.to_path_buf())
+            decide(film, Some(false), None, Some(&beside)),
+            Some(beside.clone())
         );
         // Neither, which leaves a frame from the film as the only answer.
         assert_eq!(decide(film, Some(false), None, None), None);
@@ -231,24 +244,68 @@ mod tests {
     #[test]
     fn a_film_nobody_opened_keeps_what_was_recorded_about_it() {
         let film = Path::new("/films/Heat.1995.mkv");
-        let beside = Path::new("/films/Heat.1995.jpg");
+        let inside = recorded("/films/Heat.1995.mkv", CoverSource::InFile);
+        let beside = recorded("/films/Heat.1995.jpg", CoverSource::Beside);
 
         // The row says the artwork is inside the film, and the film has not
         // changed since it was read, so it still is.
         assert_eq!(
-            decide(film, None, Some(film), Some(beside)),
-            Some(film.to_path_buf())
+            decide(film, None, Some(&inside), Some(&beside)),
+            Some(inside.clone())
         );
 
         // The row says there was nothing, and a picture has appeared beside it
         // since, which is a change the scan is entitled to act on.
         assert_eq!(
-            decide(film, None, None, Some(beside)),
-            Some(beside.to_path_buf())
+            decide(film, None, None, Some(&beside)),
+            Some(beside.clone())
         );
 
         // The picture that was beside it has gone, and nothing takes its place.
-        assert_eq!(decide(film, None, Some(beside), None), None);
+        assert_eq!(decide(film, None, Some(&beside), None), None);
+    }
+
+    /// The whole point of recording the source: a scan may find whatever it
+    /// likes and none of it displaces a choice.
+    #[test]
+    fn a_cover_somebody_picked_survives_whatever_a_scan_finds() {
+        let film = Path::new("/films/Heat.1995.mkv");
+        let chosen = recorded("/pictures/heat.png", CoverSource::Chosen);
+        let beside = recorded("/films/Heat.1995.jpg", CoverSource::Beside);
+
+        // A picture beside the film, artwork inside it, and both at once.
+        assert_eq!(
+            decide(film, Some(false), Some(&chosen), Some(&beside)),
+            Some(chosen.clone())
+        );
+        assert_eq!(
+            decide(film, Some(true), Some(&chosen), None),
+            Some(chosen.clone())
+        );
+        assert_eq!(
+            decide(film, Some(true), Some(&chosen), Some(&beside)),
+            Some(chosen.clone())
+        );
+        // And a scan that finds nothing at all leaves it alone as well, which
+        // is the case an image somebody moved out of the folder produces.
+        assert_eq!(decide(film, None, Some(&chosen), None), Some(chosen));
+    }
+
+    /// A picture in the film's own folder is that claim and says so, since
+    /// which claim it is decides what a later scan may do with it.
+    #[test]
+    fn a_picture_found_beside_a_film_says_that_is_where_it_came_from() {
+        let films = [file("/films/Heat.1995.mkv")];
+        let names = [ParsedName::from_file_name("Heat.1995.mkv")];
+        let images = [file("/films/Heat.1995.jpg")];
+
+        assert_eq!(
+            beside(&films, &names, &images),
+            [Some(Cover::new(
+                "/films/Heat.1995.jpg",
+                CoverSource::Beside
+            ))]
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use subtext_core::{Correction, Cue, MatchKind, SubtitleLabel, Timestamp};
+use subtext_core::{Correction, Cover, Cue, MatchKind, SubtitleLabel, Timestamp};
 
 /// A folder the library watches.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,10 +49,9 @@ pub struct FilmRecord {
     /// How long the film runs, once the player has opened it and found out.
     pub duration: Option<Timestamp>,
     pub poster_path: Option<PathBuf>,
-    /// Where the poster was drawn from: the film itself where it carries its
-    /// own artwork, a picture beside it where there is one, and nothing where a
-    /// frame from the film is all there is.
-    pub cover_path: Option<PathBuf>,
+    /// The image the poster was drawn from and the claim it has on this film,
+    /// or nothing at all, in which case a frame from the film is all there is.
+    pub cover: Option<Cover>,
     /// The colour pair taken from the poster, as the front end wrote it.
     pub accent: Option<String>,
     /// What the film's file is, which is also what says whether the rest of
