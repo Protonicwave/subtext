@@ -17,6 +17,7 @@ import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
 import { useAlignment } from './useAlignment';
+import { useCheck } from './useCheck';
 import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
@@ -127,6 +128,16 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     setSyncing(true);
     measure();
   }, [measure]);
+  // Watching what the measurement did, which is the only evidence that is not
+  // another number. The lines it goes to are the ones being drawn, so the
+  // moment it lands on is a moment in the film rather than in the file.
+  const check = useCheck(alignment, timeline.cues, transport);
+  const { start: watchIt } = check;
+  const see = useCallback(() => {
+    setSyncing(true);
+    watchIt();
+  }, [watchIt]);
+
   const [choosing, setChoosing] = useState(false);
   const toggleTracks = useCallback(() => {
     setChoosing((showing) => !showing);
@@ -138,6 +149,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     stepping,
     sync,
     align,
+    check: { available: check.offered, see },
     choice,
     toggleFullscreen,
     toggleSync,
@@ -218,6 +230,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
             preview={preview}
             sync={sync}
             alignment={alignment}
+            check={check}
             syncing={syncing}
             choice={choice}
             choosing={choosing}

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
 import { SKIP_MS } from './intervals';
 import type { Alignment } from './useAlignment';
+import type { Check } from './useCheck';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
 import type { TrackChoice } from './useTrack';
@@ -23,6 +24,7 @@ const playing: Playback = {
 function show(playback: Partial<Playback> = {}, visible = true, available = true) {
   const transport: Transport = {
     toggle: vi.fn(),
+    play: vi.fn(),
     positionNow: vi.fn(() => playing.positionMs),
     seekTo: vi.fn(),
     skipBy: vi.fn(),
@@ -49,6 +51,13 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
     undo: vi.fn(),
     dismiss: vi.fn(),
   };
+  const check: Check = {
+    offered: false,
+    watching: false,
+    start: vi.fn(),
+    keep: vi.fn(),
+    putBack: vi.fn(),
+  };
   const choice: TrackChoice = {
     tracks: [],
     active: null,
@@ -67,6 +76,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
       sync={sync}
       alignment={alignment}
+      check={check}
       syncing={false}
       choice={choice}
       choosing={false}

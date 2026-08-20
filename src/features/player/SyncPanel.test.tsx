@@ -3,11 +3,17 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AlignmentView } from '@/shared/ipc/bindings';
 import { grounds, landing, nothingMeasured } from '@/test/alignment';
+import { CHECK } from './outcomes';
 import { SyncPanel } from './SyncPanel';
 import type { Alignment, AlignState } from './useAlignment';
+import type { Check } from './useCheck';
 import { RATES, STEP_MS, type Sync } from './useSync';
 
-function show(state: Partial<Sync> = {}, phase: AlignState = { phase: 'idle' }) {
+function show(
+  state: Partial<Sync> = {},
+  phase: AlignState = { phase: 'idle' },
+  checking: Partial<Check> = {},
+) {
   const sync: Sync = {
     available: true,
     offsetMs: 0,
@@ -28,15 +34,25 @@ function show(state: Partial<Sync> = {}, phase: AlignState = { phase: 'idle' }) 
     undo: vi.fn(),
     dismiss: vi.fn(),
   };
+  // Offered by default, since that is what the panel is handed for every
+  // measurement that was written, which is what most of these are about.
+  const check: Check = {
+    offered: phase.phase === 'outcome' && phase.outcome.outcome === 'aligned' && !phase.undone,
+    watching: false,
+    start: vi.fn(),
+    keep: vi.fn(),
+    putBack: vi.fn(),
+    ...checking,
+  };
   const onClose = vi.fn();
 
-  render(<SyncPanel sync={sync} alignment={alignment} onClose={onClose} />);
-  return { sync, alignment, onClose };
+  render(<SyncPanel sync={sync} alignment={alignment} check={check} onClose={onClose} />);
+  return { sync, alignment, check, onClose };
 }
 
 /** The panel showing how an alignment ended. */
-function ended(outcome: AlignmentView, sync: Partial<Sync> = {}) {
-  return show(sync, { phase: 'outcome', outcome, undone: false });
+function ended(outcome: AlignmentView, sync: Partial<Sync> = {}, checking: Partial<Check> = {}) {
+  return show(sync, { phase: 'outcome', outcome, undone: false }, checking);
 }
 
 /** A measurement that was written, which is the only kind worth checking. */
@@ -482,5 +498,58 @@ describe('lining a subtitle up by listening to the film', () => {
 
     expect(screen.getByRole('status')).not.toHaveTextContent(/stretches/);
     expect(screen.getByRole('status')).not.toHaveTextContent(/agreed/);
+  });
+
+  it('offers to watch a measurement land, and says what that will do', async () => {
+    const { check } = ended(written);
+
+    expect(screen.getByText(CHECK.note)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: CHECK.offer }));
+    expect(check.start).toHaveBeenCalled();
+  });
+
+  /*
+   * There is nothing to check about a refusal. The file is exactly as it was,
+   * so going and watching it would show what it showed before anybody asked.
+   */
+  it('offers nothing to watch where the measurement was refused', () => {
+    ended({ outcome: 'no-audio' });
+    expect(screen.queryByRole('button', { name: CHECK.offer })).not.toBeInTheDocument();
+  });
+
+  it('asks, while the stretch is playing, whether the lines arrive', async () => {
+    const { check } = ended(written, {}, { offered: false, watching: true });
+
+    expect(screen.getByText(CHECK.ask)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: CHECK.keep }));
+    expect(check.keep).toHaveBeenCalled();
+  });
+
+  /*
+   * Putting it back while watching is the undo that was already there, reached
+   * from the question rather than from the sentence above it, so there is one
+   * way back and not two.
+   */
+  it('puts the measurement back from the question it is asked in', async () => {
+    const { check, alignment } = ended(written, {}, { offered: false, watching: true });
+
+    await userEvent.click(screen.getByRole('button', { name: /put it back/i }));
+    expect(check.putBack).toHaveBeenCalled();
+    expect(alignment.undo).not.toHaveBeenCalled();
+  });
+
+  /*
+   * Closing the panel without answering is an answer of a kind, and the kind
+   * that changes nothing: the measurement was written when it was made, and
+   * declining to look at it leaves it exactly where it is.
+   */
+  it('leaves a measurement in force when the question is put away unanswered', async () => {
+    const { check, alignment } = ended(written, {}, { offered: false, watching: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(alignment.dismiss).toHaveBeenCalled();
+    expect(check.putBack).not.toHaveBeenCalled();
+    expect(alignment.undo).not.toHaveBeenCalled();
   });
 });

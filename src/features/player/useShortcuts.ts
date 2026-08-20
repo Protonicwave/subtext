@@ -26,6 +26,11 @@ export interface Actions {
   sync: Sync;
   /** Working out where they should have been by listening to the film. */
   align: () => void;
+  /**
+   * Watching a measurement land, which is offered only once one has been made
+   * and only while it is still there to be taken back.
+   */
+  check: { available: boolean; see: () => void };
   /** Which subtitle is being read, and whether there is a choice to make. */
   choice: TrackChoice;
   toggleFullscreen: () => void;
@@ -56,6 +61,7 @@ export function useShortcuts(actions: Actions) {
         stepping,
         sync,
         align,
+        check,
         choice,
         toggleFullscreen,
         toggleSync,
@@ -114,6 +120,15 @@ export function useShortcuts(actions: Actions) {
         case 'a':
           if (!sync.available) return;
           align();
+          break;
+        /*
+         * V for what a measurement is worth seeing before it is believed. The
+         * key does nothing until there is a measurement in force to check,
+         * since a film nobody has measured has nothing to show.
+         */
+        case 'v':
+          if (!check.available) return;
+          check.see();
           break;
         /*
          * C for captions, which is what every other player calls this key. A

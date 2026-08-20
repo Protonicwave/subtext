@@ -247,3 +247,22 @@ function rateSaid(rate: number): string {
   const named = RATES.find((known) => sameRate(known.value, rate));
   return `, stretched ${named?.name ?? `by ${rate.toFixed(4)}`}`;
 }
+
+/**
+ * Watching the measurement, rather than reading about it.
+ *
+ * The wording of the check, in the one file both doors read from, for the same
+ * reason every other sentence here is: the timing panel and the film page are
+ * drawn differently, they offer the same thing, and two wordings would be one
+ * offer described two ways.
+ */
+export const CHECK = {
+  /** Taking up the offer. */
+  offer: 'See it land',
+  /** What taking it up will do, said before it happens. */
+  note: 'Goes to the busiest few seconds of dialogue in the film and plays them, so you can watch the lines arrive.',
+  /** What is being asked while it plays. */
+  ask: 'Do the lines arrive with the voices?',
+  /** The answer that leaves the measurement in force. */
+  keep: 'Yes, keep it',
+} as const;

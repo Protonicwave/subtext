@@ -1,7 +1,8 @@
 import { type KeyboardEvent, useState } from 'react';
 import { classes } from '@/shared/ui/classes';
-import { backTo, replacing, said, working } from './outcomes';
+import { CHECK, backTo, replacing, said, working } from './outcomes';
 import type { Alignment } from './useAlignment';
+import type { Check } from './useCheck';
 import { RATES, STEP_MS, type Sync, asWritten, offsetLabel, sameRate } from './useSync';
 import styles from './SyncPanel.module.css';
 
@@ -19,10 +20,12 @@ interface SyncPanelProps {
   sync: Sync;
   /** Working the offset out by listening to the film rather than by ear. */
   alignment: Alignment;
+  /** Watching what it measured, rather than reading the figures for it. */
+  check: Check;
   onClose: () => void;
 }
 
-export function SyncPanel({ sync, alignment, onClose }: SyncPanelProps) {
+export function SyncPanel({ sync, alignment, check, onClose }: SyncPanelProps) {
   const named = RATES.find((known) => sameRate(known.value, sync.rate));
   const [byHand, setByHand] = useState(named === undefined);
   const [typed, setTyped] = useState(String(sync.rate));
@@ -77,7 +80,7 @@ export function SyncPanel({ sync, alignment, onClose }: SyncPanelProps) {
         bracket keys do the same while you watch.
       </p>
 
-      <AlignAction alignment={alignment} offsetMs={sync.offsetMs} />
+      <AlignAction alignment={alignment} check={check} offsetMs={sync.offsetMs} />
 
       <label className={styles.field}>
         <span className={styles.label}>Framerate</span>
@@ -134,7 +137,15 @@ export function SyncPanel({ sync, alignment, onClose }: SyncPanelProps) {
  * sentence: a refusal here means the file cannot be measured, which is worth
  * knowing and is not a fault to be reported in red.
  */
-function AlignAction({ alignment, offsetMs }: { alignment: Alignment; offsetMs: number }) {
+function AlignAction({
+  alignment,
+  check,
+  offsetMs,
+}: {
+  alignment: Alignment;
+  check: Check;
+  offsetMs: number;
+}) {
   const { state } = alignment;
 
   if (state.phase === 'confirming') {
@@ -186,6 +197,10 @@ function AlignAction({ alignment, offsetMs }: { alignment: Alignment; offsetMs: 
 
   if (state.phase === 'outcome') {
     const { title, sentence } = said(state.outcome);
+    // The measurement that is in force and could still be taken back, which is
+    // the only one there is anything to watch or to undo.
+    const written = state.outcome.outcome === 'aligned' && !state.undone ? state.outcome : null;
+
     return (
       <div className={styles.aligning}>
         <div className={styles.row}>
@@ -201,11 +216,43 @@ function AlignAction({ alignment, offsetMs }: { alignment: Alignment; offsetMs: 
         <p className={styles.note} role="status">
           {sentence}
         </p>
-        {state.outcome.outcome === 'aligned' && !state.undone && (
-          <button type="button" className={styles.nudge} onClick={alignment.undo}>
-            Put it back {backTo(state.outcome.previous.offsetMs)}
-          </button>
-        )}
+
+        {written !== null &&
+          (check.watching ? (
+            <div className={styles.answer}>
+              <p className={styles.note}>{CHECK.ask}</p>
+              <div className={styles.row}>
+                <button type="button" className={styles.nudge} onClick={check.keep}>
+                  {CHECK.keep}
+                </button>
+                <button
+                  type="button"
+                  className={classes(styles.nudge, styles.quiet)}
+                  onClick={check.putBack}
+                >
+                  Put it back {backTo(written.previous.offsetMs)}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.answer}>
+              <div className={styles.row}>
+                {check.offered && (
+                  <button type="button" className={styles.nudge} onClick={check.start}>
+                    {CHECK.offer}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={classes(styles.nudge, styles.quiet)}
+                  onClick={alignment.undo}
+                >
+                  Put it back {backTo(written.previous.offsetMs)}
+                </button>
+              </div>
+              {check.offered && <p className={styles.note}>{CHECK.note}</p>}
+            </div>
+          ))}
       </div>
     );
   }
