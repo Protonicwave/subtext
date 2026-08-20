@@ -1,0 +1,92 @@
+/*
+ * The shelf is as tall as every row it would have, and holds only the rows in
+ * view. Each row is positioned rather than flowed, which is what lets the ones
+ * between be absent without the scroll position moving.
+ */
+.shelf {
+  position: relative;
+  width: 100%;
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: var(--spine-gap);
+  width: 100%;
+  /* Rows are placed by transform rather than by top, so that scrolling moves
+     them on the compositor instead of laying the shelf out again. */
+  will-change: transform;
+}
+
+/*
+ * One film, on its edge.
+ *
+ * The colours are the film's own, pulled a long way down so that a shelf of a
+ * few hundred reads as a shelf rather than as a chart. What separates one spine
+ * from the next is hue at low strength, which is enough to see a run of the
+ * same series together and not so much that the wall is loud.
+ */
+.spine {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: var(--spine-height);
+  padding: var(--space-3) 0;
+  border-radius: 2px var(--radius-sm) var(--radius-sm) 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--film-accent) 26%, var(--colour-surface)),
+    color-mix(in oklab, var(--film-pair) 30%, var(--colour-bg))
+  );
+  /* The lit edge where a spine stands away from the one before it, which is
+     what stops a row of them reading as one striped block. */
+  box-shadow:
+    inset 1px 0 0 color-mix(in oklab, #fff 10%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, var(--colour-line-strong) 55%, transparent);
+  transition:
+    transform var(--duration-quick) var(--ease-out),
+    box-shadow var(--duration-quick);
+}
+
+.spine:hover,
+.spine:focus-visible {
+  transform: translateY(-4px);
+  box-shadow:
+    inset 1px 0 0 color-mix(in oklab, #fff 16%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, var(--film-accent) 62%, transparent),
+    0 10px 22px -12px color-mix(in oklab, var(--film-accent) 70%, transparent);
+}
+
+/*
+ * The title, on its side.
+ *
+ * Top to bottom, which is the way a spine is read in English and therefore the
+ * way a shelf of them can be read without turning your head twice. What does
+ * not fit is cut with an ellipsis: a title too long for its edge is the ordinary
+ * case, and the film's page is one press away.
+ */
+.title {
+  writing-mode: vertical-rl;
+  overflow: hidden;
+  max-height: 100%;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--colour-text-dim);
+  transition: color var(--duration-quick);
+}
+
+.spine:hover .title,
+.spine:focus-visible .title {
+  color: var(--colour-text);
+}
+
+/* A film on a drive that is not plugged in. Faint rather than absent, since it
+   is still one of the films on the shelf. */
+.gone {
+  opacity: 0.4;
+}
