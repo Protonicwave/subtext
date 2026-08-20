@@ -10,6 +10,7 @@ import { frameId } from '@/features/library/transition';
 import { fileNameOf, useLibrary } from '@/features/library/useLibrary';
 import { appearanceOf, comfortOf } from '@/shared/settings/schema';
 import { useSetting, useSettings } from '@/shared/settings/useSettings';
+import { shapeOf, talkingOf } from './dialogue';
 import { REWIND_MS } from './intervals';
 import { Controls } from './Controls';
 import { Subtitles } from './Subtitles';
@@ -181,6 +182,18 @@ function Film({
     wake,
   });
 
+  // Where the talking falls, worked out from the cues as they were read rather
+  // than from the timeline. The comfort preferences move a line by a tenth of a
+  // second and a provisional nudge moves the whole track by less than a bucket,
+  // so neither is visible at this width, and reading the timeline instead would
+  // redraw the shape on every press of a nudge key. It is worked out again when
+  // the track or its correction changes, and when the film says how long it is,
+  // which is the one fact here that arrives after the bar has been drawn.
+  const talking = useMemo(
+    () => shapeOf(talkingOf(dialogue.cues, playback.durationMs)),
+    [dialogue.cues, playback.durationMs],
+  );
+
   const preview = useMemo(
     () => ({
       source: streamOf(film.path),
@@ -251,6 +264,7 @@ function Film({
             playback={playback}
             transport={transport}
             stepping={stepping}
+            talking={talking}
             preview={preview}
             sync={sync}
             alignment={alignment}

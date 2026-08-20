@@ -21,6 +21,7 @@ import {
 } from '@/shared/ui/Icon';
 import { clockOf, countdownOf } from '@/shared/media/clock';
 import { classes } from '@/shared/ui/classes';
+import { BUCKETS } from './dialogue';
 import { SKIP_MS } from './intervals';
 import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
@@ -55,6 +56,14 @@ interface ControlsProps {
   transport: Transport;
   /** Moving by line, which a film with no subtitles cannot do. */
   stepping: Stepping;
+  /**
+   * Where the film is talking, as a path drawn under the scrubber.
+   *
+   * Empty for a film with no subtitle to read it from, and for one whose length
+   * is not known yet. Nothing is drawn in either case, and no room is left where
+   * something would have been.
+   */
+  talking: string;
   /** What the bar shows about the moment under the pointer. */
   preview: Preview;
   /** Putting the subtitles back in step with the film. */
@@ -82,6 +91,7 @@ export function Controls({
   playback,
   transport,
   stepping,
+  talking,
   preview,
   sync,
   alignment,
@@ -160,6 +170,24 @@ export function Controls({
             along={along}
             line={preview.spokenAt(along * durationMs)}
           />
+        )}
+
+        {/*
+         * The film's dialogue, under the bar and in the film's own colour. One
+         * path, drawn when the track or its correction changes and at no other
+         * time: it says where the talking is, which does not move as the film
+         * plays, so filling it in behind the thumb would be a second scrubber
+         * saying what the first one already says.
+         */}
+        {talking !== '' && (
+          <svg
+            className={styles.dialogue}
+            viewBox={`0 0 ${String(BUCKETS)} 100`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d={talking} />
+          </svg>
         )}
 
         <input
