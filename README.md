@@ -14,7 +14,7 @@ Subtext reads the files themselves rather than asking anybody about them. That i
 - **Shelves made from your own folders.** However you sorted your films is how the library is arranged, because you already did the sorting and nobody else's taxonomy is going to beat it.
 - **Covers taken off your disk.** The artwork inside the file, or the image beside it, or a frame from the film, in that order.
 - **A page for every film that says what the file actually is.** Container, codec, resolution, bit depth, frame rate, every audio track, every subtitle track.
-- **Subtitles chosen, corrected, and put right by listening to the film.** Press A and Subtext works out how far out they are from the soundtrack itself.
+- **Subtitles chosen, corrected, and put right by listening to the film.** Press A and Subtext works out how far out they are, then shows you the lines landing on the voices so you do not have to take its word for it.
 
 Nothing is uploaded and no network request is ever made. No file is copied, moved or written beside your films. Subtext watches folders that already exist on your disk, and a film that goes missing keeps its playback position until it comes back.
 
@@ -80,13 +80,39 @@ Arrow keys land on the start of a line rather than an arbitrary ten seconds back
 
 ### Working the offset out for you
 
-Press A, or use the align action in the timing panel or on the film's page, and Subtext listens to the film. It reads the soundtrack, works out where the talking actually falls, and compares that with where the subtitle claims it does. Where the two agree plainly, the offset and any framerate conversion are set for you, and one press puts back whatever was in force before. A feature length film takes a few seconds. It carries on playing throughout, and the reading can be stopped at any point.
+Press A, or use the align action in the timing panel or on a film's page, and Subtext works the offset out for you. It is something you ask for rather than something done to you: nothing is measured when films are added to the library, no film is read until you press the key, and a correction you arrived at yourself is never replaced without asking first. The film carries on playing throughout and the reading can be stopped at any point.
 
-It is something you ask for rather than something done to you. Nothing is measured when films are added to the library, no film is read until you press the key, and a correction you arrived at yourself is never replaced without asking first.
+Where the film carries a text subtitle track of its own, that track is what the other subtitles are measured against. It was written for these exact frames, so it is timings against timings, the answer is good to a hundredth of a second, and no audio is read at all. It works whatever language either track is in, because dialogue falls at the same moments however it has been translated.
 
-Subtext decodes the audio itself for this, so the formats it can read are its own rather than the webview's. It reads AAC, MP3, FLAC, Vorbis, PCM and ALAC, which covers most of what a film is distributed in. It does not read AC-3, E-AC-3, DTS or TrueHD, which is what a disc rip usually carries. Those films say so by name and leave the bracket keys where they are. None of the audio is played, kept or written anywhere; it is read a packet at a time to be measured and thrown away.
+Otherwise Subtext listens to the film. It reads the soundtrack, works out where the talking actually falls, and compares that with where the subtitle claims it does. Lines that caption a sound rather than a voice, `[DOOR SLAMS]` or a lyric, are left out of the comparison, and they are still drawn on screen as they always were.
 
-Where the measurement is not good enough to act on, nothing is changed and it says so. A subtitle belonging to a different film, or a forced track of a few dozen lines with too little in it to line up, both end that way. Being told that nothing happened leaves you exactly where you were, with the keys above; a wrong answer applied quietly would leave you watching a film that is out from beginning to end, with no reason to suspect the file.
+Subtext decodes that audio itself, so the formats it can read are its own rather than the webview's. It reads MP3, FLAC, Vorbis, PCM and ALAC, and AAC in the plain two channel form a download usually carries. It does not read AAC of more than two channels or in its high efficiency form, and it does not read AC-3, E-AC-3, DTS or TrueHD, which is what a disc rip usually carries. None of the audio is played, kept or written anywhere: it is read a packet at a time to be measured and thrown away. A film whose soundtrack Subtext cannot read can still be measured against a text subtitle track inside it, where it carries one, because that path reads no audio at all.
+
+Either way the film is measured a stretch at a time, a couple of dozen stretches across its length, and the answer that wins is the one that explains all of them rather than the one that scores best in one place. That is what tells a subtitle that is out by a fixed amount from one that drifts wider as the film goes on because it was timed against a different framerate. A single measurement cannot tell those two apart, because a wrong stretch at a compensating offset looks very much like the right one.
+
+#### It checks its own answer
+
+A measurement you cannot check is worse than none. Nudging by ear has a floor: you can hear that you have made it worse and press the other key. A number applied to a film you have not watched yet has no floor at all, and if it is wrong it is wrong from beginning to end with nothing to suggest the tool rather than the file.
+
+So Subtext counts. For the file as it stands, and again for the correction it has just measured, it counts how many lines arrive as somebody starts talking. Nothing is written unless that count goes up and clears a bar, and what you are told is both counts: seventy lines in a hundred landing on the talking, against twenty five before. Beside them is what the film said, which is how many of those stretches agreed and how closely.
+
+No film puts every line on a voice. Whispers, lines off microphone and dialogue under a loud mix are speech a soundtrack reading will miss, so the figure is quoted next to the same figure for the file as it was rather than as a mark out of a hundred.
+
+Then press V and watch it happen. Subtext goes to the busiest few seconds of dialogue in the whole film, plays them, and asks whether the lines arrive with the voices. Keep it, or put back whatever was in force before, which is one press and no confirmation because it is undoing something that has just happened. The film does not pause to ask.
+
+#### What it refuses, and why refusing is the point
+
+A correction that makes a film worse is not applied, whatever the arithmetic thought of it. Where that happens Subtext says what it measured, changes nothing, and leaves the bracket keys where they were.
+
+It refuses by name, because which refusal it is tells you what to do next:
+
+- **Not enough to go on.** A track of a few dozen lines, which is what a subtitle for signs and foreign dialogue looks like, has too little in it to tell one moment of a film from another.
+- **Nothing to listen to**, for a film with no soundtrack, and **audio Subtext cannot read**, for one whose soundtrack is in a format there is no decoder for. The second names the format it found.
+- **Not sure enough to say.** The lines do not fall where the talking does, whatever they are moved by. A subtitle belonging to another film ends here.
+- **This film has breaks in it.** The subtitles fit up to a point, and after it everything is out by the same amount again, which is what an advertisement break cut into a recording does. One shift cannot put both parts right, so none is applied.
+- **A subtitle for a different cut.** The subtitles fit up to a point, and then the film goes on talking through lines the subtitle does not have. It says roughly where that started. Stretching a theatrical subtitle onto an extended cut would look aligned and be wrong in every scene the two versions do not share, which is worse than leaving it alone.
+
+Being told that nothing happened leaves you exactly where you were, with the keys above. A wrong answer applied quietly would leave you watching a film that is out from beginning to end, with no reason to suspect the file.
 
 ## Codec support
 
