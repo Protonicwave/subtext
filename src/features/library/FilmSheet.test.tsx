@@ -384,6 +384,30 @@ describe('the film sheet', () => {
     });
 
     /*
+     * Which track it measures is not a detail: a correction is written to one
+     * track and the offer says nothing about which, so somebody with a film in
+     * three languages cannot tell what is about to be moved.
+     */
+    it('names the subtitle it would measure', () => {
+      open();
+
+      expect(screen.getByText(/It measures English, which is the subtitle/)).toBeInTheDocument();
+    });
+
+    /*
+     * The one this used to get wrong. A film whose subtitles have been turned
+     * off is watched with none, and falling back to the first readable track
+     * offered to measure a subtitle the player would not draw, which is a
+     * correction written to a track nobody asked about and a measurement
+     * nobody could check.
+     */
+    it('does not offer to measure a subtitle the player would not draw', () => {
+      open({ subtitlesOff: true });
+
+      expect(screen.queryByRole('button', { name: 'Listen and line up' })).not.toBeInTheDocument();
+    });
+
+    /*
      * Every ending the command can report has a wording, including the ones
      * that changed nothing. Each of those says the nudge keys are still there.
      */

@@ -16,7 +16,7 @@ import { CloseIcon, PlayIcon, SyncIcon } from '@/shared/ui/Icon';
 import { classes } from '@/shared/ui/classes';
 import { useNavigation } from '@/app/routes';
 import { backTo, replacing, said, working } from '@/features/player/outcomes';
-import { activeTrackOf, readableTracksOf, trackProblemOf } from '@/features/player/tracks';
+import { activeTrackOf, trackNameOf, trackProblemOf } from '@/features/player/tracks';
 import { useAlignment } from '@/features/player/useAlignment';
 import { useSync } from '@/features/player/useSync';
 import { useFilmPalette } from './accent';
@@ -237,10 +237,12 @@ function Row({ language, children }: { language: string | null; children: ReactN
  */
 function AlignOffer({ film }: { film: FilmView }) {
   const preferred = useSetting('subtitleLanguage');
-  const readable = readableTracksOf(film.tracks);
-  // The track it would be watched with, or the first that could be read where
-  // subtitles have been turned off for this film.
-  const track = activeTrackOf(film, preferred) ?? readable[0] ?? null;
+  // The track this film would be watched with, and only that one. Falling back
+  // to the first readable track when subtitles have been turned off would offer
+  // to measure a subtitle the player is not going to draw, which is a
+  // measurement nobody could check and a correction written to a track nobody
+  // asked about.
+  const track = activeTrackOf(film, preferred);
 
   const sync = useSync(track);
   const alignment = useAlignment(track, sync);
@@ -317,7 +319,8 @@ function AlignOffer({ film }: { film: FilmView }) {
       </p>
       <p className={styles.offer}>
         Subtext reads the soundtrack, works out where the talking falls, and moves the subtitles to
-        match. It takes a few seconds, and the film need not be open.
+        match. It takes a few seconds, and the film need not be open. It measures{' '}
+        {trackNameOf(track)}, which is the subtitle this film is watched with.
       </p>
       <div className={styles.row}>
         <Button onClick={alignment.start}>Listen and line up</Button>
