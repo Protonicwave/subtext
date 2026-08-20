@@ -87,8 +87,8 @@ describe('choosing the film shown large', () => {
   });
 
   /*
-   * The billboard offers to play what it shows, and a file that is not there is
-   * the one thing it should not offer.
+   * The masthead offers to carry on with what it shows, and a file that is not
+   * there is the one thing it should not offer.
    */
   it('never shows a film whose file has gone', () => {
     const here = film(1, '/films/Crime');

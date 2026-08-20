@@ -3,12 +3,12 @@ import { useEffect, useState, type RefObject } from 'react';
 /**
  * How far an element sits below the top of the thing that scrolls it.
  *
- * The wall is virtualised against the page's own scrolling, and the billboard
+ * The wall is virtualised against the page's own scrolling, and the masthead
  * above it is not part of the wall. Without this the virtualiser would take
  * every scroll position to be a position within the wall and draw rows that are
- * a billboard's height too far down.
+ * a masthead's height too far down.
  *
- * Measured again when the scroller changes size, since the billboard is a
+ * Measured again when the scroller changes size, since the masthead is a
  * fraction of the window's height and a resized window moves the wall.
  */
 export function useOffsetTop(scroller: RefObject<HTMLElement | null>, node: HTMLElement | null) {

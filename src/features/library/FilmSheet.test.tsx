@@ -135,7 +135,7 @@ describe('the film sheet', () => {
   });
 
   /*
-   * The tile, the row, the billboard and the palette all come to this: a film
+   * The tile, the row, the masthead and the palette all come to this: a film
    * named to the store. Which controls do the naming is the library screen's
    * business, and is covered there.
    */
