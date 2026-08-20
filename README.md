@@ -3,8 +3,9 @@
 <!--
   The demo belongs here, above everything else. Record it and add it as
   docs/demo.gif before tagging a release. It should open on the library:
-  the shelves the folders made, one film opened for what its file is, then
-  the subtitle lined up by listening to the film.
+  where the last film was stopped and the shelves the folders made, one film
+  opened for what its file is, its dialogue beside the picture, then the
+  subtitle lined up by listening to the film.
 -->
 
 A player for the films already on your disk.
@@ -12,8 +13,9 @@ A player for the films already on your disk.
 Subtext reads the files themselves rather than asking anybody about them. That is the whole of it, and everything below follows from it:
 
 - **Shelves made from your own folders.** However you sorted your films is how the library is arranged, because you already did the sorting and nobody else's taxonomy is going to beat it.
-- **Covers taken off your disk.** The artwork inside the file, or the image beside it, or a frame from the film, in that order.
+- **Covers taken off your disk.** The artwork inside the film, the image beside it, the one a media manager wrote down, or the one in the folder above. Nothing fetched, and any of them replaced by a picture you pick.
 - **A page for every film that says what the file actually is.** Container, codec, resolution, bit depth, frame rate, every audio track, every subtitle track.
+- **The dialogue beside the picture.** Ctrl+T lists every line of the film, follows it as it plays, and seeks to any line you click.
 - **Subtitles chosen, corrected, and put right by listening to the film.** Press A and Subtext works out how far out they are, then shows you the lines landing on the voices so you do not have to take its word for it.
 
 Nothing is uploaded and no network request is ever made. No file is copied, moved or written beside your films. Subtext watches folders that already exist on your disk, and a film that goes missing keeps its playback position until it comes back.
@@ -26,27 +28,39 @@ The macOS and Windows builds are not code signed, because that needs a paid deve
 
 ## The library
 
-One film sits at the top, the one you stopped part way through most recently, or the newest thing you added if you have not started anything. Play it, or open it for what it is.
+The library opens on where you stopped. Not on an offer: on a statement of how much is left of the film you are part way through, when you left it, what you were watching it with, and the line that was on screen at that moment. A film you have not started says what it is instead of borrowing the words for one in progress. Carry on with it, or open it for what it is.
 
 Below that are rows, one for each folder inside a folder you asked Subtext to watch, named after the folder and in the order they were first found. Films sitting loose in a watched folder get a row under its name. There is nothing to tag, nothing to file and no genres to argue with: if your films are in folders called Westerns and Kurosawa, that is what the library says. Above the folders is a row of what you have not finished.
 
-A wall of covers stops working somewhere around a couple of hundred films, so there is also a list, sortable by title, folder, year, runtime, video, size, when it was added and how much of it you have seen. Ctrl+L swaps between the two and Subtext remembers which you chose, along with how you last sorted it.
+There are three ways to look at the same library. Covers, which is what a library is for. A list, sortable by title, folder, year, runtime, video, size, when it was added and how much of it you have seen, which serves one too large to look at. And spines, the whole shelf at once, every film an edge in its own colours, for a library you know by sight rather than by title. Ctrl+L moves on to the next of the three, and Subtext remembers which you chose along with how you last sorted the list.
 
 Ctrl+K finds a film by its title or by the folder it is filed in, without regard to case or to the accents over the letters, so `amelie` finds Amélie. The same list holds the things Subtext can do, each shown with its own key, so it teaches the shortcuts rather than standing in for them.
 
 ### What a film is
 
-Opening a film shows its page before it plays. The top is the cover, the title, the year, how long it runs and where you stopped. Below that is what Subtext read out of the file: the container, the video codec, the resolution, the bit depth, the frame rate, the average bitrate, the size, when it was added and where it lives. Then every audio track with its language and codec, and every subtitle track with its language, whether it sits beside the film or inside it, and whether it is forced or for hearing impaired viewers.
+Opening a film shows its page before it plays. The top is the cover, with a line under it saying where that picture came from and the two ways to change it, beside the title, the year, how long it runs and where you stopped. Below that is what Subtext read out of the file: the container, the video codec, the resolution, the bit depth, the frame rate, the average bitrate, the size, when it was added and where it lives. Then every track the file carries, sound and subtitles in one table, each with its language, what it is written as, and what it is: whether a subtitle sits beside the film or inside it, whether it is forced or for hearing impaired viewers, which one the film will be watched with, and which cannot be read at all.
 
 A fact Subtext does not know is left out rather than shown empty. An MP4 is not taken apart the way a Matroska file is, so it says less, and saying less is the honest answer.
 
 ## Covers
 
-A film's cover comes off your disk and from nowhere else. Subtext makes no network requests, so there is no artwork service to consent to and none to be wrong.
+A film's cover comes off your disk and from nowhere else. Subtext makes no network requests, so there is no artwork service to consent to, none to be wrong about your films, and none to stop answering one day.
 
-Three places are tried in order. An image attached inside a Matroska file, which is where a well made one keeps its artwork. An image beside the film, named after it or called `cover`, `poster` or `folder` in the film's own folder, which is the layout Plex, Jellyfin and Kodi have taught people to keep. Then a frame from the film itself, taken a fifth of the way in.
+Five places are looked in, in the order of how good a claim each one has on the film:
 
-The first two were chosen by somebody and the third is a guess, which is why the guess comes last. A film with none of the three is drawn as a cover composed from its title, its year and how long it runs. Whatever is used, the image is cached in Subtext's own data directory and nothing is written beside your films.
+- **A picture you picked.** Choose an image on a film's page, or drop one onto its tile. Nothing a later scan finds will replace it.
+- **Artwork inside the film.** A Matroska file can carry its cover attached, which is where a well made one keeps it.
+- **An image beside the film.** Named after it, or called `cover`, `poster` or `folder` in the film's own folder, which is the layout Plex, Jellyfin and Kodi have taught people to keep.
+- **The artwork a media manager named.** Kodi, Jellyfin and the tools that write for them leave a small file next to each film recording what they worked out about it, and one part of it names the picture they settled on. Subtext reads that one name and nothing else in the file, and only for a film that has found no better cover. A name pointing at a server is passed over the same way a name pointing at nothing is.
+- **An image in the folder above.** The box set layout, where one picture serves every film filed under it. It says the least of any claim here, which is why it is tried last.
+
+A film with none of them is drawn as a cover composed from its own title, its year and how long it runs, in the film's own colours. That is the answer rather than a frame because a frame taken a fifth of the way into a film is a moment nobody chose, and a wall of those reads as a decoder having run rather than as a shelf of films. If you would rather see the film, one setting puts frames back, drawn whole on a blurred extension of themselves rather than cut to the shape of a tile.
+
+The frame is still taken either way. It is what the row of what you have not finished shows, it is the picture beside the film you stopped part way through, and taking it is how a film in a container Subtext does not read gives up how long it runs.
+
+Every film's page says where its picture came from, and a mark on the tile says the same in fewer words, so artwork found on the disk can be told from a guess at a glance. If you keep your posters together in a folder of their own, Settings will match that whole folder to your films by name in one pass.
+
+Whatever is used, the image is cached in Subtext's own data directory. The picture itself stays where it is: nothing is copied, moved or written beside your films.
 
 ## Subtitles
 
@@ -75,8 +89,6 @@ A file that came from somewhere else says nothing about which encode it was time
 The correction is saved against that track and applied every time its dialogue is read afterwards. A track from inside the film needs none of this: it was timed against those exact frames by whoever made the file.
 
 Two settings apply to every subtitle whatever it came from. A lead-in puts a line on screen slightly before it is spoken, and a minimum time on screen keeps a short line up long enough to be read. Both are what broadcast subtitling does and what a file timed to the first syllable does not, and both can be set to zero if you would rather have the file exactly as written.
-
-Arrow keys land on the start of a line rather than an arbitrary ten seconds back, which is the one thing Subtext does with the dialogue beyond drawing it.
 
 ### Working the offset out for you
 
@@ -113,6 +125,14 @@ It refuses by name, because which refusal it is tells you what to do next:
 - **A subtitle for a different cut.** The subtitles fit up to a point, and then the film goes on talking through lines the subtitle does not have. It says roughly where that started. Stretching a theatrical subtitle onto an extended cut would look aligned and be wrong in every scene the two versions do not share, which is worse than leaving it alone.
 
 Being told that nothing happened leaves you exactly where you were, with the keys above. A wrong answer applied quietly would leave you watching a film that is out from beginning to end, with no reason to suspect the file.
+
+## The dialogue beside the film
+
+Ctrl+T sets the film's lines out beside the picture. The line being spoken is marked, the list follows the film as it plays, and clicking any line seeks to it. Scroll back to find something and it stops following, because somebody who has gone looking has taken the panel away from the film on purpose; scroll back to where the film is and it starts following again. The same key puts it away, and whether it is there is remembered from one film to the next.
+
+Nothing is read to do this. The lines are already parsed, already corrected and already in memory, because that is what the subtitles on the picture are drawn from, so the panel and the picture cannot come to disagree about what was said. A film with no readable subtitle offers no panel rather than an empty one.
+
+Under the scrubber is the same dialogue drawn as a shape. The thick stretches are the exchanges, the flat ones are the chase and the twenty minutes at the end of a film that stops talking, so where the scenes are is visible before the pointer is anywhere near them. Arrow keys land on the start of a line rather than an arbitrary ten seconds back.
 
 ## Codec support
 
