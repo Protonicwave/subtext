@@ -37,7 +37,7 @@ mod walk;
 mod watch;
 
 pub use crate::attach::{Attached, attach_subtitle};
-pub use crate::covers::{OnDisk, on_disk};
+pub use crate::covers::{OnDisk, from_folder, on_disk};
 pub use crate::error::{Error, Result};
 pub use crate::ingest::{ScanOutcome, TrackWarnings, scan_folder};
 pub use crate::media::{PICTURE_HEAD, is_picture};

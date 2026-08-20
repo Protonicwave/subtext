@@ -19,6 +19,11 @@
 //! managers write, since `Heat.1995-poster.jpg` is the same claim about the
 //! same film.
 //!
+//! One place is not beside anything. A folder of pictures somebody points at
+//! belongs to no layout and sits nowhere near the films it is for, so it is
+//! matched to the whole library by name alone, and what it finds is a choice
+//! rather than a discovery: pointing at the folder was one.
+//!
 //! Everything here is a question about names except one, and that one is kept
 //! apart on purpose: reading a sidecar means opening a file, so a sidecar is
 //! only ever named here and is opened by [`decide`], for the one film in the
@@ -101,6 +106,48 @@ pub fn on_disk(
                 sidecar: best(written.get(folder), name, alone).map(Path::to_path_buf),
                 above: above(folder, name, &pictures, &films_in_folder),
             }
+        })
+        .collect()
+}
+
+/// The pictures in a folder somebody pointed at, matched to the films they
+/// name, for each film in the order the films were given.
+///
+/// The one place a picture is matched to a film that is nowhere near it. Every
+/// other source here is a question about where a file sits as well as about
+/// what it is called, and this is a question about the name alone: somebody who
+/// has downloaded a folder of posters has said that the folder is for their
+/// library, and where a picture sits inside it says nothing further.
+///
+/// The reduction is the pairing's, so a picture called `Heat.1995.jpg` finds
+/// the same film its subtitle would, and the year is what tells two films of
+/// the same name apart. A picture under one of the fixed names is not looked
+/// for: `poster.jpg` names the folder it is in, and in a folder of posters that
+/// is not a film.
+///
+/// Nothing is opened. Whether each matched picture is a picture is the caller's
+/// question, since it is the caller that is about to record one.
+#[must_use]
+pub fn from_folder(pictures: &[FoundFile], films: &[ParsedName]) -> Vec<Option<PathBuf>> {
+    let mut by_name: HashMap<String, Vec<Candidate<'_>>> = HashMap::new();
+    for picture in pictures {
+        let Some(candidate) = claim(picture) else {
+            continue;
+        };
+        by_name
+            .entry(candidate.name.key.clone())
+            .or_default()
+            .push(candidate);
+    }
+
+    films
+        .iter()
+        .map(|film| {
+            by_name
+                .get(film.key.as_str())?
+                .iter()
+                .find(|candidate| candidate.name.year_agrees_with(film))
+                .map(|candidate| candidate.path.to_path_buf())
         })
         .collect()
 }
@@ -235,19 +282,27 @@ fn by_folder<'a>(files: &'a [FoundFile], fixed: &[&str]) -> HashMap<&'a Path, He
             continue;
         }
 
-        let name = ParsedName::from_file_name(&without_suffix(&file.file_name));
-        if name.key.is_empty() {
+        let Some(candidate) = claim(file) else {
             continue;
-        }
+        };
         held.named
-            .entry(name.key.clone())
+            .entry(candidate.name.key.clone())
             .or_default()
-            .push(Candidate {
-                path: &file.path,
-                name,
-            });
+            .push(candidate);
     }
     folders
+}
+
+/// What one file's name claims about the film it belongs to.
+///
+/// Nothing, where the name reduces to nothing: such a file would otherwise be
+/// claimed by every film whose name reduces to nothing as well.
+fn claim(file: &FoundFile) -> Option<Candidate<'_>> {
+    let name = ParsedName::from_file_name(&without_suffix(&file.file_name));
+    (!name.key.is_empty()).then(|| Candidate {
+        path: &file.path,
+        name,
+    })
 }
 
 /// The best of the files in one folder for one film, of which there may be
@@ -381,6 +436,15 @@ mod tests {
         claims(films, &[], sidecars)
             .into_iter()
             .map(|found| found.sidecar.map(|path| path.display().to_string()))
+            .collect()
+    }
+
+    /// The picture each film takes from a folder somebody pointed at.
+    fn dressed(pictures: &[&str], films: &[&str]) -> Vec<Option<String>> {
+        let films = found(films);
+        super::from_folder(&found(pictures), &names(&films))
+            .into_iter()
+            .map(|picture| picture.map(|path| path.display().to_string()))
             .collect()
     }
 
@@ -811,5 +875,93 @@ mod tests {
         );
         // Nothing above the root to hold a picture that serves it.
         assert_eq!(above(&["/Heat.1995.mkv"], &["/Heat.1995.jpg"]), [None]);
+    }
+
+    /// The whole point of a folder of posters: a name is all there is to go on,
+    /// and the name a release carries is not the name a poster carries.
+    #[test]
+    fn a_picture_finds_the_film_its_name_reduces_to() {
+        let films = &[
+            "/films/Heat.1995.1080p.BluRay.x264-GROUP.mkv",
+            "/films/Ran (1985)/Ran.mkv",
+        ];
+        let pictures = &["/pictures/Heat.1995.jpg", "/pictures/ran.png"];
+
+        assert_eq!(
+            dressed(pictures, films),
+            vec![
+                Some("/pictures/Heat.1995.jpg".to_owned()),
+                Some("/pictures/ran.png".to_owned()),
+            ]
+        );
+
+        // The suffix a media manager writes is read off the picture as well, so
+        // a folder saved by one of those tools matches the same way.
+        assert_eq!(
+            dressed(&["/pictures/Heat.1995-poster.jpg"], &films[..1]),
+            vec![Some("/pictures/Heat.1995-poster.jpg".to_owned())]
+        );
+    }
+
+    /// Two remakes reduce to the same name and are told apart by the year, in
+    /// exactly the way the subtitle pairing tells them apart.
+    #[test]
+    fn two_films_of_the_same_name_are_told_apart_by_the_year() {
+        let films = &["/films/Heat.1995.mkv", "/films/Heat.1986.mkv"];
+
+        assert_eq!(
+            dressed(
+                &["/pictures/Heat.1986.jpg", "/pictures/Heat.1995.jpg"],
+                films
+            ),
+            vec![
+                Some("/pictures/Heat.1995.jpg".to_owned()),
+                Some("/pictures/Heat.1986.jpg".to_owned()),
+            ]
+        );
+
+        // A picture that names no year agrees with either, so both take it.
+        // Nothing about the folder says which of them it was meant for, and a
+        // cover somebody can see is wrong is better than one film covered by a
+        // guess and the other left bare.
+        let both = dressed(&["/pictures/Heat.jpg"], films);
+        assert_eq!(both[0], Some("/pictures/Heat.jpg".to_owned()));
+        assert_eq!(both[1], both[0]);
+    }
+
+    #[test]
+    fn a_film_the_folder_has_nothing_for_is_left_alone() {
+        let films = &["/films/Heat.1995.mkv", "/films/Ran.1985.mkv"];
+
+        // A picture belonging to a film that is not in the library, and one
+        // whose name reduces to nothing at all.
+        assert_eq!(
+            dressed(
+                &["/pictures/Sicario.2015.jpg", "/pictures/1080p.jpg"],
+                films
+            ),
+            vec![None, None]
+        );
+        // A folder with no pictures in it, which is what a folder of something
+        // else looks like from here.
+        assert_eq!(dressed(&[], films), vec![None, None]);
+        // And a picture named after the folder it sits in, which in a folder of
+        // posters names no film.
+        assert_eq!(dressed(&["/pictures/poster.jpg"], films), vec![None, None]);
+    }
+
+    /// A folder that has been moved or unplugged since it was chosen. The walk
+    /// says there is nothing there rather than failing, so nothing is matched
+    /// and no film is touched.
+    #[test]
+    fn a_folder_that_is_not_there_covers_nothing() {
+        let directory = TempDir::new().unwrap();
+        let gone = directory.path().join("never-existed");
+
+        let pictures = crate::walk::discover(&gone).images;
+        assert!(pictures.is_empty());
+
+        let films = found(&["/films/Heat.1995.mkv"]);
+        assert_eq!(super::from_folder(&pictures, &names(&films)), vec![None]);
     }
 }
