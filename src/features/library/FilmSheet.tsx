@@ -25,6 +25,7 @@ import { ComposedCover } from './ComposedCover';
 import { coverNameOf, coverStatementOf, isChosen } from './covers';
 import { useCover } from './useCover';
 import { fileFactsOf } from './facts';
+import { FrameCover } from './FrameCover';
 import { useFrames } from './frames';
 import { pictureFor } from './picture';
 import { remainingOf } from './remaining';
@@ -138,9 +139,11 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
 
             <div className={styles.picture}>
               <motion.span layoutId={frameId(film.id)} className={styles.cover}>
-                {picture.kind === 'composed' ? (
-                  <ComposedCover film={film} />
-                ) : (
+                {picture.kind === 'composed' && <ComposedCover film={film} />}
+                {picture.kind === 'frame' && (
+                  <FrameCover film={film} src={sourceOf(picture.path)} />
+                )}
+                {picture.kind === 'artwork' && (
                   <img
                     className={styles.still}
                     src={sourceOf(picture.path)}

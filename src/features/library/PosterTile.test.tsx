@@ -67,10 +67,14 @@ describe('a film in the grid', () => {
 
     const container = show(film);
 
+    // Whole rather than cut down the middle, on a blurred extension of itself,
+    // with the title over it and the caption still under the tile.
+    expect(container.querySelectorAll('img')).toHaveLength(2);
     expect(container.querySelector('img')).toHaveAttribute(
       'src',
       'asset:///data/posters/heat.webp',
     );
+    expect(screen.getAllByText('Heat')).toHaveLength(2);
   });
 
   it('composes a film whose poster has not been drawn yet, frames or not', () => {

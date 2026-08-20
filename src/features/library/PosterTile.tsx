@@ -8,6 +8,7 @@ import { stillnessWanted } from '@/shared/ui/stillness';
 import { useFilmPalette } from './accent';
 import { ComposedCover } from './ComposedCover';
 import { CoverMark } from './CoverMark';
+import { FrameCover } from './FrameCover';
 import { pictureFor } from './picture';
 import { frameId } from './transition';
 import { linesOf } from './useLibrary';
@@ -81,9 +82,9 @@ export function PosterTile({ film, onOpen, shared = true }: PosterTileProps) {
         }}
       >
         <motion.span {...(shared && { layoutId: frameId(film.id) })} className={styles.frame}>
-          {picture.kind === 'composed' ? (
-            <ComposedCover film={film} />
-          ) : (
+          {picture.kind === 'composed' && <ComposedCover film={film} />}
+          {picture.kind === 'frame' && <FrameCover film={film} src={sourceOf(picture.path)} />}
+          {picture.kind === 'artwork' && (
             <img className={styles.still} src={sourceOf(picture.path)} alt="" draggable={false} />
           )}
 
