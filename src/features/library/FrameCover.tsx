@@ -1,4 +1,5 @@
 import type { FilmView } from '@/shared/ipc/bindings';
+import { classes } from '@/shared/ui/classes';
 import styles from './FrameCover.module.css';
 
 /**
@@ -13,7 +14,9 @@ import styles from './FrameCover.module.css';
  *
  * The title is set over it because a frame does not carry one the way a poster
  * does. A frame that admits to being a frame is a better answer than a frame
- * pretending to be artwork.
+ * pretending to be artwork. It is left off where the title is already set
+ * beside the picture, since the masthead names the film in its own heading and
+ * two of them would be the same word twice.
  *
  * The same image twice, which costs one decode: the second use of a URL is the
  * first one's bitmap.
@@ -23,14 +26,16 @@ interface FrameCoverProps {
   film: FilmView;
   /** Where the poster drawn from the frame is served from. */
   src: string;
+  /** Whether the film's title is set over it. */
+  titled?: boolean;
 }
 
-export function FrameCover({ film, src }: FrameCoverProps) {
+export function FrameCover({ film, src, titled = true }: FrameCoverProps) {
   return (
-    <span className={styles.cover} aria-hidden="true">
+    <span className={classes(styles.cover, titled && styles.titled)} aria-hidden="true">
       <img className={styles.wash} src={src} alt="" draggable={false} />
       <img className={styles.shot} src={src} alt="" draggable={false} />
-      <span className={styles.title}>{film.title}</span>
+      {titled && <span className={styles.title}>{film.title}</span>}
     </span>
   );
 }

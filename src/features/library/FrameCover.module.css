@@ -42,8 +42,9 @@
   object-fit: contain;
 }
 
-/* A scrim under the words, so the title reads over a bright frame. */
-.cover::after {
+/* A scrim under the words, so the title reads over a bright frame. Drawn only
+   where there are words, since a dark band under nothing is just a dark band. */
+.titled::after {
   content: '';
   position: absolute;
   inset: 0;
