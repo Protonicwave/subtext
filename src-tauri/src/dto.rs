@@ -907,6 +907,29 @@ pub(crate) struct PosterWanted {
     pub(crate) cover: bool,
 }
 
+/// What a folder of pictures turned out to cover.
+///
+/// Two counts and nothing else. Which films took a cover is not reported here
+/// because the library is read again straight afterwards and says so itself,
+/// film by film, in the source on every row.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CoversTaken {
+    /// Films that took a cover from the folder.
+    pub(crate) matched: u32,
+    /// Films the folder had nothing for, which are left exactly as they were.
+    pub(crate) unmatched: u32,
+}
+
+impl CoversTaken {
+    pub(crate) fn of(matched: usize, films: usize) -> Self {
+        Self {
+            matched: count(matched),
+            unmatched: count(films.saturating_sub(matched)),
+        }
+    }
+}
+
 /// Where a film was left.
 #[derive(Clone, Copy, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]

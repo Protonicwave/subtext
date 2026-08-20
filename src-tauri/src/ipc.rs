@@ -50,6 +50,7 @@ pub(crate) fn bindings() -> Builder<tauri::Wry> {
             commands::choose_image,
             commands::choose_cover,
             commands::clear_cover,
+            commands::covers_from_folder,
             commands::read_preferences,
             commands::write_preference,
             commands::forget_preferences,

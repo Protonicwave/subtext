@@ -236,6 +236,20 @@ export const commands = {
 	 */
 	clearCover: (filmId: Id) => typedError<FilmView, Failure>(__TAURI_INVOKE("clear_cover", { filmId })),
 	/**
+	 *  Covers as much of the library as one folder of pictures can.
+	 * 
+	 *  The folder is walked for pictures and each one is matched to the film its
+	 *  name reduces to. A film the folder has nothing for is left exactly as it
+	 *  was, since a folder somebody pointed at is an offer of artwork and not a
+	 *  statement that everything else is wrong.
+	 * 
+	 *  What is matched is recorded as chosen, because it was: somebody pointed at
+	 *  the folder. That includes a film whose cover was already chosen by hand,
+	 *  which is the one place a choice is overwritten, and it is overwritten by a
+	 *  later choice rather than by a scan.
+	 */
+	coversFromFolder: (path: string) => typedError<CoversTaken, Failure>(__TAURI_INVOKE("covers_from_folder", { path })),
+	/**
 	 *  Every preference that has been set, by key.
 	 * 
 	 *  The whole lot in one call rather than a call per control. There are a few
@@ -502,6 +516,20 @@ export type CorrectionView = {
 export type CoverSourceView = "chosen" | "in-file" | "beside" | "sidecar" | "folder-above" | 
 /**  No image was found, so the tile is drawn from the film itself. */
 "none";
+
+/**
+ *  What a folder of pictures turned out to cover.
+ * 
+ *  Two counts and nothing else. Which films took a cover is not reported here
+ *  because the library is read again straight afterwards and says so itself,
+ *  film by film, in the source on every row.
+ */
+export type CoversTaken = {
+	/**  Films that took a cover from the folder. */
+	matched: number,
+	/**  Films the folder had nothing for, which are left exactly as they were. */
+	unmatched: number,
+};
 
 /**  One of the nine places a cue can ask to be drawn. */
 export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
