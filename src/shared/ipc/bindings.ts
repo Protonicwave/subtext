@@ -203,6 +203,39 @@ export const commands = {
 	pair: string,
 } | null, durationMs: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("save_poster", { filmId, image, accent, durationMs })),
 	/**
+	 *  Opens the platform's own file picker, filtered to picture files.
+	 * 
+	 *  The other half of settling a cover by hand. What comes back is a path and
+	 *  nothing else: whether the file is a picture at all is [`choose_cover`]'s
+	 *  question, because a path can also arrive from a drop and both have to be
+	 *  held to the same test.
+	 */
+	chooseImage: () => typedError<string | null, Failure>(__TAURI_INVOKE("choose_image")),
+	/**
+	 *  Settles a film's cover, because somebody said which picture it is.
+	 * 
+	 *  The one source no scan is allowed to have an opinion about, which is what
+	 *  makes this worth a command of its own rather than a row written like any
+	 *  other. The file stays exactly where it is: what is recorded is where to
+	 *  find it, and the poster drawn from it goes in the cache with every other.
+	 */
+	chooseCover: (filmId: Id, path: string) => typedError<FilmView, Failure>(__TAURI_INVOKE("choose_cover", { filmId, path })),
+	/**
+	 *  Gives a film back to the scan, which is the undo of choosing.
+	 * 
+	 *  The choice is dropped and the folder is looked at again, so what the film
+	 *  ends up with is what a scan would have given it and stays that way. Doing
+	 *  only the first half would leave a film showing a frame until the next
+	 *  startup and then quietly showing artwork again, which is a state nobody
+	 *  asked for and could not keep.
+	 * 
+	 *  A film the disk has no picture for ends with no cover at all, and the tile
+	 *  goes back to being drawn from the film itself. That is what taking a frame
+	 *  means here, and it is the common case in a library of releases that carry
+	 *  no artwork.
+	 */
+	clearCover: (filmId: Id) => typedError<FilmView, Failure>(__TAURI_INVOKE("clear_cover", { filmId })),
+	/**
 	 *  Every preference that has been set, by key.
 	 * 
 	 *  The whole lot in one call rather than a call per control. There are a few
