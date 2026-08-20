@@ -22,6 +22,8 @@ import { useAlignment } from '@/features/player/useAlignment';
 import { useSync } from '@/features/player/useSync';
 import { useFilmPalette } from './accent';
 import { ComposedCover } from './ComposedCover';
+import { coverNameOf, coverStatementOf, isChosen } from './covers';
+import { useCover } from './useCover';
 import { fileFactsOf } from './facts';
 import { useFrames } from './frames';
 import { remainingOf } from './remaining';
@@ -108,6 +110,9 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
 
       <div
         className={styles.sheet}
+        // Named so that a picture dropped anywhere on the page becomes this
+        // film's cover, the same way one dropped on its tile does.
+        data-film-id={film.id}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`film-sheet-${String(film.id)}`}
@@ -125,13 +130,17 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
               <CloseIcon size={12} />
             </button>
 
-            <motion.span layoutId={frameId(film.id)} className={styles.cover}>
-              {still === null ? (
-                <ComposedCover film={film} />
-              ) : (
-                <img className={styles.still} src={still} alt="" draggable={false} />
-              )}
-            </motion.span>
+            <div className={styles.picture}>
+              <motion.span layoutId={frameId(film.id)} className={styles.cover}>
+                {still === null ? (
+                  <ComposedCover film={film} />
+                ) : (
+                  <img className={styles.still} src={still} alt="" draggable={false} />
+                )}
+              </motion.span>
+
+              <CoverChoice film={film} />
+            </div>
 
             <div className={styles.head}>
               <h2 className={styles.title} id={`film-sheet-${String(film.id)}`}>
@@ -220,6 +229,46 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Where the picture came from, and the two ways to change it.
+ *
+ * Under the cover because that is what it is about. A film page that shows an
+ * image without saying what kind of claim it is leaves somebody guessing at
+ * whether Subtext found the artwork or made a frame up, and those are very
+ * different things to be looking at.
+ *
+ * Putting a choice back is offered only where there is one, since a cover the
+ * scan chose is already the scan's to change and offering to hand it back
+ * would be offering to do nothing.
+ */
+function CoverChoice({ film }: { film: FilmView }) {
+  const cover = useCover(film);
+
+  return (
+    <div className={styles.source}>
+      <p className={styles.sourceName}>{coverNameOf(film.coverSource)}</p>
+      <p className={styles.sourceNote}>{coverStatementOf(film.coverSource)}</p>
+
+      <div className={styles.sourceActions}>
+        <Button tone="ghost" disabled={cover.busy} onClick={cover.choose}>
+          Choose an image
+        </Button>
+        {isChosen(film.coverSource) && (
+          <Button tone="ghost" disabled={cover.busy} onClick={cover.clear}>
+            Use what was found
+          </Button>
+        )}
+      </div>
+
+      {cover.problem !== null && (
+        <p className={styles.sourceProblem} role="status">
+          {cover.problem}
+        </p>
+      )}
     </div>
   );
 }

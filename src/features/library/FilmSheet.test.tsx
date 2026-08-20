@@ -15,6 +15,9 @@ const { ipc } = vi.hoisted(() => ({
     cancelAlignment: vi.fn(() => Promise.resolve(null)),
     setTrackCorrection: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
     trackCues: vi.fn((): Promise<CueView[]> => Promise.resolve([])),
+    chooseImage: vi.fn((): Promise<string | null> => Promise.resolve(null)),
+    chooseCover: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
+    clearCover: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
   },
 }));
 
@@ -40,6 +43,7 @@ vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://$
 
 const { LEAD_MS } = await import('@/features/player/check');
 const { CHECK } = await import('@/features/player/outcomes');
+const { IpcError } = await import('@/shared/ipc/client');
 const { FilmSheet } = await import('./FilmSheet');
 const { useLibrary } = await import('./useLibrary');
 const { useSheet } = await import('./useSheet');
@@ -490,4 +494,106 @@ describe('the film sheet', () => {
       expect(screen.getByRole('status')).toHaveTextContent(/bracket keys still work/);
     });
   });
+  /*
+   * Where the picture came from, and the two ways to settle it. The statement
+   * is the same one the mark on a tile makes, from the same place, so the two
+   * cannot come to describe the same film differently.
+   */
+  describe('the cover', () => {
+    it('says where the picture came from', () => {
+      open({ coverSource: 'beside' });
+
+      expect(screen.getByText('Beside the film')).toBeInTheDocument();
+      expect(screen.getByText(/sitting next to the film on the disk/)).toBeInTheDocument();
+    });
+
+    it('says plainly when there was no artwork to find', () => {
+      open({ coverSource: 'none' });
+
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+      expect(screen.getByText(/No artwork was found anywhere on the disk/)).toBeInTheDocument();
+    });
+
+    it('settles on a picture that was picked, and redraws from what came back', async () => {
+      const chosen = { ...film, coverSource: 'chosen' as const };
+      ipc.chooseImage.mockReturnValue(Promise.resolve('/pictures/Heat.png'));
+      ipc.chooseCover.mockReturnValue(Promise.resolve(chosen));
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Your choice')).toBeInTheDocument();
+      });
+      expect(ipc.chooseCover).toHaveBeenCalledWith(film.id, '/pictures/Heat.png');
+      // Read back rather than patched, so the page says what the library says.
+      expect(useLibrary.getState().films[0]?.coverSource).toBe('chosen');
+    });
+
+    it('changes nothing when the picker is closed without a picture', async () => {
+      ipc.chooseImage.mockReturnValue(Promise.resolve(null));
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(ipc.chooseImage).toHaveBeenCalled();
+      });
+      expect(ipc.chooseCover).not.toHaveBeenCalled();
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+    });
+
+    it('says why a picture was refused, and leaves the film as it was', async () => {
+      ipc.chooseImage.mockReturnValue(Promise.resolve('/pictures/Heat.mkv'));
+      // Rejected when it is called rather than when it is set up, so the
+      // failure belongs to the click and not to the test's own arrangement.
+      ipc.chooseCover.mockImplementation(() =>
+        Promise.reject(new IpcError('that file is not a JPEG, a PNG or a WebP')),
+      );
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('status')).toHaveTextContent(/not a JPEG, a PNG or a WebP/);
+      });
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+    });
+
+    /*
+     * Only a picked cover can be handed back. Offering to put back one the scan
+     * chose would be offering to do nothing, since the scan is already free to
+     * change it.
+     */
+    it('offers to put a choice back, and only where there is one', async () => {
+      ipc.clearCover.mockReturnValue(Promise.resolve({ ...film, coverSource: 'none' as const }));
+      open({ coverSource: 'chosen' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Use what was found' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('From the film itself')).toBeInTheDocument();
+      });
+      expect(ipc.clearCover).toHaveBeenCalledWith(film.id);
+      expect(screen.queryByRole('button', { name: 'Use what was found' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * A drop is reported to the window rather than to the element under it, so
+     * the page says which film it is and the routing works the rest out.
+     */
+    it('names its film so a picture can be dropped on it', () => {
+      open();
+
+      expect(screen.getByRole('dialog')).toHaveAttribute('data-film-id', String(film.id));
+    });
+
+    it('still says where the picture came from for a film that has gone', () => {
+      open({ missing: true, coverSource: 'sidecar' });
+
+      expect(screen.getByText('From a media manager')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Choose an image' })).toBeInTheDocument();
+    });
+  });
+
 });
