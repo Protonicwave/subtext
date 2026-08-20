@@ -13,6 +13,7 @@ function film(position: PositionView | null): FilmView {
     addedAt: Date.UTC(2026, 7, 12),
     durationMs: 10_260_000,
     posterPath: null,
+    coverPath: null,
     coverSource: 'none',
     accent: null,
     missing: false,

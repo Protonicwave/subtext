@@ -43,6 +43,7 @@ const summary: ScanSummary = {
   subtitlesRead: 20,
   cuesIndexed: 15_000,
   filmsMissing: 0,
+  coversChanged: 0,
   unpairedSubtitles: [],
   filmsWithoutSubtitles: [],
   unreadable: [],

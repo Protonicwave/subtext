@@ -128,6 +128,12 @@ pub(crate) struct FilmView {
     pub(crate) added_at: Millis,
     pub(crate) duration_ms: Option<u32>,
     pub(crate) poster_path: Option<String>,
+    /// The image the poster was drawn from, where there was one.
+    ///
+    /// Not what is drawn: the poster is. It is what the report after a scan
+    /// shows beside each place a cover came from, so that a statement about
+    /// where the artwork was found can be checked against the disk.
+    pub(crate) cover_path: Option<String>,
     /// Where the picture the poster was drawn from came from, which is what the
     /// film page says under the cover and what tells a frame apart from artwork
     /// somebody put there.
@@ -177,6 +183,10 @@ impl FilmView {
             added_at: Millis::of(film.added_at),
             duration_ms: film.duration.map(Timestamp::millis),
             poster_path: film.poster_path.map(|path| path.display().to_string()),
+            cover_path: film
+                .cover
+                .as_ref()
+                .map(|cover| cover.path.display().to_string()),
             cover_source: CoverSourceView::of(Cover::source_of(film.cover.as_ref())),
             accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
@@ -966,6 +976,9 @@ pub(crate) struct ScanSummary {
     pub(crate) subtitles_read: u32,
     pub(crate) cues_indexed: u32,
     pub(crate) films_missing: u32,
+    /// Films whose cover changed. What the report after a scan is shown for,
+    /// since a scan that settled nothing new has nothing to report.
+    pub(crate) covers_changed: u32,
     /// Subtitle files belonging to no film, which the import sheet offers to
     /// attach by hand.
     pub(crate) unpaired_subtitles: Vec<String>,
@@ -987,6 +1000,7 @@ impl ScanSummary {
             subtitles_read: count(outcome.subtitles_read),
             cues_indexed: count(outcome.cues_indexed),
             films_missing: count(outcome.films_missing),
+            covers_changed: count(outcome.covers_changed),
             unpaired_subtitles: paths(&outcome.unpaired_subtitles),
             films_without_subtitles: paths(&outcome.films_without_subtitles),
             unreadable: paths(&outcome.unreadable),

@@ -348,3 +348,25 @@ fn a_rescan_does_not_open_a_sidecar_the_row_already_answers_for() {
     library.scan();
     assert_eq!(cover_of(&library, "Heat (1995)/Heat.mkv"), expected);
 }
+
+/// What the report shown after a scan is opened on. A scan that settled nothing
+/// new has nothing to say about covers, and a library nobody has touched is
+/// almost every scan there is.
+#[test]
+fn a_scan_says_how_many_covers_it_changed_and_says_nothing_twice() {
+    let library = Fixture::new();
+    library.matroska("Heat.1995.mkv", entries());
+    library.write("Heat.1995.jpg", ARTWORK);
+    library.matroska("Ronin.1998.mkv", entries());
+
+    // One film found a picture beside it; the other had nothing to find, which
+    // is what its row already said.
+    assert_eq!(library.scan().covers_changed, 1);
+    assert_eq!(library.scan().covers_changed, 0);
+
+    // A picture appearing beside the second film is a change the next scan
+    // makes, and the one after it is quiet again.
+    library.write("Ronin.1998.jpg", ARTWORK);
+    assert_eq!(library.scan().covers_changed, 1);
+    assert_eq!(library.scan().covers_changed, 0);
+}

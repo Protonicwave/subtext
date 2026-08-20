@@ -58,6 +58,10 @@ pub struct ScanOutcome {
     pub cues_indexed: usize,
     pub films_missing: usize,
     pub tracks_removed: usize,
+    /// Films whose cover changed, which is what the report shown after a scan
+    /// exists to describe. Nought for a rescan of a library nobody has touched,
+    /// since deciding a cover writes only where the answer is different.
+    pub covers_changed: usize,
     /// Films opened to see what they are and what subtitle tracks they carry.
     pub films_probed: usize,
     /// Subtitle tracks found inside those films.
@@ -175,7 +179,7 @@ pub fn scan_folder(
         .iter()
         .map(|(id, cover)| (*id, cover.as_ref()))
         .collect();
-    database.films().set_covers(&covers)?;
+    let covers_changed = database.films().set_covers(&covers)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
@@ -195,6 +199,7 @@ pub fn scan_folder(
         subtitles_read: written.tracks,
         cues_indexed: written.cues,
         films_missing,
+        covers_changed,
         tracks_removed: plan.removed.len(),
         films_probed: films_to_open.len(),
         embedded_tracks: written.streams,

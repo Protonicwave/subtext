@@ -595,6 +595,14 @@ export type FilmView = {
 	durationMs: number | null,
 	posterPath: string | null,
 	/**
+	 *  The image the poster was drawn from, where there was one.
+	 * 
+	 *  Not what is drawn: the poster is. It is what the report after a scan
+	 *  shows beside each place a cover came from, so that a statement about
+	 *  where the artwork was found can be checked against the disk.
+	 */
+	coverPath: string | null,
+	/**
 	 *  Where the picture the poster was drawn from came from, which is what the
 	 *  film page says under the cover and what tells a frame apart from artwork
 	 *  somebody put there.
@@ -830,6 +838,11 @@ export type ScanSummary = {
 	subtitlesRead: number,
 	cuesIndexed: number,
 	filmsMissing: number,
+	/**
+	 *  Films whose cover changed. What the report after a scan is shown for,
+	 *  since a scan that settled nothing new has nothing to report.
+	 */
+	coversChanged: number,
 	/**
 	 *  Subtitle files belonging to no film, which the import sheet offers to
 	 *  attach by hand.

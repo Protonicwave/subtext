@@ -83,6 +83,7 @@ const film = {
   addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: '/data/posters/heat.webp',
+  coverPath: null,
   coverSource: 'none',
   accent: null,
   missing: false,
@@ -595,5 +596,4 @@ describe('the film sheet', () => {
       expect(screen.getByRole('button', { name: 'Choose an image' })).toBeInTheDocument();
     });
   });
-
 });
