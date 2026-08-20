@@ -103,6 +103,41 @@ pub(crate) fn is_image(file_name: &str) -> bool {
     classify(file_name) == Some(FileKind::Image)
 }
 
+/// How many bytes of a file are enough to say what picture format it is in.
+///
+/// The longest signature below is WebP's, which is settled by the twelfth
+/// byte. A round block with room above that costs nothing on top of opening
+/// the file at all, and leaves somewhere for a format added later to sit.
+pub const PICTURE_HEAD: usize = 32;
+
+/// Whether the head of a file is a picture in one of the formats above.
+///
+/// Asked of a file somebody picked by hand, where the extension is a claim
+/// rather than a fact: a film renamed to `poster.jpg` would pass the name test
+/// above and then draw nothing at all, which reads as the application losing
+/// the image rather than as the file being wrong. The walk keeps to names
+/// because it meets thousands of files and opens none of them; a single file
+/// somebody pointed at is worth the read.
+///
+/// The signatures are the ones the list of extensions above stands for, and
+/// the two must be changed together. Nothing here decodes: this says the file
+/// begins the way one of those formats begins, which is as much as can be
+/// known without drawing it.
+#[must_use]
+pub fn is_picture(head: &[u8]) -> bool {
+    // JPEG, in every variant, begins with the start-of-image marker followed by
+    // the first marker of whatever flavour it is.
+    if head.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return true;
+    }
+    if head.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
+        return true;
+    }
+    // WebP is a RIFF container, so the four bytes that name it sit after the
+    // signature and the length rather than at the front.
+    head.len() >= 12 && head.starts_with(b"RIFF") && head[8..12] == *b"WEBP"
+}
+
 /// What container a film is in, by the name of its file.
 ///
 /// A film that reached the library got here through [`classify`], so this
@@ -147,7 +182,37 @@ pub(crate) fn might_matter(path: &Path) -> bool {
 mod tests {
     use std::path::Path;
 
-    use super::{FileKind, classify, container_of, is_image, is_worth_walking, might_matter};
+    use super::{
+        FileKind, classify, container_of, is_image, is_picture, is_worth_walking, might_matter,
+    };
+
+    #[test]
+    fn the_picture_formats_are_recognised_by_their_first_bytes() {
+        assert!(is_picture(&[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]));
+        assert!(is_picture(&[
+            0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00
+        ]));
+        assert!(is_picture(b"RIFF\x24\x00\x00\x00WEBPVP8 "));
+    }
+
+    #[test]
+    fn anything_else_is_not_a_picture() {
+        assert!(!is_picture(b""));
+        assert!(!is_picture(b"<?xml version=\"1.0\"?><movie>"));
+        // A film given a picture's name, which is the case the name test above
+        // cannot tell apart and this one can.
+        assert!(!is_picture(b"\x00\x00\x00\x20ftypisom"));
+    }
+
+    #[test]
+    fn a_riff_file_that_is_not_a_webp_is_not_a_picture() {
+        // An AVI is a RIFF container too, so the four bytes after the length
+        // are what separates the two and a prefix match alone would not.
+        assert!(!is_picture(b"RIFF\x24\x00\x00\x00AVI LIST"));
+        // Truncated before the format is named, which is what a file that
+        // stopped mid-header looks like.
+        assert!(!is_picture(b"RIFF\x24\x00"));
+    }
 
     #[test]
     fn recognises_films_and_subtitles() {
