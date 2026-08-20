@@ -1,4 +1,4 @@
-import type { CoverSourceView } from '@/shared/ipc/bindings';
+import type { CoverSourceView, FilmView } from '@/shared/ipc/bindings';
 
 /**
  * What to say about where a film's picture came from.
@@ -49,4 +49,54 @@ export function coverStatementOf(source: CoverSourceView): string {
  */
 export function isChosen(source: CoverSourceView): boolean {
   return source === 'chosen';
+}
+
+/**
+ * The order the places are stated in, which is the order of how good a claim
+ * each one is and the same order the back end decides them in.
+ *
+ * Nothing found is not among them. A film with no artwork is not covered from a
+ * place, and the report says what is left over rather than counting a place
+ * called nowhere.
+ */
+const PLACES: CoverSourceView[] = ['chosen', 'in-file', 'beside', 'sidecar', 'folder-above'];
+
+/** How many films took their cover from one place, and one of the pictures. */
+export interface CoverPlace {
+  source: CoverSourceView;
+  films: number;
+  /** One picture from that place, so the statement can be checked on disk. */
+  example: string | null;
+}
+
+export interface CoverTally {
+  /** The places that covered at least one film, best claim first. */
+  places: CoverPlace[];
+  /** Films with no artwork anywhere, which are drawn from their own titles. */
+  leftOver: FilmView[];
+}
+
+/**
+ * Where the library's covers came from, counted.
+ *
+ * Over the whole library rather than over what a scan touched, because that is
+ * what the statement is about: a person reading it wants to know what their
+ * films look like now, not which rows were written in the last few seconds.
+ * Every film lands in exactly one place or in the leftovers, so the numbers add
+ * up to what the library holds.
+ */
+export function coverTallyOf(films: readonly FilmView[]): CoverTally {
+  const places = PLACES.map((source) => {
+    const covered = films.filter((film) => film.coverSource === source);
+    return {
+      source,
+      films: covered.length,
+      example: covered.find((film) => film.coverPath !== null)?.coverPath ?? null,
+    };
+  });
+
+  return {
+    places: places.filter((place) => place.films > 0),
+    leftOver: films.filter((film) => film.coverSource === 'none'),
+  };
 }

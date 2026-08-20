@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
@@ -236,6 +236,39 @@ describe('importing a folder', () => {
 
     const sheet = await screen.findByRole('dialog', { name: 'What was found' });
     expect(sheet).toHaveTextContent('1 film · 0 with subtitles · 1 without');
+  });
+
+  /*
+   * A scan that settled a cover has something to say about where the artwork
+   * came from, and one that settled none has not. The second half is what
+   * keeps the statement worth reading: almost every scan changes nothing.
+   */
+  it('says where the covers came from when the scan settled any', async () => {
+    useLibrary.setState({
+      films: [{ ...film, coverSource: 'beside', coverPath: '/films/Heat.1995.jpg' }, unpaired],
+    });
+
+    render(<ImportFlow />);
+    asked();
+    emit('finished', [{ ...summary, coversChanged: 1 }]);
+
+    const sheet = await screen.findByRole('dialog', { name: 'What was found' });
+    expect(within(sheet).getByText('/films/Heat.1995.jpg')).toBeInTheDocument();
+    // And the film that found nothing is offered the way to settle it by hand.
+    expect(within(sheet).getByRole('button', { name: 'Choose a picture' })).toBeInTheDocument();
+  });
+
+  it('says nothing about covers when the scan changed none', async () => {
+    render(<ImportFlow />);
+    asked();
+
+    emit('finished', [summary]);
+
+    const sheet = await screen.findByRole('dialog', { name: 'What was found' });
+    expect(within(sheet).queryByText(/no artwork/)).not.toBeInTheDocument();
+    expect(
+      within(sheet).queryByRole('button', { name: 'Choose a picture' }),
+    ).not.toBeInTheDocument();
   });
 
   it('says when a match was only a close one', async () => {
