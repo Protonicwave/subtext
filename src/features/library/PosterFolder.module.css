@@ -1,0 +1,14 @@
+/* The button sits in a settings row, so the failure has to sit under it. */
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.problem {
+  max-width: 32ch;
+  font-size: var(--text-2xs);
+  color: var(--colour-attention);
+  text-align: right;
+}

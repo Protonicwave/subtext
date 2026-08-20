@@ -4,6 +4,7 @@ import { CloseIcon, FolderIcon } from '@/shared/ui/Icon';
 import { ipc, reasonFor } from '@/shared/ipc/client';
 import { useImport } from '@/features/onboarding/useImport';
 import { useLibrary } from '@/features/library/useLibrary';
+import { PosterFolder } from '@/features/library/PosterFolder';
 import { Action, Choice } from './controls';
 import { useSetting } from '@/shared/settings/useSettings';
 import styles from './LibrarySection.module.css';
@@ -95,6 +96,13 @@ export function LibrarySection() {
           { value: 'exact', label: 'Exact names' },
         ]}
       />
+
+      <Action
+        label="Covers from a folder of pictures"
+        hint="If you keep your posters together, Subtext can match them to your films by name in one pass. The pictures stay where they are: nothing is copied, moved or written beside your films."
+      >
+        <PosterFolder />
+      </Action>
 
       <Action
         label="Read your folders again"
