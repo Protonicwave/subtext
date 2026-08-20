@@ -13,7 +13,7 @@ use specta::Type;
 use specta_typescript::Number;
 use subtext_align::{Alignment, Confidence, Landing, Misfit};
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
-use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
+use subtext_core::{Correction, Cover, CoverSource, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
     AudioDetails, FilmRecord, PlaybackPosition, TrackMatch, TrackOrigin, TrackRecord, VideoDetails,
     WatchedFolder,
@@ -128,6 +128,10 @@ pub(crate) struct FilmView {
     pub(crate) added_at: Millis,
     pub(crate) duration_ms: Option<u32>,
     pub(crate) poster_path: Option<String>,
+    /// Where the picture the poster was drawn from came from, which is what the
+    /// film page says under the cover and what tells a frame apart from artwork
+    /// somebody put there.
+    pub(crate) cover_source: CoverSourceView,
     pub(crate) accent: Option<AccentView>,
     /// The file is not where it was. The film is kept anyway.
     pub(crate) missing: bool,
@@ -173,6 +177,7 @@ impl FilmView {
             added_at: Millis::of(film.added_at),
             duration_ms: film.duration.map(Timestamp::millis),
             poster_path: film.poster_path.map(|path| path.display().to_string()),
+            cover_source: CoverSourceView::of(Cover::source_of(film.cover.as_ref())),
             accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
             details,
@@ -668,6 +673,36 @@ impl AlignmentView {
             landing: LandingView::of(found.landing()),
             as_written: LandingView::of(found.as_written()),
             wanted,
+        }
+    }
+}
+
+/// Where a film's cover came from.
+///
+/// The claim, not the file. A screen says who chose the image and how directly,
+/// and nothing on this side of the boundary has to know what a `.nfo` is or
+/// which folder was looked in to say it.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CoverSourceView {
+    Chosen,
+    InFile,
+    Beside,
+    Sidecar,
+    FolderAbove,
+    /// No image was found, so the tile is drawn from the film itself.
+    None,
+}
+
+impl CoverSourceView {
+    fn of(source: CoverSource) -> Self {
+        match source {
+            CoverSource::Chosen => Self::Chosen,
+            CoverSource::InFile => Self::InFile,
+            CoverSource::Beside => Self::Beside,
+            CoverSource::Sidecar => Self::Sidecar,
+            CoverSource::FolderAbove => Self::FolderAbove,
+            CoverSource::Nothing => Self::None,
         }
     }
 }

@@ -14,6 +14,7 @@ function film(id: number, title: string, shelf = 'Films'): FilmView {
     addedAt: 0,
     durationMs: null,
     posterPath: null,
+    coverSource: 'none',
     accent: null,
     missing: false,
     details: null,

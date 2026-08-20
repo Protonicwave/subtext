@@ -45,6 +45,7 @@ function film(tracks: TrackView[], changes: Partial<FilmView> = {}): FilmView {
     addedAt: Date.UTC(2026, 7, 12),
     durationMs: null,
     posterPath: null,
+    coverSource: 'none',
     accent: null,
     missing: false,
     details: null,

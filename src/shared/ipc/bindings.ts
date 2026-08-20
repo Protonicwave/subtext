@@ -459,6 +459,17 @@ export type CorrectionView = {
 	rate: number,
 };
 
+/**
+ *  Where a film's cover came from.
+ * 
+ *  The claim, not the file. A screen says who chose the image and how directly,
+ *  and nothing on this side of the boundary has to know what a `.nfo` is or
+ *  which folder was looked in to say it.
+ */
+export type CoverSourceView = "chosen" | "in-file" | "beside" | "sidecar" | "folder-above" | 
+/**  No image was found, so the tile is drawn from the film itself. */
+"none";
+
 /**  One of the nine places a cue can ask to be drawn. */
 export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
 
@@ -522,6 +533,12 @@ export type FilmView = {
 	addedAt: Millis,
 	durationMs: number | null,
 	posterPath: string | null,
+	/**
+	 *  Where the picture the poster was drawn from came from, which is what the
+	 *  film page says under the cover and what tells a frame apart from artwork
+	 *  somebody put there.
+	 */
+	coverSource: CoverSourceView,
 	accent: AccentView | null,
 	/**  The file is not where it was. The film is kept anyway. */
 	missing: boolean,

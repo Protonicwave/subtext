@@ -79,6 +79,7 @@ const film = {
   addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: '/data/posters/heat.webp',
+  coverSource: 'none',
   accent: null,
   missing: false,
   details,
