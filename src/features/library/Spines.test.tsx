@@ -121,8 +121,13 @@ describe('the spines', () => {
   });
 
   /*
-   * A thousand spines inside one frame, holding no image between them. The
-   * second is what makes the first true, so both are asserted together.
+   * A thousand spines inside one frame, holding no image between them.
+   *
+   * The two are one property. A spine is a button and a title, and what keeps a
+   * large library cheap is that the rows out of view do not exist and that
+   * nothing here ever decodes a picture. Both are asserted rather than the
+   * timing alone, since a render under a test runner is not a paint and the
+   * count is the part that would not change in a browser.
    */
   it('draws a thousand spines quickly and holds no picture', () => {
     const many = Array.from({ length: 1_000 }, (_, at) => make(at + 1));
@@ -132,9 +137,17 @@ describe('the spines', () => {
     const took = performance.now() - at;
 
     expect(document.querySelectorAll('img, video, canvas')).toHaveLength(0);
-    // Loose against the budget, because a render under a test runner is not a
-    // paint. What it catches is a return to drawing a picture per film, which
-    // is the only thing here that could cost an order of magnitude.
+
+    // Never more than the window holds and a few rows either side, however
+    // large the library. This is the number the drawing budget rests on, and
+    // unlike the timing it says the same thing outside a test runner.
+    const drawn = screen.getAllByRole('button').length;
+    expect(drawn).toBeLessThan(400);
+    expect(drawn).toBeGreaterThan(200);
+
+    // Loose against the budget, because of what a test runner is. What it
+    // catches is a return to drawing every film, which is the only thing here
+    // that could cost an order of magnitude.
     expect(took).toBeLessThan(1_000);
   });
 });
