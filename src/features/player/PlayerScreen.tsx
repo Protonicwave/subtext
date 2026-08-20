@@ -44,9 +44,11 @@ import styles from './PlayerScreen.module.css';
 
 interface PlayerScreenProps {
   filmId: Id;
+  /** Where to begin, where the film was opened at a particular moment. */
+  atMs?: number | undefined;
 }
 
-export function PlayerScreen({ filmId }: PlayerScreenProps) {
+export function PlayerScreen({ filmId, atMs }: PlayerScreenProps) {
   const film = useLibrary((library) => library.films.find((known) => known.id === filmId));
   const back = useNavigation((navigation) => navigation.back);
 
@@ -77,18 +79,30 @@ export function PlayerScreen({ filmId }: PlayerScreenProps) {
 
   // Keyed by the film, so that opening a second one gets a fresh element and
   // fresh state rather than the last film's position.
-  return <Film key={film.id} film={film} onBack={back} />;
+  return <Film key={film.id} film={film} atMs={atMs} onBack={back} />;
 }
 
-function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
+function Film({
+  film,
+  atMs,
+  onBack,
+}: {
+  film: FilmView;
+  atMs: number | undefined;
+  onBack: () => void;
+}) {
   const screen = useRef<HTMLDivElement>(null);
 
   const settings = useSettings((state) => state.settings);
   // Worked out once, and not again when a setting the player also reads
   // changes: the element has already been told where to start.
-  const [start] = useState(() =>
-    settings.resume === 'beginning' ? 0 : startAtOf(film, REWIND_MS),
-  );
+  const [start] = useState(() => {
+    // A film opened at a moment goes there, whatever it was left at and
+    // whatever the resume preference says. Both of those are about coming back
+    // to a film, and this is somebody asking for one part of one.
+    if (atMs !== undefined) return atMs;
+    return settings.resume === 'beginning' ? 0 : startAtOf(film, REWIND_MS);
+  });
 
   // A film starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
