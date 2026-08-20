@@ -20,8 +20,9 @@ use std::time::{Duration, Instant};
 
 use criterion::Criterion;
 use subtext_container::fixture::{Container, Entry, Line};
+use subtext_core::ParsedName;
 use subtext_index::Database;
-use subtext_scan::{Scanner, Silent, discover};
+use subtext_scan::{FoundFile, Scanner, Silent, discover, on_disk};
 use tempfile::TempDir;
 
 /// The thousand file folder the targets are written against.
@@ -46,6 +47,15 @@ const FRAME: usize = 1_500;
 /// How many of the films sit in a subfolder of their own rather than loose in
 /// the root, since most collections are some of each.
 const IN_SUBFOLDERS: usize = 400;
+
+/// The library the cover decision is priced against, which is larger than the
+/// one above because covers are the part of a scan that runs against every film
+/// every time and the target in the plan is written at this size.
+const COVER_FILMS: usize = 2_000;
+
+/// Three pictures a film, which is roughly what a library that has been through
+/// a media manager carries: a poster, a backdrop and one more besides.
+const IMAGES_PER_FILM: usize = 3;
 
 const WORDS: &[&str] = &[
     "the",
@@ -271,6 +281,89 @@ fn against_the_targets(folder: &Folder) {
     );
 }
 
+/// The files a cover decision weighs, built in memory rather than on disk.
+///
+/// What is being priced here is the weighing, which is a question about names,
+/// and the walk that produces these is measured on its own above. Writing
+/// twenty thousand files out to time a comparison between their names would
+/// measure the filesystem instead.
+fn a_library_of_names() -> (
+    Vec<FoundFile>,
+    Vec<ParsedName>,
+    Vec<FoundFile>,
+    Vec<FoundFile>,
+) {
+    let mut films = Vec::with_capacity(COVER_FILMS);
+    let mut images = Vec::with_capacity(COVER_FILMS * IMAGES_PER_FILM);
+    let mut sidecars = Vec::with_capacity(COVER_FILMS);
+
+    for at in 0..COVER_FILMS {
+        // Half in folders of their own and half loose, which is what decides
+        // whether a fixed name counts and so exercises both rules.
+        let folder = if at % 2 == 0 {
+            PathBuf::from("films").join(format!("Film {at:04} ({})", 1970 + at % 50))
+        } else {
+            PathBuf::from("films")
+        };
+
+        let name = format!("Film {at:04}.{}.1080p.BluRay.x264-GROUP", 1970 + at % 50);
+        films.push(found(folder.join(format!("{name}.mkv"))));
+        images.push(found(folder.join(format!("Film {at:04}-poster.jpg"))));
+        images.push(found(folder.join(format!("Film {at:04}-fanart.jpg"))));
+        images.push(found(folder.join("backdrop.png")));
+        sidecars.push(found(folder.join(format!("Film {at:04}.nfo"))));
+    }
+
+    let names = films
+        .iter()
+        .map(|film| ParsedName::from_file_name(&film.file_name))
+        .collect();
+
+    (films, names, images, sidecars)
+}
+
+fn found(path: PathBuf) -> FoundFile {
+    FoundFile {
+        file_name: path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned(),
+        path,
+        size_bytes: 0,
+        modified_at: 0,
+    }
+}
+
+/// Deciding where two thousand films take their covers from, which happens at
+/// the end of every scan and has to stay under 40ms.
+fn covers(criterion: &mut Criterion) {
+    let (films, names, images, sidecars) = a_library_of_names();
+    println!(
+        "
+covers: {} films, {} images and {} sidecars (target 40ms)",
+        films.len(),
+        images.len(),
+        sidecars.len()
+    );
+
+    let mut group = criterion.benchmark_group("covers");
+    group.sample_size(50);
+
+    group.bench_function("two thousand films", |bencher| {
+        bencher.iter(|| {
+            on_disk(
+                black_box(&films),
+                black_box(&names),
+                black_box(&images),
+                black_box(&sidecars),
+            )
+        });
+    });
+
+    group.finish();
+}
+
 /// Walking on its own, repeated, since it is the part that runs every time the
 /// application starts.
 fn walking(criterion: &mut Criterion, folder: &Folder) {
@@ -315,5 +408,6 @@ fn main() {
     let mut criterion = Criterion::default().configure_from_args();
     walking(&mut criterion, &folder);
     rescanning(&mut criterion, &folder);
+    covers(&mut criterion);
     criterion.final_summary();
 }
