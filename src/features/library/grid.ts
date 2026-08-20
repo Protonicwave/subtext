@@ -42,9 +42,9 @@ export const RAIL_CAPTION = 58;
 /**
  * Two by three, the shape a film poster has been for a century.
  *
- * The frames captured from a film are sixteen by nine, so they are cropped to
- * this rather than letterboxed into it. A wall of tall tiles with black bars
- * down both sides is worse than losing the edges of each frame.
+ * A tile is this whatever it is drawing. Artwork off the disk is already this
+ * shape or near enough, a film with none is composed to it, and a frame shown
+ * in place of one is letterboxed into it rather than cut down to it.
  */
 export const TILE_RATIO = 3 / 2;
 

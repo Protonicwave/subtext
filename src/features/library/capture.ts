@@ -52,8 +52,8 @@ export type Moment = { fraction: number } | { seconds: number };
  * The poster drawn from an image that is already on the disk.
  *
  * The bytes are whatever was attached to the film or put beside it, and they go
- * through the same worker a frame does: the same crop to two by three, the same
- * WebP, the same colours read off the pixels. Nothing here opens the film, so
+ * through the same worker a frame does: the same WebP, the same colours read
+ * off the pixels, the same shape kept. Nothing here opens the film, so
  * this costs a decode of one picture rather than a seek into a four gigabyte
  * file, and it says nothing about how long the film runs because nothing asked.
  */
