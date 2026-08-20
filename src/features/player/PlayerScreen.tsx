@@ -17,6 +17,7 @@ import { NEAR_ENOUGH } from './ScrubberPreview';
 import { startAtOf } from './resume';
 import { useActiveLine } from './useActiveLine';
 import { useAlignment } from './useAlignment';
+import { useCheck } from './useCheck';
 import { useControls } from './useControls';
 import { useCues } from './useCues';
 import { useFullscreen } from './useFullscreen';
@@ -43,9 +44,11 @@ import styles from './PlayerScreen.module.css';
 
 interface PlayerScreenProps {
   filmId: Id;
+  /** Where to begin, where the film was opened at a particular moment. */
+  atMs?: number | undefined;
 }
 
-export function PlayerScreen({ filmId }: PlayerScreenProps) {
+export function PlayerScreen({ filmId, atMs }: PlayerScreenProps) {
   const film = useLibrary((library) => library.films.find((known) => known.id === filmId));
   const back = useNavigation((navigation) => navigation.back);
 
@@ -76,18 +79,30 @@ export function PlayerScreen({ filmId }: PlayerScreenProps) {
 
   // Keyed by the film, so that opening a second one gets a fresh element and
   // fresh state rather than the last film's position.
-  return <Film key={film.id} film={film} onBack={back} />;
+  return <Film key={film.id} film={film} atMs={atMs} onBack={back} />;
 }
 
-function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
+function Film({
+  film,
+  atMs,
+  onBack,
+}: {
+  film: FilmView;
+  atMs: number | undefined;
+  onBack: () => void;
+}) {
   const screen = useRef<HTMLDivElement>(null);
 
   const settings = useSettings((state) => state.settings);
   // Worked out once, and not again when a setting the player also reads
   // changes: the element has already been told where to start.
-  const [start] = useState(() =>
-    settings.resume === 'beginning' ? 0 : startAtOf(film, REWIND_MS),
-  );
+  const [start] = useState(() => {
+    // A film opened at a moment goes there, whatever it was left at and
+    // whatever the resume preference says. Both of those are about coming back
+    // to a film, and this is somebody asking for one part of one.
+    if (atMs !== undefined) return atMs;
+    return settings.resume === 'beginning' ? 0 : startAtOf(film, REWIND_MS);
+  });
 
   // A film starts a little before where it was left.
   const [video, playback, transport] = usePlayback(film.path, start);
@@ -127,6 +142,16 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     setSyncing(true);
     measure();
   }, [measure]);
+  // Watching what the measurement did, which is the only evidence that is not
+  // another number. The lines it goes to are the ones being drawn, so the
+  // moment it lands on is a moment in the film rather than in the file.
+  const check = useCheck(alignment, timeline.cues, transport);
+  const { start: watchIt } = check;
+  const see = useCallback(() => {
+    setSyncing(true);
+    watchIt();
+  }, [watchIt]);
+
   const [choosing, setChoosing] = useState(false);
   const toggleTracks = useCallback(() => {
     setChoosing((showing) => !showing);
@@ -138,6 +163,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
     stepping,
     sync,
     align,
+    check: { available: check.offered, see },
     choice,
     toggleFullscreen,
     toggleSync,
@@ -218,6 +244,7 @@ function Film({ film, onBack }: { film: FilmView; onBack: () => void }) {
             preview={preview}
             sync={sync}
             alignment={alignment}
+            check={check}
             syncing={syncing}
             choice={choice}
             choosing={choosing}

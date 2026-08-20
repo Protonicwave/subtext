@@ -50,34 +50,66 @@ const APART_MS: f64 = 250.0;
 /// produced the answer in the first place.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Confidence {
-    agreement: f32,
-    tightness: f32,
+    /// What the film's stretches said about the answer, which is where every
+    /// part of this but the separation is read from.
+    fit: Fit,
     separation: f32,
 }
 
 impl Confidence {
     /// Nothing was measurable, which is not the same as measuring badly.
     pub const NONE: Self = Self {
-        agreement: 0.0,
-        tightness: 0.0,
+        fit: Fit {
+            slope: 0.0,
+            intercept_ms: 0.0,
+            agreed: 0,
+            across: 0,
+            spread_ms: f32::MAX,
+        },
         separation: 0.0,
     };
 
-    /// How much of the film agrees with the answer, from none of it to all.
+    /// How many stretches of the film agreed with the answer.
     ///
     /// The film is cut into stretches and each is asked how far its lines still
-    /// have to move once the answer is applied. This is the share of them that
-    /// said what the answer says they should.
+    /// have to move once the answer is applied. This is how many of them said
+    /// what the answer says they should, out of [`Confidence::across`].
+    ///
+    /// The count rather than the share, because it is the count that can be put
+    /// to somebody: a share is a verdict on the answer and a count is what the
+    /// film said.
+    #[must_use]
+    pub fn agreed(self) -> u32 {
+        self.fit.agreed
+    }
+
+    /// How many stretches the film was measured in.
+    #[must_use]
+    pub fn across(self) -> u32 {
+        self.fit.across
+    }
+
+    /// How far the middle stretch sits from the answer, in milliseconds.
+    ///
+    /// The middle rather than the average, for the same reason the line through
+    /// the stretches is a middle: a handful of stretches that found the wrong
+    /// thing would otherwise decide a figure that is meant to describe the rest.
+    #[must_use]
+    pub fn spread_ms(self) -> f32 {
+        self.fit.spread_ms
+    }
+
+    /// How much of the film agrees with the answer, from none of it to all.
     #[must_use]
     pub fn agreement(self) -> f32 {
-        self.agreement
+        self.fit.agreement()
     }
 
     /// How closely the stretches that agree sit to the answer, from barely to
     /// exactly.
     #[must_use]
     pub fn tightness(self) -> f32 {
-        self.tightness
+        self.fit.tightness()
     }
 
     /// How far the answer stands above the next explanation that is not the same
@@ -102,7 +134,7 @@ impl Confidence {
     /// them respectable.
     #[must_use]
     pub fn score(self) -> f32 {
-        self.agreement * self.tightness * self.separation
+        self.fit.score() * self.separation
     }
 }
 
@@ -183,8 +215,6 @@ struct Candidate {
 struct Measured {
     correction: Correction,
     score: f32,
-    agreement: f32,
-    tightness: f32,
     /// The candidate this came from, and the line the film's stretches came to
     /// about it. Both are kept so that the winner can be put back to the film
     /// once, to be read for the ways the film does not fit it. The settled
@@ -279,8 +309,6 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
         measured.push(Measured {
             correction,
             score: fit.score(),
-            agreement: fit.agreement,
-            tightness: fit.tightness,
             from: candidate,
             fit,
         });
@@ -306,8 +334,7 @@ pub fn align(cues: &[Cue], speech: &Signal) -> Alignment {
     Alignment {
         correction: best.correction,
         confidence: Confidence {
-            agreement: best.agreement,
-            tightness: best.tightness,
+            fit: best.fit,
             separation: separation_of(&measured, film_ms),
         },
         landing: landing_of(cues, speech, best.correction),
@@ -703,6 +730,52 @@ mod tests {
         assert!(found.confidence().tightness() > 0.9);
         assert!(found.confidence().separation() < 0.1);
         assert!(found.confidence().score() < DEFENSIBLE);
+    }
+
+    /// What the confidence is made of, rather than what it comes to.
+    ///
+    /// The share it reports is the count of stretches that agreed over the count
+    /// it was measured in, and both of those go to whoever has to say why an
+    /// answer should be believed. A figure that did not match the share it is
+    /// read from would be two claims about the same film.
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn the_confidence_says_how_many_stretches_agreed_and_how_many_there_were() {
+        let cues = dialogue(1_500);
+        let found = align(&cues, &speech_of(&cues, Correction::of_offset(2_500)));
+        let confidence = found.confidence();
+
+        assert!(
+            confidence.across() > 1,
+            "measured in {}",
+            confidence.across()
+        );
+        assert!(confidence.agreed() <= confidence.across());
+        assert!(
+            (confidence.agreement() - confidence.agreed() as f32 / confidence.across() as f32)
+                .abs()
+                < f32::EPSILON
+        );
+        // A film the answer describes leaves its stretches sitting on the line
+        // rather than merely near it.
+        assert!(
+            confidence.spread_ms() < 150.0,
+            "{}ms",
+            confidence.spread_ms()
+        );
+    }
+
+    /// Nothing measured says nothing in every part, and a film nobody could
+    /// measure must not read as a film measured in no stretches and agreed by
+    /// none of them, which is a figure rather than an absence.
+    #[test]
+    fn a_film_that_could_not_be_measured_reports_no_stretches_at_all() {
+        let confidence = align(&[], &Signal::from_bins(vec![false; 100])).confidence();
+
+        assert_eq!(confidence.agreed(), 0);
+        assert_eq!(confidence.across(), 0);
+        assert!(confidence.agreement().abs() < f32::EPSILON);
+        assert!(confidence.tightness().abs() < f32::EPSILON);
     }
 
     /// The failure this whole stage exists to stop. A stretch and a shift trade

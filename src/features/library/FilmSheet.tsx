@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react';
 import { motion } from 'motion/react';
-import type { AudioView, FilmView, TrackView } from '@/shared/ipc/bindings';
+import type { AudioView, FilmView, Id, TrackView } from '@/shared/ipc/bindings';
 import { ipc } from '@/shared/ipc/client';
 import { sourceOf } from '@/shared/media/source';
 import { useSetting } from '@/shared/settings/useSettings';
@@ -15,8 +15,9 @@ import { Button } from '@/shared/ui/Button';
 import { CloseIcon, PlayIcon, SyncIcon } from '@/shared/ui/Icon';
 import { classes } from '@/shared/ui/classes';
 import { useNavigation } from '@/app/routes';
-import { backTo, replacing, said, working } from '@/features/player/outcomes';
-import { activeTrackOf, readableTracksOf, trackProblemOf } from '@/features/player/tracks';
+import { busiestMomentOf } from '@/features/player/check';
+import { CHECK, backTo, replacing, said, working } from '@/features/player/outcomes';
+import { activeTrackOf, trackNameOf, trackProblemOf } from '@/features/player/tracks';
 import { useAlignment } from '@/features/player/useAlignment';
 import { useSync } from '@/features/player/useSync';
 import { useFilmPalette } from './accent';
@@ -73,6 +74,14 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
   const play = () => {
     onClose();
     openFilm(film.id);
+  };
+
+  // The same check the player offers, from the one place that has no player in
+  // it. There is nothing to watch a measurement land on here, so this goes to
+  // where there is, at the moment the check would have played.
+  const watch = (atMs: number) => {
+    onClose();
+    openFilm(film.id, atMs);
   };
 
   // Taken here so that the shell does not also read it as leaving the screen
@@ -206,7 +215,7 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
                 ))
               )}
 
-              <AlignOffer film={film} />
+              <AlignOffer film={film} onWatch={watch} />
             </section>
           </div>
         </div>
@@ -235,12 +244,14 @@ function Row({ language, children }: { language: string | null; children: ReactN
  * know its subtitles are out, and being made to start the film to say so is a
  * detour.
  */
-function AlignOffer({ film }: { film: FilmView }) {
+function AlignOffer({ film, onWatch }: { film: FilmView; onWatch: (atMs: number) => void }) {
   const preferred = useSetting('subtitleLanguage');
-  const readable = readableTracksOf(film.tracks);
-  // The track it would be watched with, or the first that could be read where
-  // subtitles have been turned off for this film.
-  const track = activeTrackOf(film, preferred) ?? readable[0] ?? null;
+  // The track this film would be watched with, and only that one. Falling back
+  // to the first readable track when subtitles have been turned off would offer
+  // to measure a subtitle the player is not going to draw, which is a
+  // measurement nobody could check and a correction written to a track nobody
+  // asked about.
+  const track = activeTrackOf(film, preferred);
 
   const sync = useSync(track);
   const alignment = useAlignment(track, sync);
@@ -289,17 +300,34 @@ function AlignOffer({ film }: { film: FilmView }) {
 
   if (state.phase === 'outcome') {
     const { title, sentence } = said(state.outcome);
+    const written = state.outcome.outcome === 'aligned' && !state.undone ? state.outcome : null;
+
     return (
       <div className={styles.align}>
         <p className={styles.offerTitle}>{title}</p>
         <p className={styles.offer} role="status">
           {sentence}
         </p>
+        {written !== null && <p className={styles.offer}>{CHECK.note}</p>}
         <div className={styles.row}>
-          {state.outcome.outcome === 'aligned' && !state.undone && (
-            <Button onClick={alignment.undo}>
-              Put it back {backTo(state.outcome.previous.offsetMs)}
-            </Button>
+          {written !== null && (
+            <>
+              <Button
+                onClick={() => {
+                  void momentIn(track.id).then(onWatch, () => {
+                    // The lines could not be read, so there is no busiest
+                    // moment to go to. Nothing is said: the measurement stands,
+                    // the sentence about it is still on screen, and the film
+                    // can be opened with the button above it.
+                  });
+                }}
+              >
+                {CHECK.offer}
+              </Button>
+              <Button tone="ghost" onClick={alignment.undo}>
+                Put it back {backTo(written.previous.offsetMs)}
+              </Button>
+            </>
           )}
           <Button tone="ghost" onClick={alignment.dismiss}>
             Dismiss
@@ -317,13 +345,29 @@ function AlignOffer({ film }: { film: FilmView }) {
       </p>
       <p className={styles.offer}>
         Subtext reads the soundtrack, works out where the talking falls, and moves the subtitles to
-        match. It takes a few seconds, and the film need not be open.
+        match. It takes a few seconds, and the film need not be open. It measures{' '}
+        {trackNameOf(track)}, which is the subtitle this film is watched with.
       </p>
       <div className={styles.row}>
         <Button onClick={alignment.start}>Listen and line up</Button>
       </div>
     </div>
   );
+}
+
+/**
+ * The moment in a film worth watching to see whether a measurement landed.
+ *
+ * Read here rather than held, because a film's page shows what was scanned and
+ * reads nothing from disk to do it. The lines of a track are a few hundred
+ * kilobytes and are wanted at the moment somebody asks to watch, which is once
+ * per measurement rather than once per film looked at.
+ */
+async function momentIn(trackId: Id): Promise<number> {
+  const cues = await ipc.trackCues(trackId);
+  const at = busiestMomentOf(cues);
+  if (at === null) throw new Error('this track has no lines to watch for');
+  return at;
 }
 
 /** Opening the folder the film is in, with the film picked out. */

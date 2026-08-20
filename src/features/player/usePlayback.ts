@@ -33,6 +33,14 @@ export interface Playback {
 export interface Transport {
   toggle: () => void;
   /**
+   * Runs the film, whatever it was doing.
+   *
+   * Separate from the toggle because one caller is not asking for the other
+   * thing: a check plays a stretch of film to be watched, and on a film that
+   * was paused a toggle would be the right key press and the wrong result.
+   */
+  play: () => void;
+  /**
    * Where the film is at this moment.
    *
    * The element rather than the position above, which is up to a quarter of a
@@ -209,19 +217,23 @@ export function usePlayback(
     element.currentTime = at / 1000;
   }, []);
 
+  const play = useCallback(() => {
+    const element = video.current;
+    if (element === null) return;
+
+    void element.play().catch(() => {
+      // Reported by the error event if it is the file, and not worth saying
+      // twice if it is not.
+    });
+  }, []);
+
   const toggle = useCallback(() => {
     const element = video.current;
     if (element === null) return;
 
-    if (element.paused) {
-      void element.play().catch(() => {
-        // Reported by the error event if it is the file, and not worth saying
-        // twice if it is not.
-      });
-    } else {
-      element.pause();
-    }
-  }, []);
+    if (element.paused) play();
+    else element.pause();
+  }, [play]);
 
   const skipBy = useCallback(
     (ms: number) => {
@@ -254,8 +266,8 @@ export function usePlayback(
   // to it, and a new object on every timeupdate would rebind them four times a
   // second for the length of the film.
   const transport = useMemo(
-    () => ({ toggle, positionNow, seekTo, skipBy, setVolume, toggleMute }),
-    [toggle, positionNow, seekTo, skipBy, setVolume, toggleMute],
+    () => ({ toggle, play, positionNow, seekTo, skipBy, setVolume, toggleMute }),
+    [toggle, play, positionNow, seekTo, skipBy, setVolume, toggleMute],
   );
 
   return [video, state, transport];

@@ -317,8 +317,11 @@ export type AlignmentView =
 { outcome: "aligned"; correction: CorrectionView; 
 /**  What was in force beforehand, so that it can be put back. */
 previous: CorrectionView; 
-/**  How sure the measurement was, from nothing to certain. */
-confidence: number; 
+/**
+ *  What the film said about the answer: how many of its stretches
+ *  agreed, out of how many, and how closely.
+ */
+grounds: GroundsView; 
 /**  How the lines land now. */
 landing: LandingView; 
 /**
@@ -551,6 +554,34 @@ export type FolderView = {
 	films: number,
 	/**  Whether changes to it are being noticed as they happen. */
 	watching: boolean,
+};
+
+/**
+ *  What the film itself said about the answer it was handed.
+ * 
+ *  The parts rather than the number they come to. A single figure is a verdict,
+ *  and a verdict is exactly what somebody cannot check: told that a measurement
+ *  is nine tenths sure, there is nothing to do but believe it or not. Told that
+ *  the film was measured in twenty stretches, that eighteen of them agreed, and
+ *  that the middle one sits forty milliseconds from the answer, somebody can
+ *  weigh it, and can watch a minute of the film and see whether it is so.
+ * 
+ *  The score comes too, because it is the number the bar was cleared on and
+ *  leaving it out would mean the front end could not say what was decided, only
+ *  what was seen.
+ */
+export type GroundsView = {
+	/**  How many stretches of the film agreed with the answer. */
+	agreed: number,
+	/**
+	 *  How many stretches it was measured in, which is what the count above is
+	 *  out of. Nought where there was nothing to measure.
+	 */
+	across: number,
+	/**  How far the middle stretch sits from the answer, in milliseconds. */
+	spreadMs: number,
+	/**  The parts as one number, which is what an answer is accepted on. */
+	score: number,
 };
 
 /**

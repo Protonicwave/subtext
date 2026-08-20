@@ -26,6 +26,7 @@ import { ScrubberPreview } from './ScrubberPreview';
 import { SyncPanel } from './SyncPanel';
 import { TrackMenu } from './TrackMenu';
 import type { Alignment } from './useAlignment';
+import type { Check } from './useCheck';
 import type { Stepping } from './useStepping';
 import type { Sync } from './useSync';
 import type { TrackChoice } from './useTrack';
@@ -60,6 +61,8 @@ interface ControlsProps {
   sync: Sync;
   /** Working that out by listening to the film instead. */
   alignment: Alignment;
+  /** Watching a measurement land, which is offered once one has been made. */
+  check: Check;
   /** The timing controls are showing. */
   syncing: boolean;
   /** Which subtitle the film is read with. */
@@ -82,6 +85,7 @@ export function Controls({
   preview,
   sync,
   alignment,
+  check,
   syncing,
   choice,
   choosing,
@@ -133,7 +137,7 @@ export function Controls({
        */}
       {choosing && <TrackMenu choice={choice} onClose={onToggleTracks} />}
       {syncing && !choosing && (
-        <SyncPanel sync={sync} alignment={alignment} onClose={onToggleSync} />
+        <SyncPanel sync={sync} alignment={alignment} check={check} onClose={onToggleSync} />
       )}
 
       <div

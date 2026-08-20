@@ -83,6 +83,17 @@
   border-top: 1px solid var(--colour-line);
 }
 
+/*
+ * What is offered about a measurement once it has been made: watching it land,
+ * and putting it back. Part of the block above rather than a block of its own,
+ * so it takes the column and the gap and not the rule across the top.
+ */
+.answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .working {
   flex: 1;
   font-size: var(--text-xs);

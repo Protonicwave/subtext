@@ -81,7 +81,7 @@ export function App() {
       <main className={styles.stage} inert={sheetOpen}>
         {route.screen === 'library' && <LibraryScreen />}
         {route.screen === 'settings' && <SettingsScreen />}
-        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} />}
+        {route.screen === 'player' && <PlayerScreen filmId={route.filmId} atMs={route.atMs} />}
       </main>
 
       {firstRun && <FirstRun />}

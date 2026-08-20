@@ -1,6 +1,7 @@
 import type {
   AlignStageView,
   AlignmentView,
+  GroundsView,
   LandingView,
   ReferenceView,
 } from '@/shared/ipc/bindings';
@@ -61,7 +62,7 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
           outcome.correction.rate,
         )}${measuredAgainst(outcome.reference)}. ${landed(outcome.landing)} ${lineUpWith(
           outcome.reference,
-        )}, against ${inHundred(outcome.asWritten)} before.`,
+        )}, against ${inHundred(outcome.asWritten)} before.${borneOutBy(outcome.grounds)}`,
       };
     case 'no-better':
       return {
@@ -121,6 +122,27 @@ export function said(outcome: AlignmentView): { title: string; sentence: string 
     case 'stopped':
       return { title: 'Stopped', sentence: 'The subtitles have been left as they were.' };
   }
+}
+
+/**
+ * What the film said about the answer, which is the grounds for believing it.
+ *
+ * The counts rather than the figure they come to. Somebody told a measurement is
+ * nine tenths sure can only believe it or not; somebody told that the film was
+ * measured in twenty stretches and that eighteen of them said the same thing has
+ * been shown the working, and can go and watch one of them.
+ *
+ * Left out where nothing could be measured, for the same reason the landing
+ * figures are: none out of none is an absence rather than a number.
+ */
+function borneOutBy(grounds: GroundsView): string {
+  if (grounds.across === 0) return '';
+  const stretches = grounds.across === 1 ? 'stretch' : 'stretches';
+  return ` ${String(grounds.agreed)} of the ${String(
+    grounds.across,
+  )} ${stretches} of film it was measured across agreed, the middle one ${String(
+    grounds.spreadMs,
+  )} milliseconds off.`;
 }
 
 /**
@@ -225,3 +247,22 @@ function rateSaid(rate: number): string {
   const named = RATES.find((known) => sameRate(known.value, rate));
   return `, stretched ${named?.name ?? `by ${rate.toFixed(4)}`}`;
 }
+
+/**
+ * Watching the measurement, rather than reading about it.
+ *
+ * The wording of the check, in the one file both doors read from, for the same
+ * reason every other sentence here is: the timing panel and the film page are
+ * drawn differently, they offer the same thing, and two wordings would be one
+ * offer described two ways.
+ */
+export const CHECK = {
+  /** Taking up the offer. */
+  offer: 'See it land',
+  /** What taking it up will do, said before it happens. */
+  note: 'Goes to the busiest few seconds of dialogue in the film and plays them, so you can watch the lines arrive.',
+  /** What is being asked while it plays. */
+  ask: 'Do the lines arrive with the voices?',
+  /** The answer that leaves the measurement in force. */
+  keep: 'Yes, keep it',
+} as const;

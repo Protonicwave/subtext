@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BindingsModule from '@/shared/ipc/bindings';
 import type * as ClientModule from '@/shared/ipc/client';
-import type { CueView, FilmView, TrackView } from '@/shared/ipc/bindings';
+import type { AlignmentView, CueView, FilmView, TrackView } from '@/shared/ipc/bindings';
+import { grounds, landing } from '@/test/alignment';
 import { opens, positionOf, pretendMediaWorks, reaches, refuses } from '@/test/media';
 
 const { ipc } = vi.hoisted(() => ({
@@ -19,8 +20,8 @@ const { ipc } = vi.hoisted(() => ({
     // Reading a film takes a while and this one never finishes, which is what
     // lets a test look at the panel while the work is going on.
     alignTrack: vi.fn(
-      () =>
-        new Promise<never>(() => {
+      (): Promise<AlignmentView> =>
+        new Promise(() => {
           /* still reading */
         }),
     ),
@@ -56,6 +57,8 @@ vi.mock('@/shared/media/source', () => ({
   streamOf: (path: string) => `stream://${path}`,
 }));
 
+const { CHECK } = await import('./outcomes');
+const { LEAD_MS } = await import('./check');
 const { PlayerScreen } = await import('./PlayerScreen');
 const { useLibrary } = await import('./../library/useLibrary');
 const { useNavigation } = await import('@/app/routes');
@@ -440,6 +443,71 @@ describe('playing a film', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
     expect(ipc.cancelAlignment).toHaveBeenCalled();
+  });
+
+  /*
+   * The measurement is a sentence full of numbers, and the film is the only
+   * thing that settles it. So the last thing a measurement does is offer to
+   * show it: one key, the busiest dialogue in the film, and the picture never
+   * stops.
+   */
+  it('goes to the busiest dialogue to show what a measurement did', async () => {
+    ipc.trackCues.mockResolvedValueOnce([
+      { index: 1, startMs: 10_000, endMs: 12_000, text: 'A guy told me one time', position: null },
+      { index: 2, startMs: 600_000, endMs: 602_000, text: 'Do not let yourself', position: null },
+      {
+        index: 3,
+        startMs: 603_000,
+        endMs: 605_000,
+        text: 'get attached to anything',
+        position: null,
+      },
+      { index: 4, startMs: 606_000, endMs: 608_000, text: 'you are not willing', position: null },
+    ]);
+    ipc.alignTrack.mockResolvedValueOnce({
+      outcome: 'aligned',
+      correction: { offsetMs: -1_250, rate: 1 },
+      previous: { offsetMs: 0, rate: 1 },
+      grounds: grounds(0.8),
+      landing: landing(0.93),
+      asWritten: landing(0.12),
+      reference: { against: 'speech' },
+    });
+
+    const { video } = open();
+    opens(video(), RUNS);
+    await dialogueArrives();
+    reaches(video(), 60_000);
+
+    await userEvent.keyboard('a');
+    expect(await screen.findByText('Lined up')).toBeInTheDocument();
+
+    await userEvent.keyboard('v');
+
+    // The busiest stretch, a moment before its first line, as the lines are
+    // now drawn: the measurement it is checking has moved them by 1.25s, and
+    // the reading comfort settings put every line up a moment early. It goes to
+    // where the line will be seen rather than to where the file wrote it, which
+    // is the only place the question can be answered.
+    expect(positionOf(video())).toBe(600_000 - 1_250 - LEAD - LEAD_MS);
+    // And the film is still running, which is the point of doing it this way
+    // rather than in a dialog.
+    expect(video().paused).toBe(false);
+    expect(screen.getByText(CHECK.ask)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: CHECK.keep }));
+    expect(screen.queryByText(CHECK.ask)).not.toBeInTheDocument();
+  });
+
+  it('leaves the watch key alone until there is a measurement to watch', async () => {
+    const { video } = open();
+    opens(video(), RUNS);
+    reaches(video(), 60_000);
+
+    await userEvent.keyboard('v');
+
+    expect(positionOf(video())).toBe(60_000);
+    expect(screen.queryByText(CHECK.ask)).not.toBeInTheDocument();
   });
 
   it('leaves the align key alone for a film with no subtitle to measure', async () => {

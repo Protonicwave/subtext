@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BindingsModule from '@/shared/ipc/bindings';
 import type * as ClientModule from '@/shared/ipc/client';
-import type { AlignmentView, FilmView, MediaView, TrackView } from '@/shared/ipc/bindings';
-import { landing } from '@/test/alignment';
+import type { AlignmentView, CueView, FilmView, MediaView, TrackView } from '@/shared/ipc/bindings';
+import { grounds, landing } from '@/test/alignment';
 
 const { ipc } = vi.hoisted(() => ({
   ipc: {
@@ -14,6 +14,7 @@ const { ipc } = vi.hoisted(() => ({
     alignTrack: vi.fn((): Promise<AlignmentView> => new Promise(() => undefined)),
     cancelAlignment: vi.fn(() => Promise.resolve(null)),
     setTrackCorrection: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
+    trackCues: vi.fn((): Promise<CueView[]> => Promise.resolve([])),
   },
 }));
 
@@ -37,6 +38,8 @@ vi.mock('@/shared/ipc/bindings', async () => {
 // under test. The sheet only cares that it has one.
 vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://${path}` }));
 
+const { LEAD_MS } = await import('@/features/player/check');
+const { CHECK } = await import('@/features/player/outcomes');
 const { FilmSheet } = await import('./FilmSheet');
 const { useLibrary } = await import('./useLibrary');
 const { useSheet } = await import('./useSheet');
@@ -356,7 +359,7 @@ describe('the film sheet', () => {
           outcome: 'aligned',
           correction: { offsetMs: -1_250, rate: 1 },
           previous: { offsetMs: 0, rate: 1 },
-          confidence: 0.9,
+          grounds: grounds(0.9),
           landing: landing(0.94),
           asWritten: landing(0.14),
           reference: { against: 'speech' },
@@ -375,7 +378,96 @@ describe('the film sheet', () => {
       expect(screen.getByRole('status')).toHaveTextContent(
         /94 lines in a hundred land on the talking, against 14 before/,
       );
+      // Including the grounds it rests on, which is the other half of what the
+      // panel shows and would be the easier half to leave out here.
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /18 of the 20 stretches of film it was measured across agreed, the middle one 40 milliseconds off/,
+      );
       expect(screen.getByRole('button', { name: 'Put it back as written' })).toBeInTheDocument();
+    });
+
+    /*
+     * Which track it measures is not a detail: a correction is written to one
+     * track and the offer says nothing about which, so somebody with a film in
+     * three languages cannot tell what is about to be moved.
+     */
+    it('names the subtitle it would measure', () => {
+      open();
+
+      expect(screen.getByText(/It measures English, which is the subtitle/)).toBeInTheDocument();
+    });
+
+    /*
+     * The one this used to get wrong. A film whose subtitles have been turned
+     * off is watched with none, and falling back to the first readable track
+     * offered to measure a subtitle the player would not draw, which is a
+     * correction written to a track nobody asked about and a measurement
+     * nobody could check.
+     */
+    it('does not offer to measure a subtitle the player would not draw', () => {
+      open({ subtitlesOff: true });
+
+      expect(screen.queryByRole('button', { name: 'Listen and line up' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The same check the player offers, from the page that has no player on it.
+     * There is nothing here to watch a measurement land on, so taking it up
+     * opens the film at the moment the check would have played.
+     */
+    it('opens the film at the busiest dialogue to watch a measurement land', async () => {
+      ipc.alignTrack.mockReturnValue(
+        Promise.resolve({
+          outcome: 'aligned',
+          correction: { offsetMs: -1_250, rate: 1 },
+          previous: { offsetMs: 0, rate: 1 },
+          grounds: grounds(0.9),
+          landing: landing(0.94),
+          asWritten: landing(0.14),
+          reference: { against: 'speech' },
+        }),
+      );
+      ipc.trackCues.mockResolvedValue(
+        [0, 600_000, 602_000, 604_000].map((startMs, at) => ({
+          index: at + 1,
+          startMs,
+          endMs: startMs + 1_500,
+          text: 'line',
+          position: null,
+        })),
+      );
+      open();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Listen and line up' }));
+      await waitFor(() => {
+        expect(screen.getByText('Lined up')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: CHECK.offer }));
+
+      await waitFor(() => {
+        expect(useNavigation.getState().route).toMatchObject({
+          screen: 'player',
+          filmId: 7,
+          atMs: 600_000 - LEAD_MS,
+        });
+      });
+      // And the page it was asked from is out of the way, since the answer is
+      // in the film rather than on it.
+      expect(useSheet.getState().filmId).toBeNull();
+    });
+
+    it('offers nothing to watch where the measurement was refused', async () => {
+      ipc.alignTrack.mockReturnValue(Promise.resolve({ outcome: 'no-audio' }));
+      open();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Listen and line up' }));
+      await waitFor(() => {
+        expect(screen.getByText('Nothing to listen to')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('button', { name: CHECK.offer })).not.toBeInTheDocument();
+      expect(ipc.trackCues).not.toHaveBeenCalled();
     });
 
     /*

@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ClientModule from '@/shared/ipc/client';
 import type { AlignProgressed, AlignmentView, TrackView } from '@/shared/ipc/bindings';
-import { landing } from '@/test/alignment';
+import { grounds, landing } from '@/test/alignment';
 import type { Sync } from './useSync';
 
 const { ipc, emitters, emit } = vi.hoisted(() => {
@@ -94,7 +94,7 @@ const ALIGNED: AlignmentView = {
   outcome: 'aligned',
   correction: { offsetMs: 3_500, rate: 1 },
   previous: { offsetMs: -800, rate: 1 },
-  confidence: 0.61,
+  grounds: grounds(0.61),
   landing: landing(0.94),
   asWritten: landing(0.14),
   reference: { against: 'speech' },
