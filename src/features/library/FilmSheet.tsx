@@ -26,6 +26,7 @@ import { coverNameOf, coverStatementOf, isChosen } from './covers';
 import { useCover } from './useCover';
 import { fileFactsOf } from './facts';
 import { useFrames } from './frames';
+import { pictureFor } from './picture';
 import { remainingOf } from './remaining';
 import { resolutionOf, runtimeOf } from './runtime';
 import { useLibrary } from './useLibrary';
@@ -67,10 +68,15 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
 
   useReturningFocus(panel);
 
-  // The same picture the tile behind is showing: the frame from where the film
-  // was stopped if one has been taken, and the poster otherwise.
+  // Behind the sheet, where a wide picture is wanted: the frame from where the
+  // film was stopped if one has been taken, and the poster otherwise.
   const frame = useFrames((held) => held.frames[film.id]?.url);
   const still = frame ?? (film.posterPath === null ? null : sourceOf(film.posterPath));
+
+  // The cover itself is whatever the tile is showing, because the tile morphs
+  // into it. Two different pictures for one film would be visible in the
+  // moment between them.
+  const picture = pictureFor(film, useSetting('withoutArtwork'));
   const carryingOn = film.position !== null;
 
   const play = () => {
@@ -132,10 +138,15 @@ function Panel({ film, onClose }: { film: FilmView; onClose: () => void }) {
 
             <div className={styles.picture}>
               <motion.span layoutId={frameId(film.id)} className={styles.cover}>
-                {still === null ? (
+                {picture.kind === 'composed' ? (
                   <ComposedCover film={film} />
                 ) : (
-                  <img className={styles.still} src={still} alt="" draggable={false} />
+                  <img
+                    className={styles.still}
+                    src={sourceOf(picture.path)}
+                    alt=""
+                    draggable={false}
+                  />
                 )}
               </motion.span>
 

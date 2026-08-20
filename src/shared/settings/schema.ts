@@ -149,6 +149,16 @@ export const FIELDS = {
    * cover that where a hundred would only make it harder to choose.
    */
   tileSize: choice('library.tiles', ['small', 'medium', 'large'], 'medium'),
+  /*
+   * What a film with no artwork anywhere on the disk is drawn as.
+   *
+   * The composed cover, because it was designed and the frame is a guess: a
+   * fifth of the way into a film is a moment nobody chose, and a wall of those
+   * reads as a decoder having run rather than as a shelf of films. The frame is
+   * still taken, and still shown where a wide picture is wanted, so this
+   * decides what a cover is and nothing else.
+   */
+  withoutArtwork: choice('library.without-artwork', ['composed', 'frame'], 'composed'),
   // The value Rust reads under this key is the name of the strict one, so these
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),

@@ -2,11 +2,13 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import type { FilmView } from '@/shared/ipc/bindings';
 import { sourceOf } from '@/shared/media/source';
+import { useSetting } from '@/shared/settings/useSettings';
 import { classes } from '@/shared/ui/classes';
 import { stillnessWanted } from '@/shared/ui/stillness';
 import { useFilmPalette } from './accent';
 import { ComposedCover } from './ComposedCover';
 import { CoverMark } from './CoverMark';
+import { pictureFor } from './picture';
 import { frameId } from './transition';
 import { linesOf } from './useLibrary';
 import styles from './PosterTile.module.css';
@@ -16,8 +18,9 @@ import styles from './PosterTile.module.css';
  *
  * The tile carries its own colours as custom properties, which is what lets the
  * lift, the glow and the ring all be one film's colour without a component
- * anywhere reading a palette. A film with no picture anywhere draws the cover
- * composed from what is known about it, so the grid is never a row of holes.
+ * anywhere reading a palette. A film with no artwork on the disk draws the
+ * cover composed from what is known about it, so the grid is never a row of
+ * holes and never a wall of frames nobody chose.
  */
 
 /** How long a pointer rests on a tile before the preview starts. */
@@ -41,7 +44,7 @@ export function PosterTile({ film, onOpen, shared = true }: PosterTileProps) {
   const preview = usePreview(hovered && !film.missing, film.path);
 
   const palette = useFilmPalette(film);
-  const still = film.posterPath === null ? null : sourceOf(film.posterPath);
+  const picture = pictureFor(film, useSetting('withoutArtwork'));
   const progress = film.position?.progress ?? null;
 
   return (
@@ -78,10 +81,10 @@ export function PosterTile({ film, onOpen, shared = true }: PosterTileProps) {
         }}
       >
         <motion.span {...(shared && { layoutId: frameId(film.id) })} className={styles.frame}>
-          {still === null ? (
+          {picture.kind === 'composed' ? (
             <ComposedCover film={film} />
           ) : (
-            <img className={styles.still} src={still} alt="" draggable={false} />
+            <img className={styles.still} src={sourceOf(picture.path)} alt="" draggable={false} />
           )}
 
           {preview !== null && (
