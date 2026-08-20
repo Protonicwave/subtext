@@ -555,11 +555,19 @@ fn settled(database: &Database, film_id: i64, image: &Path) -> Answer<FilmView> 
     read_back(database, film.id)
 }
 
-/// Drops a film's cover, whatever it was, and says where the film is.
+/// Drops a film's choice of cover, and says where the film is.
 ///
 /// The path comes back because the caller's next move is to look at the folder
 /// the film sits in, and reading the row twice to find it would be reading it
 /// twice.
+///
+/// What the row is left saying matters more than it looks. A scan does not
+/// open a film it has already seen, so whether that film carries its own
+/// artwork is something only the row still remembers, and clearing the row
+/// outright would lose it until the file itself changed. So the film is asked
+/// once, here, which reads the attachments element and not the film. A film
+/// that carries artwork is put back to that, and a film that does not is left
+/// with nothing for the scan to weigh against what is beside it.
 fn forgotten(database: &Database, film_id: i64) -> Answer<PathBuf> {
     let film = database
         .films()
@@ -567,9 +575,17 @@ fn forgotten(database: &Database, film_id: i64) -> Answer<PathBuf> {
         .map_err(Failure::of)?
         .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
+    // A film that cannot be opened at all carries nothing this can see, which
+    // is the same answer as a film that carries no artwork and is treated as
+    // one: the scan will find the file missing soon enough and say so.
+    let inside = subtext_container::cover(&film.path)
+        .ok()
+        .flatten()
+        .map(|_| Cover::new(&film.path, CoverSource::InFile));
+
     database
         .films()
-        .set_covers(&[(film.id, None)])
+        .set_covers(&[(film.id, inside.as_ref())])
         .map_err(Failure::of)?;
 
     Ok(film.path)
@@ -864,7 +880,7 @@ mod tests {
     // to say, so it stops rather than passing quietly.
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use subtext_core::CoverSource;
     use subtext_index::{Database, NewFilm};
@@ -921,12 +937,42 @@ mod tests {
         }
 
         fn cover(&self) -> Option<subtext_core::Cover> {
+            self.cover_of(self.film_id)
+        }
+
+        fn cover_of(&self, film_id: i64) -> Option<subtext_core::Cover> {
             self.database
                 .films()
-                .by_id(self.film_id)
+                .by_id(film_id)
                 .unwrap()
                 .and_then(|film| film.cover)
         }
+
+        /// A second film in the same folder, from a file already on the disk.
+        fn film_at(&self, path: &Path) -> i64 {
+            let folder = self.database.folders().list().unwrap()[0].id;
+            self.database
+                .films()
+                .upsert(&NewFilm {
+                    folder_id: folder,
+                    path,
+                    title: "Attached",
+                    year: None,
+                    size_bytes: std::fs::metadata(path).unwrap().len(),
+                    modified_at: 1_700_000_000_000,
+                })
+                .unwrap()
+                .id
+        }
+    }
+
+    /// A Matroska file with a picture attached, as a well made one carries.
+    fn carrying_artwork() -> Vec<u8> {
+        use subtext_container::fixture::{Attachment, Container, Entry};
+
+        Container::new(vec![Entry::video(1)])
+            .with_attachments(vec![Attachment::new("cover.png", PNG).of_type("image/png")])
+            .bytes()
     }
 
     #[test]
@@ -1001,6 +1047,33 @@ mod tests {
         // Nothing is left for the scan to weigh the choice against, which is
         // what puts the film back in the way of being decided afresh.
         assert_eq!(fixture.cover(), None);
+    }
+
+    /*
+     * A scan does not open a film it has already seen, so the row is the only
+     * thing that still remembers whether the file carries artwork. Clearing it
+     * outright would lose that until the file itself changed.
+     */
+    #[test]
+    fn forgetting_a_choice_puts_back_the_artwork_inside_the_film() {
+        let fixture = Fixture::new();
+        let film = fixture.root.join("Attached.mkv");
+        std::fs::write(&film, carrying_artwork()).unwrap();
+        let film_id = fixture.film_at(&film);
+        settled(
+            &fixture.database,
+            film_id,
+            &fixture.picture("chosen.png", PNG),
+        )
+        .unwrap();
+
+        forgotten(&fixture.database, film_id).unwrap();
+
+        let cover = fixture
+            .cover_of(film_id)
+            .expect("a film carrying its own artwork should be put back to it");
+        assert_eq!(cover.source, CoverSource::InFile);
+        assert_eq!(cover.path, film);
     }
 
     #[test]
