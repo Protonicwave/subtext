@@ -14,8 +14,7 @@
 }
 
 /* The padding is here rather than on the scroller, so the scrollbar sits at the
-   edge of the window and not inset from it, and so the billboard above can run
-   the full width. */
+   edge of the window and not inset from it. */
 .inner {
   padding: 0 var(--space-12) var(--space-16);
 }

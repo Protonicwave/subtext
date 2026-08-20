@@ -7,12 +7,12 @@ import { useSetting, useSettings } from '@/shared/settings/useSettings';
 import type { Settings } from '@/shared/settings/schema';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
-import { Billboard } from './Billboard';
+import { Masthead } from './Masthead';
 import { ContinueWatching } from './ContinueWatching';
 import { FilmList } from './FilmList';
 import { Shelf } from './Shelf';
 import { Wall } from './Wall';
-import { billboardOf, shelvesOf } from './shelves';
+import { mastheadOf, shelvesOf } from './shelves';
 import { libraryTotalOf, sizeOf } from './size';
 import { useCapture } from './useCapture';
 import { useLibrary } from './useLibrary';
@@ -22,11 +22,12 @@ import styles from './LibraryScreen.module.css';
 /**
  * The screen you land on.
  *
- * One film shown large above rows built from the folders somebody already made,
- * or the one wall for anybody who would rather have every film at once. Both
- * are drawn against the same scrolling, which this screen owns rather than
- * leaving to the shell: the wall is virtualised, and a virtualiser has to be
- * told which element is scrolled to know what is in view.
+ * Where the reader stopped, stated above rows built from the folders somebody
+ * already made, or above the one wall for anybody who would rather have every
+ * film at once. Both are drawn against the same scrolling, which this screen
+ * owns rather than leaving to the shell: the wall is virtualised, and a
+ * virtualiser has to be told which element is scrolled to know what is in
+ * view.
  */
 export function LibraryScreen() {
   const held = useLibrary((library) => library.films);
@@ -62,7 +63,7 @@ export function LibraryScreen() {
     () => (shelved ? shelvesOf(films, resumable) : []),
     [shelved, films, resumable],
   );
-  const billboard = useMemo(() => billboardOf(films, resumable), [films, resumable]);
+  const masthead = useMemo(() => mastheadOf(films, resumable), [films, resumable]);
 
   // Nothing is captured until the library has been read, so that a first run
   // does not open a decoder before there is anything to point it at.
@@ -72,8 +73,8 @@ export function LibraryScreen() {
    * A tile and a row both open the film's page rather than the film. What a
    * file is turns out to be the question somebody has when they are looking at
    * a wall of covers, and the page answers it with the film one press away. The
-   * billboard is the exception: it is already showing one film large, so it
-   * offers to play it and puts the page beside that.
+   * masthead is the exception: it is already showing one film, so it offers to
+   * carry on with it and puts the page beside that.
    */
   const open = (film: FilmView) => {
     openSheet(film.id);
@@ -86,9 +87,9 @@ export function LibraryScreen() {
 
   return (
     <div className={styles.screen} ref={scroller}>
-      {billboard && <Billboard film={billboard} onPlay={play} onOpen={open} />}
-
       <div className={styles.inner}>
+        {masthead && <Masthead film={masthead} onPlay={play} onOpen={open} />}
+
         <div className={styles.tools}>
           {/*
            * Announced, because this is the one place the screen says whether it

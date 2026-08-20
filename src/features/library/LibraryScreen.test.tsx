@@ -8,6 +8,7 @@ const { ipc } = vi.hoisted(() => ({
   ipc: {
     chooseFolder: vi.fn(),
     postersWanted: vi.fn(() => Promise.resolve([])),
+    trackCues: vi.fn(() => Promise.resolve([])),
     writePreference: vi.fn(() => Promise.resolve(null)),
   },
 }));
@@ -139,10 +140,11 @@ describe('the library screen', () => {
   });
 
   /*
-   * The billboard is the exception. It is already showing one film large, so it
-   * offers to play it and puts the page beside that rather than in front of it.
+   * The masthead is the exception. It is already showing one film, so it offers
+   * to carry on with it and puts the page beside that rather than in front of
+   * it.
    */
-  it('plays the film on the billboard, and offers its page beside it', async () => {
+  it('plays the film on the masthead, and offers its page beside it', async () => {
     show({ films: [film, watching], resumable: [watching] });
 
     await userEvent.click(screen.getByRole('button', { name: /carry on$/i }));
@@ -156,7 +158,7 @@ describe('the library screen', () => {
     show({ films: [film, watching], resumable: [watching] });
 
     expect(screen.getByRole('heading', { name: /carry on watching/i })).toBeInTheDocument();
-    expect(screen.getByText('48 min left')).toBeInTheDocument();
+    expect(screen.getByText('48 min left of 2 hr 50 min')).toBeInTheDocument();
   });
 
   it('says nothing about carrying on when there is nothing to carry on with', () => {
@@ -192,18 +194,26 @@ describe('the library screen', () => {
     expect(shelfNames()).toEqual(['Carry on watching', 'Crime', 'films']);
   });
 
-  it('shows the film to carry on with large, above the rows', () => {
+  it('states where the reader stopped, above the rows', () => {
     show({ films: [film, watching], resumable: [watching] });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Ronin' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /carry on/i })).toBeInTheDocument();
+    expect(screen.getByText(/you stopped here/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /carry on$/i })).toBeInTheDocument();
+  });
+
+  /* No film, so nothing to state about one. */
+  it('says nothing above the rows when there is no library yet', () => {
+    show({ films: [], folders: [] });
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 
   /*
    * A library nobody has watched yet still has something to show, and what
    * arrived last is the likeliest reason the application was opened.
    */
-  it('shows the most recently added film large when nothing has been started', () => {
+  it('names the most recently added film when nothing has been started', () => {
     show({ films: [film, on('Crime', { id: 40, title: 'Stalker' })] });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Stalker' })).toBeInTheDocument();
@@ -251,8 +261,10 @@ describe('the library screen', () => {
     expect(screen.getAllByText(/missing/i).length).toBeGreaterThan(0);
   });
 
-  it('draws a film that has a captured frame with it', () => {
-    show({ films: [{ ...film, posterPath: '/data/posters/abc.webp' }] });
+  it('draws a film that has a picture with it', () => {
+    // Covered from the disk, since a film with no artwork anywhere is drawn
+    // from its own title rather than from a frame nobody chose.
+    show({ films: [{ ...film, posterPath: '/data/posters/abc.webp', coverSource: 'beside' }] });
 
     // Decorative, so it has no accessible name to find it by: the title beside
     // it is what says which film this is.
