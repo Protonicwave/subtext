@@ -290,7 +290,9 @@ describe('the library screen', () => {
     // not move with the size of the library. That is the whole property the
     // scrolling target rests on: a row costs the same whether there are ten
     // rows behind it or ten thousand.
-    const tiles = document.querySelectorAll('button').length;
+    // Counted by the mark each tile carries its film's identity on, since a
+    // tile holds more than one button and this is a count of tiles.
+    const tiles = document.querySelectorAll('[data-film-id]').length;
     expect(tiles).toBeLessThan(60);
     // Found by the tile's caption rather than by its text, since the cover
     // composed for a film with no picture sets the title as well.

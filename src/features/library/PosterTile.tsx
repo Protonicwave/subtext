@@ -6,6 +6,7 @@ import { classes } from '@/shared/ui/classes';
 import { stillnessWanted } from '@/shared/ui/stillness';
 import { useFilmPalette } from './accent';
 import { ComposedCover } from './ComposedCover';
+import { CoverMark } from './CoverMark';
 import { frameId } from './transition';
 import { linesOf } from './useLibrary';
 import styles from './PosterTile.module.css';
@@ -44,71 +45,84 @@ export function PosterTile({ film, onOpen, shared = true }: PosterTileProps) {
   const progress = film.position?.progress ?? null;
 
   return (
-    <button
-      type="button"
+    // The film is named on the tile itself rather than held anywhere, so that a
+    // picture dropped on it can be matched to it without every tile in a wall
+    // of two thousand having to be a listener.
+    <div
       className={classes(styles.tile, film.missing && styles.gone)}
+      data-film-id={film.id}
       style={
         {
           '--film-accent': palette.primary,
           '--film-pair': palette.pair,
         } as CSSProperties
       }
-      onClick={() => {
-        onOpen(film);
-      }}
       onPointerEnter={() => {
         setHovered(true);
       }}
       onPointerLeave={() => {
         setHovered(false);
       }}
-      onFocus={() => {
-        setHovered(true);
-      }}
-      onBlur={() => {
-        setHovered(false);
-      }}
     >
-      <motion.span {...(shared && { layoutId: frameId(film.id) })} className={styles.frame}>
-        {still === null ? (
-          <ComposedCover film={film} />
-        ) : (
-          <img className={styles.still} src={still} alt="" draggable={false} />
-        )}
+      <button
+        type="button"
+        className={styles.open}
+        onClick={() => {
+          onOpen(film);
+        }}
+        onFocus={() => {
+          setHovered(true);
+        }}
+        onBlur={() => {
+          setHovered(false);
+        }}
+      >
+        <motion.span {...(shared && { layoutId: frameId(film.id) })} className={styles.frame}>
+          {still === null ? (
+            <ComposedCover film={film} />
+          ) : (
+            <img className={styles.still} src={still} alt="" draggable={false} />
+          )}
 
-        {preview !== null && (
-          <video
-            className={styles.preview}
-            src={preview}
-            muted
-            autoPlay
-            loop
-            playsInline
-            disablePictureInPicture
-            crossOrigin="anonymous"
-            onLoadedMetadata={(event) => {
-              // From the same moment the poster was taken, so the preview
-              // carries on from the still rather than starting at the logos.
-              const { duration } = event.currentTarget;
-              if (Number.isFinite(duration)) event.currentTarget.currentTime = duration * 0.2;
-            }}
-          />
-        )}
+          {preview !== null && (
+            <video
+              className={styles.preview}
+              src={preview}
+              muted
+              autoPlay
+              loop
+              playsInline
+              disablePictureInPicture
+              crossOrigin="anonymous"
+              onLoadedMetadata={(event) => {
+                // From the same moment the poster was taken, so the preview
+                // carries on from the still rather than starting at the logos.
+                const { duration } = event.currentTarget;
+                if (Number.isFinite(duration)) event.currentTarget.currentTime = duration * 0.2;
+              }}
+            />
+          )}
 
-        {film.missing && <span className={styles.badge}>Missing</span>}
+          {film.missing && <span className={styles.badge}>Missing</span>}
 
-        {progress !== null && (
-          <span className={styles.sliver} aria-hidden="true">
-            <span style={{ width: `${String(Math.round(progress * 100))}%` }} />
-          </span>
-        )}
-      </motion.span>
+          {progress !== null && (
+            <span className={styles.sliver} aria-hidden="true">
+              <span style={{ width: `${String(Math.round(progress * 100))}%` }} />
+            </span>
+          )}
+        </motion.span>
 
-      <span className={styles.caption}>
-        <span className={styles.name}>{film.title}</span>
-        <span className={styles.meta}>{describe(film)}</span>
-      </span>
-    </button>
+        <span className={styles.caption}>
+          <span className={styles.name}>{film.title}</span>
+          <span className={styles.meta}>{describe(film)}</span>
+        </span>
+      </button>
+
+      {/* A film whose file is not there has no picture to settle, and saying
+          where the one on screen came from would be the least of what is wrong
+          with it. */}
+      {!film.missing && <CoverMark film={film} shown={hovered} />}
+    </div>
   );
 }
 
