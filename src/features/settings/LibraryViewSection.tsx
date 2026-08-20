@@ -26,11 +26,12 @@ export function LibraryViewSection() {
 
       <Choice
         name="libraryView"
-        label="Covers or a list"
-        hint="Covers are what a library is for. A list serves one too large to look at, with a column for each thing you might sort by."
+        label="How the films are drawn"
+        hint="Covers are what a library is for. A list serves one too large to look at, with a column for each thing you might sort by. Spines are the whole shelf at once, each film an edge in its own colours, for finding one by sight."
         options={[
           { value: 'covers', label: 'Covers' },
           { value: 'list', label: 'List' },
+          { value: 'spines', label: 'Spines' },
         ]}
       />
 

@@ -125,11 +125,13 @@ export const FIELDS = {
    */
   libraryLayout: choice('library.layout', ['shelves', 'wall'], 'shelves'),
   /*
-   * Covers or a list. The wall stops serving somewhere around two hundred
-   * films and a table serves ten thousand, so both are here rather than one of
-   * them being the right answer for every library.
+   * Covers, a list, or spines. The wall stops serving somewhere around two
+   * hundred films, a table serves ten thousand of them by name, and the spines
+   * are the other half of that: the whole shelf at once, as edges, for anybody
+   * who knows their library by sight rather than by title. Three answers rather
+   * than one being right for every library.
    */
-  libraryView: choice('library.view', ['covers', 'list'], 'covers'),
+  libraryView: choice('library.view', ['covers', 'list', 'spines'], 'covers'),
   /*
    * Which column the list is ordered by, and whether it runs the other way.
    * The names are the columns themselves, so that a sort a version from later

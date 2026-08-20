@@ -242,16 +242,35 @@ describe('the library screen', () => {
     expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
   });
 
-  it('remembers which of the two views somebody asked for', async () => {
+  /*
+   * The other half of what a table gives a large library. A list finds a film
+   * whose name is known; the spines show the whole shelf to somebody who would
+   * recognise it on sight.
+   */
+  it('gives the whole shelf on edge when the spines are the view chosen', () => {
+    useSettings.setState({ settings: { ...DEFAULTS, libraryView: 'spines' } });
+    show({ films: [on('Crime'), on('Epics', { id: 9, title: 'Stalker' })] });
+
+    expect(screen.getByRole('button', { name: 'Heat' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stalker' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
+  });
+
+  it('remembers which of the three views somebody asked for', async () => {
     show({ films: [film] });
 
     await userEvent.click(screen.getByRole('button', { name: 'List' }));
     expect(useSettings.getState().settings.libraryView).toBe('list');
     expect(screen.getByRole('table')).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: 'Spines' }));
+    expect(useSettings.getState().settings.libraryView).toBe('spines');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
     await userEvent.click(screen.getByRole('button', { name: 'Covers' }));
     expect(useSettings.getState().settings.libraryView).toBe('covers');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'films' })).toBeInTheDocument();
   });
 
   it('shows a film whose file has gone as missing rather than hiding it', () => {

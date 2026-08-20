@@ -36,7 +36,17 @@ export interface Command {
 export const COMMANDS: readonly Command[] = [
   { id: 'palette', name: 'Find a film', key: 'k', keys: ['Ctrl', 'K'] },
   { id: 'folder', name: 'Choose a folder to watch', key: 'o', keys: ['Ctrl', 'O'] },
-  { id: 'view', name: 'Show the library as covers or as a list', key: 'l', keys: ['Ctrl', 'L'] },
+  /*
+   * Three views rather than two, so the key moves on to the next one rather
+   * than swapping between a pair. The name says so, because a key described as
+   * a swap and behaving as a cycle is a key nobody trusts.
+   */
+  {
+    id: 'view',
+    name: 'Show the library as covers, a list or spines',
+    key: 'l',
+    keys: ['Ctrl', 'L'],
+  },
   /*
    * T for the text of the film, and with Ctrl because the letters on their own
    * belong to the player. It is one key both ways: the panel is put away by the
