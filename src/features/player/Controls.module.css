@@ -170,6 +170,21 @@
   align-items: center;
 }
 
+/*
+ * Where the film is talking, drawn under the bar in the film's own colour.
+ * Texture rather than a second control: it takes no pointer, it does not fill
+ * in as the film runs, and it is faint enough that the thumb and the played
+ * fraction are still what the eye goes to first.
+ */
+.dialogue {
+  position: absolute;
+  inset: calc(50% + var(--space-1)) 0 0;
+  width: 100%;
+  fill: var(--colour-accent);
+  opacity: 0.34;
+  pointer-events: none;
+}
+
 .scrubber {
   position: relative;
   width: 100%;

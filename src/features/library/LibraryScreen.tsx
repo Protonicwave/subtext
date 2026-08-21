@@ -1,18 +1,19 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import type { FilmView } from '@/shared/ipc/bindings';
-import { CoversIcon, FolderIcon, ListIcon } from '@/shared/ui/Icon';
+import { CoversIcon, FolderIcon, ListIcon, SpinesIcon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
 import { classes } from '@/shared/ui/classes';
 import { useSetting, useSettings } from '@/shared/settings/useSettings';
 import type { Settings } from '@/shared/settings/schema';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
-import { Billboard } from './Billboard';
+import { Masthead } from './Masthead';
 import { ContinueWatching } from './ContinueWatching';
 import { FilmList } from './FilmList';
 import { Shelf } from './Shelf';
+import { Spines } from './Spines';
 import { Wall } from './Wall';
-import { billboardOf, shelvesOf } from './shelves';
+import { mastheadOf, shelvesOf } from './shelves';
 import { libraryTotalOf, sizeOf } from './size';
 import { useCapture } from './useCapture';
 import { useLibrary } from './useLibrary';
@@ -22,11 +23,13 @@ import styles from './LibraryScreen.module.css';
 /**
  * The screen you land on.
  *
- * One film shown large above rows built from the folders somebody already made,
- * or the one wall for anybody who would rather have every film at once. Both
- * are drawn against the same scrolling, which this screen owns rather than
- * leaving to the shell: the wall is virtualised, and a virtualiser has to be
- * told which element is scrolled to know what is in view.
+ * Where the reader stopped, stated above the films themselves: rows built from
+ * the folders somebody already made, one wall for anybody who would rather have
+ * every film at once, a table for a library too large to look at, or the whole
+ * shelf on edge. All of them are drawn against the same scrolling, which this
+ * screen owns rather than leaving to the shell: every one of them is
+ * virtualised, and a virtualiser has to be told which element is scrolled to
+ * know what is in view.
  */
 export function LibraryScreen() {
   const held = useLibrary((library) => library.films);
@@ -52,17 +55,18 @@ export function LibraryScreen() {
     [stopped, showMissing],
   );
 
-  // The list serves a library the wall has stopped serving, so it stands beside
-  // the covers rather than replacing them, and which one somebody is looking at
-  // decides whether the folders are worth arranging into rows at all.
-  const listed = useSetting('libraryView') === 'list';
+  // The list and the spines each serve a library the wall has stopped serving,
+  // by name and by sight, so all three stand beside each other rather than one
+  // replacing the others. Which one somebody is looking at decides whether the
+  // folders are worth arranging into rows at all: only the covers have rows.
+  const view = useSetting('libraryView');
   const layout = useSetting('libraryLayout');
-  const shelved = !listed && layout === 'shelves';
+  const shelved = view === 'covers' && layout === 'shelves';
   const shelves = useMemo(
     () => (shelved ? shelvesOf(films, resumable) : []),
     [shelved, films, resumable],
   );
-  const billboard = useMemo(() => billboardOf(films, resumable), [films, resumable]);
+  const masthead = useMemo(() => mastheadOf(films, resumable), [films, resumable]);
 
   // Nothing is captured until the library has been read, so that a first run
   // does not open a decoder before there is anything to point it at.
@@ -72,8 +76,8 @@ export function LibraryScreen() {
    * A tile and a row both open the film's page rather than the film. What a
    * file is turns out to be the question somebody has when they are looking at
    * a wall of covers, and the page answers it with the film one press away. The
-   * billboard is the exception: it is already showing one film large, so it
-   * offers to play it and puts the page beside that.
+   * masthead is the exception: it is already showing one film, so it offers to
+   * carry on with it and puts the page beside that.
    */
   const open = (film: FilmView) => {
     openSheet(film.id);
@@ -86,9 +90,9 @@ export function LibraryScreen() {
 
   return (
     <div className={styles.screen} ref={scroller}>
-      {billboard && <Billboard film={billboard} onPlay={play} onOpen={open} />}
-
       <div className={styles.inner}>
+        {masthead && <Masthead film={masthead} onPlay={play} onOpen={open} />}
+
         <div className={styles.tools}>
           {/*
            * Announced, because this is the one place the screen says whether it
@@ -116,8 +120,10 @@ export function LibraryScreen() {
         {loaded &&
           (films.length === 0 ? (
             <p className={styles.empty}>{emptyBecause(folders.length, held.length)}</p>
-          ) : listed ? (
+          ) : view === 'list' ? (
             <FilmList films={films} scroller={scroller} onOpen={open} />
+          ) : view === 'spines' ? (
+            <Spines films={films} scroller={scroller} onOpen={open} />
           ) : shelved ? (
             shelves.map((shelf) => <Shelf key={shelf.key} shelf={shelf} onOpen={open} />)
           ) : (
@@ -132,10 +138,11 @@ export function LibraryScreen() {
 }
 
 /**
- * Covers or the list, which is the one choice the toolbar carries.
+ * Covers, the list or the spines, which is the one choice the toolbar carries.
  *
- * Two buttons rather than a menu: there are two of them, they are both worth
- * one press, and each says which it is by showing what it would give you.
+ * Three buttons rather than a menu: each is worth one press, and each says
+ * which it is by showing what it would give you. Drawn in the order the key
+ * cycles them, so that the key and the toolbar teach the same thing.
  */
 function ViewToggle() {
   const view = useSetting('libraryView');
@@ -160,6 +167,7 @@ function ViewToggle() {
     <div className={styles.views}>
       {option('covers', 'Covers', <CoversIcon size={14} />)}
       {option('list', 'List', <ListIcon size={14} />)}
+      {option('spines', 'Spines', <SpinesIcon size={14} />)}
     </div>
   );
 }

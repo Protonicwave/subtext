@@ -12,6 +12,8 @@ const film = {
   addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: null,
+  coverPath: null,
+  coverSource: 'none',
   accent: null,
   missing: false,
   details: null,

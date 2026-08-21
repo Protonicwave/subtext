@@ -1,0 +1,92 @@
+/*
+ * The statement about a tile's picture, and the two ways to change it.
+ *
+ * Sits over the top left of the frame, where the missing badge sits on the
+ * tiles that have one, since a missing film is not offered a cover and the two
+ * never appear together.
+ */
+
+.mark {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 2;
+  opacity: 0;
+  transition: opacity var(--duration-quick) var(--ease-out);
+}
+
+.shown {
+  opacity: 1;
+}
+
+/* Reachable by keyboard before it is visible, which is what brings it into view. */
+.mark:focus-within {
+  opacity: 1;
+}
+
+.label {
+  display: block;
+  max-width: 12ch;
+  padding: 2px var(--space-2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--colour-bg) 78%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--colour-text-dim);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.label:hover,
+.label:focus-visible {
+  color: var(--colour-text);
+}
+
+.actions {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 15ch;
+  padding: var(--space-1);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+.action {
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--colour-text);
+  font-size: var(--text-xs);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action:hover,
+.action:focus-visible {
+  background: var(--colour-surface-hover);
+}
+
+.action:disabled {
+  color: var(--colour-text-faint);
+  cursor: default;
+}
+
+.problem {
+  max-width: 28ch;
+  padding: var(--space-2);
+  color: var(--colour-attention);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}

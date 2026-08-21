@@ -42,9 +42,9 @@ export const RAIL_CAPTION = 58;
 /**
  * Two by three, the shape a film poster has been for a century.
  *
- * The frames captured from a film are sixteen by nine, so they are cropped to
- * this rather than letterboxed into it. A wall of tall tiles with black bars
- * down both sides is worse than losing the edges of each frame.
+ * A tile is this whatever it is drawing. Artwork off the disk is already this
+ * shape or near enough, a film with none is composed to it, and a frame shown
+ * in place of one is letterboxed into it rather than cut down to it.
  */
 export const TILE_RATIO = 3 / 2;
 
@@ -94,3 +94,24 @@ export function rowsOf<T>(items: readonly T[], columns: number): T[][] {
   }
   return rows;
 }
+
+/**
+ * How wide one spine is drawn, and how tall.
+ *
+ * Not scaled by the tile size, which is a choice about covers: a spine carries
+ * a title and nothing else, so there is one width at which it is legible and no
+ * range to offer. Thirty pixels holds the title face at its smallest set on its
+ * side, and a window of any ordinary width holds forty or so across, which puts
+ * a few hundred films on the screen at once. That is the whole point of the
+ * view and the numbers follow from it.
+ */
+export const SPINE_WIDTH = 30;
+export const SPINE_HEIGHT = 208;
+
+/**
+ * The gap between spines.
+ *
+ * Small, because discs on a shelf touch. Not nothing, because two dark spines
+ * side by side with no gap read as one wide one.
+ */
+export const SPINE_GAP = 5;

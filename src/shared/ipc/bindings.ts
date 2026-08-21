@@ -203,6 +203,53 @@ export const commands = {
 	pair: string,
 } | null, durationMs: number | null) => typedError<FilmView, Failure>(__TAURI_INVOKE("save_poster", { filmId, image, accent, durationMs })),
 	/**
+	 *  Opens the platform's own file picker, filtered to picture files.
+	 * 
+	 *  The other half of settling a cover by hand. What comes back is a path and
+	 *  nothing else: whether the file is a picture at all is [`choose_cover`]'s
+	 *  question, because a path can also arrive from a drop and both have to be
+	 *  held to the same test.
+	 */
+	chooseImage: () => typedError<string | null, Failure>(__TAURI_INVOKE("choose_image")),
+	/**
+	 *  Settles a film's cover, because somebody said which picture it is.
+	 * 
+	 *  The one source no scan is allowed to have an opinion about, which is what
+	 *  makes this worth a command of its own rather than a row written like any
+	 *  other. The file stays exactly where it is: what is recorded is where to
+	 *  find it, and the poster drawn from it goes in the cache with every other.
+	 */
+	chooseCover: (filmId: Id, path: string) => typedError<FilmView, Failure>(__TAURI_INVOKE("choose_cover", { filmId, path })),
+	/**
+	 *  Gives a film back to the scan, which is the undo of choosing.
+	 * 
+	 *  The choice is dropped and the folder is looked at again, so what the film
+	 *  ends up with is what a scan would have given it and stays that way. Doing
+	 *  only the first half would leave a film showing a frame until the next
+	 *  startup and then quietly showing artwork again, which is a state nobody
+	 *  asked for and could not keep.
+	 * 
+	 *  A film the disk has no picture for ends with no cover at all, and the tile
+	 *  goes back to being drawn from the film itself. That is what taking a frame
+	 *  means here, and it is the common case in a library of releases that carry
+	 *  no artwork.
+	 */
+	clearCover: (filmId: Id) => typedError<FilmView, Failure>(__TAURI_INVOKE("clear_cover", { filmId })),
+	/**
+	 *  Covers as much of the library as one folder of pictures can.
+	 * 
+	 *  The folder is walked for pictures and each one is matched to the film its
+	 *  name reduces to. A film the folder has nothing for is left exactly as it
+	 *  was, since a folder somebody pointed at is an offer of artwork and not a
+	 *  statement that everything else is wrong.
+	 * 
+	 *  What is matched is recorded as chosen, because it was: somebody pointed at
+	 *  the folder. That includes a film whose cover was already chosen by hand,
+	 *  which is the one place a choice is overwritten, and it is overwritten by a
+	 *  later choice rather than by a scan.
+	 */
+	coversFromFolder: (path: string) => typedError<CoversTaken, Failure>(__TAURI_INVOKE("covers_from_folder", { path })),
+	/**
 	 *  Every preference that has been set, by key.
 	 * 
 	 *  The whole lot in one call rather than a call per control. There are a few
@@ -459,6 +506,31 @@ export type CorrectionView = {
 	rate: number,
 };
 
+/**
+ *  Where a film's cover came from.
+ * 
+ *  The claim, not the file. A screen says who chose the image and how directly,
+ *  and nothing on this side of the boundary has to know what a `.nfo` is or
+ *  which folder was looked in to say it.
+ */
+export type CoverSourceView = "chosen" | "in-file" | "beside" | "sidecar" | "folder-above" | 
+/**  No image was found, so the tile is drawn from the film itself. */
+"none";
+
+/**
+ *  What a folder of pictures turned out to cover.
+ * 
+ *  Two counts and nothing else. Which films took a cover is not reported here
+ *  because the library is read again straight afterwards and says so itself,
+ *  film by film, in the source on every row.
+ */
+export type CoversTaken = {
+	/**  Films that took a cover from the folder. */
+	matched: number,
+	/**  Films the folder had nothing for, which are left exactly as they were. */
+	unmatched: number,
+};
+
 /**  One of the nine places a cue can ask to be drawn. */
 export type CuePositionView = "top-left" | "top-centre" | "top-right" | "middle-left" | "middle-centre" | "middle-right" | "bottom-left" | "bottom-centre" | "bottom-right";
 
@@ -522,6 +594,20 @@ export type FilmView = {
 	addedAt: Millis,
 	durationMs: number | null,
 	posterPath: string | null,
+	/**
+	 *  The image the poster was drawn from, where there was one.
+	 * 
+	 *  Not what is drawn: the poster is. It is what the report after a scan
+	 *  shows beside each place a cover came from, so that a statement about
+	 *  where the artwork was found can be checked against the disk.
+	 */
+	coverPath: string | null,
+	/**
+	 *  Where the picture the poster was drawn from came from, which is what the
+	 *  film page says under the cover and what tells a frame apart from artwork
+	 *  somebody put there.
+	 */
+	coverSource: CoverSourceView,
 	accent: AccentView | null,
 	/**  The file is not where it was. The film is kept anyway. */
 	missing: boolean,
@@ -752,6 +838,11 @@ export type ScanSummary = {
 	subtitlesRead: number,
 	cuesIndexed: number,
 	filmsMissing: number,
+	/**
+	 *  Films whose cover changed. What the report after a scan is shown for,
+	 *  since a scan that settled nothing new has nothing to report.
+	 */
+	coversChanged: number,
 	/**
 	 *  Subtitle files belonging to no film, which the import sheet offers to
 	 *  attach by hand.

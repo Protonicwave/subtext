@@ -1,4 +1,5 @@
 import { useSettings } from '@/shared/settings/useSettings';
+import type { Settings } from '@/shared/settings/schema';
 import { useNavigation } from '@/app/routes';
 import { useImport } from '@/features/onboarding/useImport';
 import type { ActionId } from './commands';
@@ -22,7 +23,12 @@ export function runCommand(id: ActionId) {
       return;
     case 'view': {
       const settings = useSettings.getState();
-      settings.change('libraryView', settings.settings.libraryView === 'list' ? 'covers' : 'list');
+      settings.change('libraryView', nextView(settings.settings.libraryView));
+      return;
+    }
+    case 'transcript': {
+      const settings = useSettings.getState();
+      settings.change('transcript', settings.settings.transcript === 'shown' ? 'hidden' : 'shown');
       return;
     }
     case 'rescan':
@@ -39,4 +45,18 @@ export function runCommand(id: ActionId) {
             : { screen: 'settings' },
         );
   }
+}
+
+/**
+ * The view the key moves on to, in the order the toggle draws them.
+ *
+ * A cycle rather than a swap, since there are three of them now. It runs the
+ * same way round as the buttons in the toolbar read, so that pressing the key
+ * twice from covers is the same as pressing the last of the three.
+ */
+const VIEWS: readonly Settings['libraryView'][] = ['covers', 'list', 'spines'];
+
+function nextView(view: Settings['libraryView']): Settings['libraryView'] {
+  const at = VIEWS.indexOf(view);
+  return VIEWS[(at + 1) % VIEWS.length] ?? 'covers';
 }

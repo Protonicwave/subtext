@@ -1,0 +1,78 @@
+/*
+ * A frame drawn at the shape of a cover.
+ *
+ * Three layers over each other: the frame blurred and overscanned to fill the
+ * tile, the frame itself at its own shape in the middle, and the title over
+ * the bottom of both.
+ */
+
+.cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--space-4);
+  overflow: hidden;
+}
+
+/*
+ * What fills the room the letterboxing leaves.
+ *
+ * Scaled past the edges before it is blurred, because a blur reads the pixels
+ * beyond what it is drawing and there are none at the edge of an image: without
+ * the overscan every tile would have a pale fringe around it.
+ */
+.wash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.3);
+  filter: blur(30px) saturate(1.2) brightness(0.55);
+}
+
+/* The frame itself, whole, at whatever shape it was taken at. */
+.shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A scrim under the words, so the title reads over a bright frame. Drawn only
+   where there are words, since a dark band under nothing is just a dark band. */
+.titled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklab, var(--colour-bg) 82%, transparent),
+    transparent 44%
+  );
+}
+
+/*
+ * Over the scrim rather than under it, which is what the stacking needs saying
+ * for: everything here is positioned, so the last one drawn would otherwise be
+ * the one the scrim covers.
+ */
+.title {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--colour-text);
+  text-shadow: 0 1px 12px color-mix(in oklab, var(--colour-bg) 80%, transparent);
+  /* Three lines is enough for any title and keeps it clear of the frame. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}

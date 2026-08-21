@@ -4,11 +4,12 @@ import { Choice } from './controls';
  * How the library is drawn, which is a different question from where it comes
  * from.
  *
- * The three here are one decision seen from three sides: how the films are
- * grouped, whether they are covers or a table, and how large a cover is. All
- * three are also reachable from the library screen itself, because that is
- * where somebody is standing when they want them changed. They are here as
- * well so that the screen has somewhere to say what each one means.
+ * The four here are one decision seen from four sides: how the films are
+ * grouped, whether they are covers or a table, how large a cover is, and what a
+ * film with no artwork is drawn as. The first three are also reachable from the
+ * library screen itself, because that is where somebody is standing when they
+ * want them changed. They are here as well so that the screen has somewhere to
+ * say what each one means.
  */
 export function LibraryViewSection() {
   return (
@@ -25,11 +26,12 @@ export function LibraryViewSection() {
 
       <Choice
         name="libraryView"
-        label="Covers or a list"
-        hint="Covers are what a library is for. A list serves one too large to look at, with a column for each thing you might sort by."
+        label="How the films are drawn"
+        hint="Covers are what a library is for. A list serves one too large to look at, with a column for each thing you might sort by. Spines are the whole shelf at once, each film an edge in its own colours, for finding one by sight."
         options={[
           { value: 'covers', label: 'Covers' },
           { value: 'list', label: 'List' },
+          { value: 'spines', label: 'Spines' },
         ]}
       />
 
@@ -41,6 +43,16 @@ export function LibraryViewSection() {
           { value: 'small', label: 'Small' },
           { value: 'medium', label: 'Medium' },
           { value: 'large', label: 'Large' },
+        ]}
+      />
+
+      <Choice
+        name="withoutArtwork"
+        label="Films with no artwork"
+        hint="Subtext looks for a picture inside each film and beside it on the disk, and never anywhere else. A film that has none is drawn from its own title, in its own colours. A frame from the film is the other answer: it shows what the film looks like, taken a fifth of the way in by nobody in particular."
+        options={[
+          { value: 'composed', label: 'A composed cover' },
+          { value: 'frame', label: 'A frame from the film' },
         ]}
       />
     </>

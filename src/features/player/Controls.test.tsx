@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Controls } from './Controls';
+import { shapeOf } from './dialogue';
 import { SKIP_MS } from './intervals';
 import type { Alignment } from './useAlignment';
 import type { Check } from './useCheck';
@@ -21,7 +22,15 @@ const playing: Playback = {
   problem: null,
 };
 
-function show(playback: Partial<Playback> = {}, visible = true, available = true) {
+/** A film that talks in the middle and is quiet at either end. */
+const TALKING = shapeOf([0.2, 1, 0]);
+
+function show(
+  playback: Partial<Playback> = {},
+  visible = true,
+  available = true,
+  talking = TALKING,
+) {
   const transport: Transport = {
     toggle: vi.fn(),
     play: vi.fn(),
@@ -73,6 +82,7 @@ function show(playback: Partial<Playback> = {}, visible = true, available = true
       playback={{ ...playing, ...playback }}
       transport={transport}
       stepping={stepping}
+      talking={talking}
       preview={{ source: 'stream:///films/Heat.mkv', spokenAt: () => 'I take scores.' }}
       sync={sync}
       alignment={alignment}
@@ -148,6 +158,24 @@ describe('the control bar', () => {
     // A range input reports the position it was moved to, however it was moved.
     fireEvent.change(scrubber, { target: { value: '600000' } });
     expect(transport.seekTo).toHaveBeenCalledWith(600_000);
+  });
+
+  it('draws where the film is talking as one shape under the scrubber', () => {
+    show();
+    const track = screen.getByRole('slider', { name: /position in the film/i }).parentElement;
+
+    // One path, and not one element a bucket. The bar is rebuilt every time it
+    // comes back, and three hundred elements is what that would cost.
+    const drawn = track?.querySelectorAll('path') ?? [];
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0]?.getAttribute('d')).toBe(TALKING);
+  });
+
+  it('leaves no gap for a film with no dialogue to draw', () => {
+    show({}, true, true, '');
+    const track = screen.getByRole('slider', { name: /position in the film/i }).parentElement;
+
+    expect(track?.querySelectorAll('svg')).toHaveLength(0);
   });
 
   it('shows the moment under the pointer, and what is said there', () => {

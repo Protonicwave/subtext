@@ -15,6 +15,9 @@ const { ipc } = vi.hoisted(() => ({
     cancelAlignment: vi.fn(() => Promise.resolve(null)),
     setTrackCorrection: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
     trackCues: vi.fn((): Promise<CueView[]> => Promise.resolve([])),
+    chooseImage: vi.fn((): Promise<string | null> => Promise.resolve(null)),
+    chooseCover: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
+    clearCover: vi.fn((): Promise<FilmView> => Promise.reject(new Error('not under test'))),
   },
 }));
 
@@ -40,6 +43,7 @@ vi.mock('@/shared/media/source', () => ({ sourceOf: (path: string) => `asset://$
 
 const { LEAD_MS } = await import('@/features/player/check');
 const { CHECK } = await import('@/features/player/outcomes');
+const { IpcError } = await import('@/shared/ipc/client');
 const { FilmSheet } = await import('./FilmSheet');
 const { useLibrary } = await import('./useLibrary');
 const { useSheet } = await import('./useSheet');
@@ -79,6 +83,8 @@ const film = {
   addedAt: Date.UTC(2026, 7, 12),
   durationMs: 170 * 60_000,
   posterPath: '/data/posters/heat.webp',
+  coverPath: null,
+  coverSource: 'none',
   accent: null,
   missing: false,
   details,
@@ -97,10 +103,20 @@ function open(changes: Partial<FilmView> = {}) {
   return showing;
 }
 
-/** What one row of the file block says. */
+/** What one row of the plate of facts says. */
 function factOf(label: string): string {
   const term = screen.getByText(label);
   return term.nextElementSibling?.textContent ?? '';
+}
+
+/** The cells of the first track of a kind, in the order they are read. */
+function rowOf(kind: 'Sound' | 'Subtitle'): string[] {
+  const row = screen
+    .getAllByRole('row')
+    .find((candidate) => candidate.firstElementChild?.textContent === kind);
+  if (row === undefined) throw new Error(`no ${kind} row in the table`);
+
+  return [...row.children].map((cell) => cell.textContent);
 }
 
 describe('the film sheet', () => {
@@ -119,7 +135,7 @@ describe('the film sheet', () => {
   });
 
   /*
-   * The tile, the row, the billboard and the palette all come to this: a film
+   * The tile, the row, the masthead and the palette all come to this: a film
    * named to the store. Which controls do the naming is the library screen's
    * business, and is covered there.
    */
@@ -127,7 +143,9 @@ describe('the film sheet', () => {
     open();
 
     expect(screen.getByRole('dialog', { name: 'Heat' })).toBeInTheDocument();
-    expect(screen.getByText('1995 · 2 hr 50 min · 1080p H.264')).toBeInTheDocument();
+    for (const fact of ['1995', '2 hr 50 min', '1080p H.264']) {
+      expect(screen.getByText(fact)).toBeInTheDocument();
+    }
   });
 
   /*
@@ -200,12 +218,39 @@ describe('the film sheet', () => {
     expect(factOf('Container')).toBe('MP4');
     expect(screen.queryByText('Resolution')).not.toBeInTheDocument();
     expect(screen.queryByText('Frame rate')).not.toBeInTheDocument();
-    expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
+    expect(screen.getByText('No sound recorded')).toBeInTheDocument();
   });
 
-  it('lists the sound the film carries', () => {
+  /*
+   * A fact the file did not state has no row, so nothing on the plate is ever
+   * drawn as a label with nothing after it.
+   */
+  it('draws no value it does not have', () => {
+    open({
+      path: '/films/Crime/Heat.1995.mp4',
+      details: {
+        container: 'MP4',
+        sizeBytes: 4_100_000_000,
+        averageBitrate: null,
+        video: null,
+        audio: [],
+      },
+    });
+
+    for (const value of screen.getByRole('dialog').querySelectorAll('dd')) {
+      expect(value.textContent.trim()).not.toBe('');
+    }
+  });
+
+  /*
+   * Sound and subtitles in one table, so that what a film is in and what it can
+   * be read in sit under each other rather than in two blocks.
+   */
+  it('lists the sound the film carries, and says which will be heard', () => {
     open();
-    expect(screen.getByText('DTS-HD MA 5.1')).toBeInTheDocument();
+
+    const sound = rowOf('Sound');
+    expect(sound).toEqual(['Sound', 'English', 'DTS-HD MA', '5.1', 'Default']);
   });
 
   it('says where each subtitle came from and how much of it there is', () => {
@@ -217,14 +262,35 @@ describe('the film sheet', () => {
     });
 
     expect(screen.getByText('Beside the film · 1,402 lines')).toBeInTheDocument();
-    expect(screen.getByText('Inside the film · 1,402 lines')).toBeInTheDocument();
-    expect(screen.getByText('Forced')).toBeInTheDocument();
+    expect(screen.getByText('Inside the film · 1,402 lines · Forced')).toBeInTheDocument();
+  });
+
+  /*
+   * The one the player would draw, marked. A film in three languages otherwise
+   * says nothing about which of them is about to be read.
+   */
+  it('marks the subtitle the film is watched with', () => {
+    open({ tracks: [track, { ...track, id: 4, language: 'fr' }] });
+
+    expect(rowOf('Subtitle')).toContain('Chosen');
+    expect(screen.getAllByText('Chosen')).toHaveLength(1);
+  });
+
+  /*
+   * A film recorded before this build described such things, and never scanned
+   * since. There is no table to draw and nothing to say about it beyond that.
+   */
+  it('says nothing was recorded for a film with no tracks at all', () => {
+    open({ details: null, tracks: [] });
+
+    expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('says plainly when a film has no subtitles at all', () => {
     open({ tracks: [] });
 
-    expect(screen.getByText('None found')).toBeInTheDocument();
+    expect(screen.getByText('No subtitles found')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /listen and line up/i })).not.toBeInTheDocument();
   });
 
@@ -487,6 +553,107 @@ describe('the film sheet', () => {
         /AC-3, in a format Subtext has no decoder for/,
       );
       expect(screen.getByRole('status')).toHaveTextContent(/bracket keys still work/);
+    });
+  });
+  /*
+   * Where the picture came from, and the two ways to settle it. The statement
+   * is the same one the mark on a tile makes, from the same place, so the two
+   * cannot come to describe the same film differently.
+   */
+  describe('the cover', () => {
+    it('says where the picture came from', () => {
+      open({ coverSource: 'beside' });
+
+      expect(screen.getByText('Beside the film')).toBeInTheDocument();
+      expect(screen.getByText(/sitting next to the film on the disk/)).toBeInTheDocument();
+    });
+
+    it('says plainly when there was no artwork to find', () => {
+      open({ coverSource: 'none' });
+
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+      expect(screen.getByText(/No artwork was found anywhere on the disk/)).toBeInTheDocument();
+    });
+
+    it('settles on a picture that was picked, and redraws from what came back', async () => {
+      const chosen = { ...film, coverSource: 'chosen' as const };
+      ipc.chooseImage.mockReturnValue(Promise.resolve('/pictures/Heat.png'));
+      ipc.chooseCover.mockReturnValue(Promise.resolve(chosen));
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Your choice')).toBeInTheDocument();
+      });
+      expect(ipc.chooseCover).toHaveBeenCalledWith(film.id, '/pictures/Heat.png');
+      // Read back rather than patched, so the page says what the library says.
+      expect(useLibrary.getState().films[0]?.coverSource).toBe('chosen');
+    });
+
+    it('changes nothing when the picker is closed without a picture', async () => {
+      ipc.chooseImage.mockReturnValue(Promise.resolve(null));
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(ipc.chooseImage).toHaveBeenCalled();
+      });
+      expect(ipc.chooseCover).not.toHaveBeenCalled();
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+    });
+
+    it('says why a picture was refused, and leaves the film as it was', async () => {
+      ipc.chooseImage.mockReturnValue(Promise.resolve('/pictures/Heat.mkv'));
+      // Rejected when it is called rather than when it is set up, so the
+      // failure belongs to the click and not to the test's own arrangement.
+      ipc.chooseCover.mockImplementation(() =>
+        Promise.reject(new IpcError('that file is not a JPEG, a PNG or a WebP')),
+      );
+      open({ coverSource: 'none' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Choose an image' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('status')).toHaveTextContent(/not a JPEG, a PNG or a WebP/);
+      });
+      expect(screen.getByText('From the film itself')).toBeInTheDocument();
+    });
+
+    /*
+     * Only a picked cover can be handed back. Offering to put back one the scan
+     * chose would be offering to do nothing, since the scan is already free to
+     * change it.
+     */
+    it('offers to put a choice back, and only where there is one', async () => {
+      ipc.clearCover.mockReturnValue(Promise.resolve({ ...film, coverSource: 'none' as const }));
+      open({ coverSource: 'chosen' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Use what was found' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('From the film itself')).toBeInTheDocument();
+      });
+      expect(ipc.clearCover).toHaveBeenCalledWith(film.id);
+      expect(screen.queryByRole('button', { name: 'Use what was found' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * A drop is reported to the window rather than to the element under it, so
+     * the page says which film it is and the routing works the rest out.
+     */
+    it('names its film so a picture can be dropped on it', () => {
+      open();
+
+      expect(screen.getByRole('dialog')).toHaveAttribute('data-film-id', String(film.id));
+    });
+
+    it('still says where the picture came from for a film that has gone', () => {
+      open({ missing: true, coverSource: 'sidecar' });
+
+      expect(screen.getByText('From a media manager')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Choose an image' })).toBeInTheDocument();
     });
   });
 });

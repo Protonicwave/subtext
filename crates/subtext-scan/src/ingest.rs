@@ -16,7 +16,7 @@ use std::sync::mpsc::{self, Receiver};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use subtext_container::{EmbeddedTrack, MediaStreams, SubtitleCodec};
 use subtext_core::{
-    Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, Timestamp, pair_with, parse_srt,
+    Cover, Cue, MatchKind, Matching, ParseWarning, SubtitleLabel, Timestamp, pair_with, parse_srt,
 };
 use subtext_index::{
     AudioDetails, Database, FilmStreams, MediaDetails, NewFilm, NewTrack, Stored, StreamEntry,
@@ -58,6 +58,10 @@ pub struct ScanOutcome {
     pub cues_indexed: usize,
     pub films_missing: usize,
     pub tracks_removed: usize,
+    /// Films whose cover changed, which is what the report shown after a scan
+    /// exists to describe. Nought for a rescan of a library nobody has touched,
+    /// since deciding a cover writes only where the answer is different.
+    pub covers_changed: usize,
     /// Films opened to see what they are and what subtitle tracks they carry.
     pub films_probed: usize,
     /// Subtitle tracks found inside those films.
@@ -171,11 +175,11 @@ pub fn scan_folder(
         &written.carry_artwork,
         &database.films().covers(folder.id)?,
     );
-    let covers: Vec<(i64, Option<&Path>)> = chosen
+    let covers: Vec<(i64, Option<&Cover>)> = chosen
         .iter()
-        .map(|(id, cover)| (*id, cover.as_deref()))
+        .map(|(id, cover)| (*id, cover.as_ref()))
         .collect();
-    database.films().set_covers(&covers)?;
+    let covers_changed = database.films().set_covers(&covers)?;
 
     progress.stage = ScanStage::Finished;
     progress.subtitles_read = written.tracks;
@@ -195,6 +199,7 @@ pub fn scan_folder(
         subtitles_read: written.tracks,
         cues_indexed: written.cues,
         films_missing,
+        covers_changed,
         tracks_removed: plan.removed.len(),
         films_probed: films_to_open.len(),
         embedded_tracks: written.streams,
@@ -437,38 +442,39 @@ fn file_label(file: &FoundFile) -> SubtitleLabel {
 /// Where each film's cover comes from, once the scan knows everything it is
 /// going to know.
 ///
-/// Three things have to meet for this: the pictures found beside the films,
-/// which is a question about names; what the films that were opened turned out
-/// to carry inside them; and what the row already said about the films that
-/// were not opened, since those have not changed and so neither has the answer.
+/// Three things have to meet for this: what the pictures and sidecars on the
+/// disk claim, which is a question about names; what the films that were opened
+/// turned out to carry inside them; and what the row already said about the
+/// films that were not opened, since those have not changed and so neither has
+/// the answer.
 fn chosen_covers(
     found: &walk::Discovery,
     names: &[subtext_core::ParsedName],
     stored: &[Stored],
     opened: &[FilmJob],
     carry_artwork: &HashSet<i64>,
-    recorded: &[(i64, Option<PathBuf>)],
-) -> Vec<(i64, Option<PathBuf>)> {
-    let beside = covers::beside(&found.films, names, &found.images);
+    recorded: &[(i64, Option<Cover>)],
+) -> Vec<(i64, Option<Cover>)> {
+    let on_disk = covers::on_disk(&found.films, names, &found.images, &found.sidecars);
     let opened: HashSet<i64> = opened.iter().map(|job| job.film_id).collect();
-    let recorded: HashMap<i64, &Path> = recorded
+    let recorded: HashMap<i64, &Cover> = recorded
         .iter()
-        .filter_map(|(id, cover)| Some((*id, cover.as_deref()?)))
+        .filter_map(|(id, cover)| Some((*id, cover.as_ref()?)))
         .collect();
 
     found
         .films
         .iter()
         .zip(stored)
-        .zip(beside)
-        .map(|((file, stored), beside)| {
+        .zip(on_disk)
+        .map(|((file, stored), on_disk)| {
             let cover = covers::decide(
                 &file.path,
                 opened
                     .contains(&stored.id)
                     .then(|| carry_artwork.contains(&stored.id)),
                 recorded.get(&stored.id).copied(),
-                beside.as_deref(),
+                &on_disk,
             );
             (stored.id, cover)
         })

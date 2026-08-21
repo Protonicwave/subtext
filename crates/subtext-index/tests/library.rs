@@ -5,7 +5,7 @@
 
 mod common;
 
-use subtext_core::{Cue, CuePosition, SubtitleLabel, Timestamp};
+use subtext_core::{Cover, CoverSource, Cue, CuePosition, SubtitleLabel, Timestamp};
 use subtext_index::{Database, NewFilm, NewTrack, TrackMatch, TrackOrigin};
 
 use crate::common::{Library, cues};
@@ -20,7 +20,7 @@ fn a_new_file_is_migrated_and_reopening_it_changes_nothing() {
     // leave what is already there alone.
     let reopened = library.reopen();
     assert_eq!(reopened.films().list().unwrap().len(), 1);
-    assert_eq!(Database::schema_version(), 8);
+    assert_eq!(Database::schema_version(), 9);
 }
 
 #[test]
@@ -506,26 +506,22 @@ fn where_a_cover_came_from_is_kept_and_only_written_when_it_changes() {
     // Nothing yet, which is what puts a film in the way of a frame capture.
     assert_eq!(films.covers(folder).unwrap(), [(film_id, None)]);
 
-    let beside = library.root.join("Heat.jpg");
+    let beside = Cover::new(library.root.join("Heat.jpg"), CoverSource::Beside);
+    assert_eq!(films.set_covers(&[(film_id, Some(&beside))]).unwrap(), 1);
     assert_eq!(
-        films
-            .set_covers(&[(film_id, Some(beside.as_path()))])
-            .unwrap(),
-        1
-    );
-    assert_eq!(
-        films.by_id(film_id).unwrap().unwrap().cover_path,
+        films.by_id(film_id).unwrap().unwrap().cover,
         Some(beside.clone())
     );
 
     // Saying the same thing again writes nothing, so a rescan of a library
     // nobody has touched still touches no rows.
-    assert_eq!(
-        films
-            .set_covers(&[(film_id, Some(beside.as_path()))])
-            .unwrap(),
-        0
-    );
+    assert_eq!(films.set_covers(&[(film_id, Some(&beside))]).unwrap(), 0);
+
+    // The same image, picked by somebody rather than found, is a different
+    // answer and is written down as one.
+    let chosen = Cover::new(beside.path.clone(), CoverSource::Chosen);
+    assert_eq!(films.set_covers(&[(film_id, Some(&chosen))]).unwrap(), 1);
+    assert_eq!(films.covers(folder).unwrap(), [(film_id, Some(chosen))]);
 
     // And an image that has been taken away leaves the film with none.
     assert_eq!(films.set_covers(&[(film_id, None)]).unwrap(), 1);

@@ -15,7 +15,7 @@ import { foldedOf } from './matching';
  * those would eventually be a key that did something else in one of them.
  */
 
-export type CommandId = 'palette' | 'folder' | 'view' | 'rescan' | 'settings';
+export type CommandId = 'palette' | 'folder' | 'view' | 'transcript' | 'rescan' | 'settings';
 
 /** Everything but opening the palette, which is the one command it cannot list. */
 export type ActionId = Exclude<CommandId, 'palette'>;
@@ -36,7 +36,28 @@ export interface Command {
 export const COMMANDS: readonly Command[] = [
   { id: 'palette', name: 'Find a film', key: 'k', keys: ['Ctrl', 'K'] },
   { id: 'folder', name: 'Choose a folder to watch', key: 'o', keys: ['Ctrl', 'O'] },
-  { id: 'view', name: 'Show the library as covers or as a list', key: 'l', keys: ['Ctrl', 'L'] },
+  /*
+   * Three views rather than two, so the key moves on to the next one rather
+   * than swapping between a pair. The name says so, because a key described as
+   * a swap and behaving as a cycle is a key nobody trusts.
+   */
+  {
+    id: 'view',
+    name: 'Show the library as covers, a list or spines',
+    key: 'l',
+    keys: ['Ctrl', 'L'],
+  },
+  /*
+   * T for the text of the film, and with Ctrl because the letters on their own
+   * belong to the player. It is one key both ways: the panel is put away by the
+   * key that brought it out, which is the only arrangement worth remembering.
+   */
+  {
+    id: 'transcript',
+    name: 'Show or hide the dialogue beside the film',
+    key: 't',
+    keys: ['Ctrl', 'T'],
+  },
   /*
    * The key the whole world uses for reading something again, which is what
    * this does. The webview would rather reload the window with it, so the

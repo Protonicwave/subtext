@@ -1,0 +1,122 @@
+/*
+ * The tally reads as a statement and the leftovers read as a list of things to
+ * do, so the two are set differently: the counts large in the figures face with
+ * the path they can be checked against under them, and the films below in the
+ * same row shape the import sheet already uses.
+ */
+
+.report {
+  padding: var(--space-2) 0;
+}
+
+.places {
+  padding: 0 var(--space-6);
+}
+
+.place {
+  display: grid;
+  grid-template-columns: 3ch minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) 0;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--colour-text);
+}
+
+.about {
+  min-width: 0;
+}
+
+.name {
+  display: block;
+  font-size: var(--text-sm);
+}
+
+.path {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* The name of the file is what survives a path too long for the row. */
+  direction: rtl;
+  text-align: left;
+}
+
+.leftOver {
+  margin-top: var(--space-3);
+  border-top: 1px solid color-mix(in oklab, var(--colour-line) 45%, transparent);
+}
+
+.statement {
+  padding: var(--space-4) var(--space-6) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.film {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid color-mix(in oklab, var(--colour-line) 45%, transparent);
+}
+
+.film:last-child {
+  border-bottom: 0;
+}
+
+.title {
+  min-width: 0;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--colour-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choose {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--colour-surface-hover);
+  color: var(--colour-text-dim);
+  transition: color var(--duration-instant);
+}
+
+.choose:hover:not(:disabled) {
+  color: var(--colour-text);
+}
+
+.choose:disabled {
+  opacity: 0.6;
+}
+
+.problem {
+  grid-column: 1 / -1;
+  font-size: var(--text-2xs);
+  color: var(--colour-attention);
+}

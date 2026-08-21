@@ -13,7 +13,7 @@ use specta::Type;
 use specta_typescript::Number;
 use subtext_align::{Alignment, Confidence, Landing, Misfit};
 use subtext_container::{SubtitleCodec, audio_codec_name, video_codec_name};
-use subtext_core::{Correction, Cue, CuePosition, Timestamp, shelf_of};
+use subtext_core::{Correction, Cover, CoverSource, Cue, CuePosition, Timestamp, shelf_of};
 use subtext_index::{
     AudioDetails, FilmRecord, PlaybackPosition, TrackMatch, TrackOrigin, TrackRecord, VideoDetails,
     WatchedFolder,
@@ -128,6 +128,16 @@ pub(crate) struct FilmView {
     pub(crate) added_at: Millis,
     pub(crate) duration_ms: Option<u32>,
     pub(crate) poster_path: Option<String>,
+    /// The image the poster was drawn from, where there was one.
+    ///
+    /// Not what is drawn: the poster is. It is what the report after a scan
+    /// shows beside each place a cover came from, so that a statement about
+    /// where the artwork was found can be checked against the disk.
+    pub(crate) cover_path: Option<String>,
+    /// Where the picture the poster was drawn from came from, which is what the
+    /// film page says under the cover and what tells a frame apart from artwork
+    /// somebody put there.
+    pub(crate) cover_source: CoverSourceView,
     pub(crate) accent: Option<AccentView>,
     /// The file is not where it was. The film is kept anyway.
     pub(crate) missing: bool,
@@ -173,6 +183,11 @@ impl FilmView {
             added_at: Millis::of(film.added_at),
             duration_ms: film.duration.map(Timestamp::millis),
             poster_path: film.poster_path.map(|path| path.display().to_string()),
+            cover_path: film
+                .cover
+                .as_ref()
+                .map(|cover| cover.path.display().to_string()),
+            cover_source: CoverSourceView::of(Cover::source_of(film.cover.as_ref())),
             accent: film.accent.as_deref().and_then(AccentView::parse),
             missing: film.missing_since.is_some(),
             details,
@@ -672,6 +687,36 @@ impl AlignmentView {
     }
 }
 
+/// Where a film's cover came from.
+///
+/// The claim, not the file. A screen says who chose the image and how directly,
+/// and nothing on this side of the boundary has to know what a `.nfo` is or
+/// which folder was looked in to say it.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CoverSourceView {
+    Chosen,
+    InFile,
+    Beside,
+    Sidecar,
+    FolderAbove,
+    /// No image was found, so the tile is drawn from the film itself.
+    None,
+}
+
+impl CoverSourceView {
+    fn of(source: CoverSource) -> Self {
+        match source {
+            CoverSource::Chosen => Self::Chosen,
+            CoverSource::InFile => Self::InFile,
+            CoverSource::Beside => Self::Beside,
+            CoverSource::Sidecar => Self::Sidecar,
+            CoverSource::FolderAbove => Self::FolderAbove,
+            CoverSource::Nothing => Self::None,
+        }
+    }
+}
+
 /// Whether a track is a file beside the film or a stream inside it.
 #[derive(Clone, Copy, Debug, Serialize, Type)]
 #[serde(rename_all = "kebab-case")]
@@ -872,6 +917,29 @@ pub(crate) struct PosterWanted {
     pub(crate) cover: bool,
 }
 
+/// What a folder of pictures turned out to cover.
+///
+/// Two counts and nothing else. Which films took a cover is not reported here
+/// because the library is read again straight afterwards and says so itself,
+/// film by film, in the source on every row.
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CoversTaken {
+    /// Films that took a cover from the folder.
+    pub(crate) matched: u32,
+    /// Films the folder had nothing for, which are left exactly as they were.
+    pub(crate) unmatched: u32,
+}
+
+impl CoversTaken {
+    pub(crate) fn of(matched: usize, films: usize) -> Self {
+        Self {
+            matched: count(matched),
+            unmatched: count(films.saturating_sub(matched)),
+        }
+    }
+}
+
 /// Where a film was left.
 #[derive(Clone, Copy, Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -908,6 +976,9 @@ pub(crate) struct ScanSummary {
     pub(crate) subtitles_read: u32,
     pub(crate) cues_indexed: u32,
     pub(crate) films_missing: u32,
+    /// Films whose cover changed. What the report after a scan is shown for,
+    /// since a scan that settled nothing new has nothing to report.
+    pub(crate) covers_changed: u32,
     /// Subtitle files belonging to no film, which the import sheet offers to
     /// attach by hand.
     pub(crate) unpaired_subtitles: Vec<String>,
@@ -929,6 +1000,7 @@ impl ScanSummary {
             subtitles_read: count(outcome.subtitles_read),
             cues_indexed: count(outcome.cues_indexed),
             films_missing: count(outcome.films_missing),
+            covers_changed: count(outcome.covers_changed),
             unpaired_subtitles: paths(&outcome.unpaired_subtitles),
             films_without_subtitles: paths(&outcome.films_without_subtitles),
             unreadable: paths(&outcome.unreadable),

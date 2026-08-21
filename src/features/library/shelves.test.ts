@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FilmView } from '@/shared/ipc/bindings';
-import { billboardOf, CARRYING_ON, shelvesOf } from './shelves';
+import { mastheadOf, CARRYING_ON, shelvesOf } from './shelves';
 
 /**
  * Only the fields the arrangement reads are given, since a whole film view here
@@ -78,27 +78,27 @@ describe('arranging the library into shelves', () => {
 describe('choosing the film shown large', () => {
   it('takes what was stopped most recently', () => {
     const stopped = film(2, '/films/Crime');
-    expect(billboardOf([film(5, '/films/Epics'), stopped], [stopped])).toBe(stopped);
+    expect(mastheadOf([film(5, '/films/Epics'), stopped], [stopped])).toBe(stopped);
   });
 
   it('takes the most recently added film when nothing has been started', () => {
     const newest = film(5, '/films/Epics');
-    expect(billboardOf([film(2, '/films/Crime'), newest], [])).toBe(newest);
+    expect(mastheadOf([film(2, '/films/Crime'), newest], [])).toBe(newest);
   });
 
   /*
-   * The billboard offers to play what it shows, and a file that is not there is
-   * the one thing it should not offer.
+   * The masthead offers to carry on with what it shows, and a file that is not
+   * there is the one thing it should not offer.
    */
   it('never shows a film whose file has gone', () => {
     const here = film(1, '/films/Crime');
     const gone = film(9, '/films/Crime', { missing: true });
 
-    expect(billboardOf([here, gone], [gone])).toBe(here);
-    expect(billboardOf([gone], [])).toBeNull();
+    expect(mastheadOf([here, gone], [gone])).toBe(here);
+    expect(mastheadOf([gone], [])).toBeNull();
   });
 
   it('shows nothing at all when there is nothing to show', () => {
-    expect(billboardOf([], [])).toBeNull();
+    expect(mastheadOf([], [])).toBeNull();
   });
 });

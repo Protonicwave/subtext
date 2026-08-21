@@ -1,9 +1,9 @@
 //! The films the library knows about.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use subtext_core::Timestamp;
+use subtext_core::{Cover, CoverSource, Timestamp};
 
 use crate::clock::now_millis;
 use crate::database::Database;
@@ -12,13 +12,13 @@ use crate::model::{FilmRecord, Fingerprint, NewFilm, Stored, TrackChoice, VideoD
 use crate::repository::{from_sql_int, path_text, to_sql_int};
 
 const COLUMNS: &str = "id, folder_id, path, title, year, size_bytes, modified_at, \
-                       duration_ms, poster_path, cover_path, accent, missing_since, \
-                       chosen_track_id, subtitles_off, added_at, container, \
+                       duration_ms, poster_path, cover_path, cover_source, accent, \
+                       missing_since, chosen_track_id, subtitles_off, added_at, container, \
                        video_codec, video_width, video_height, bit_depth, frame_rate";
 
 /// How many columns [`COLUMNS`] names, for queries that read a film alongside
 /// something else and need to know where the film ends.
-pub(super) const COLUMN_COUNT: usize = 21;
+pub(super) const COLUMN_COUNT: usize = 22;
 
 /// The same columns, qualified with a table alias for use in a join.
 pub(super) fn qualified_columns(alias: &str) -> String {
@@ -169,17 +169,12 @@ impl<'a> Films<'a> {
     /// about what is on disk now: a film that has not changed is not opened
     /// again, so whether it carries its own artwork is something only the row
     /// still remembers.
-    pub fn covers(&self, folder_id: i64) -> Result<Vec<(i64, Option<PathBuf>)>> {
+    pub fn covers(&self, folder_id: i64) -> Result<Vec<(i64, Option<Cover>)>> {
         self.database.with(|connection| {
-            let mut statement =
-                connection.prepare("SELECT id, cover_path FROM film WHERE folder_id = ?1")?;
+            let mut statement = connection
+                .prepare("SELECT id, cover_path, cover_source FROM film WHERE folder_id = ?1")?;
             let covers = statement
-                .query_map([folder_id], |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get::<_, Option<String>>(1)?.map(Into::into),
-                    ))
-                })?
+                .query_map([folder_id], |row| Ok((row.get(0)?, cover_in(row, 1)?)))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(covers)
         })
@@ -190,7 +185,7 @@ impl<'a> Films<'a> {
     /// Guarded the way the upsert is, so a rescan of a library nobody has
     /// touched writes no rows. Passing nothing for a film says there is no
     /// image for it anywhere and a frame is the only answer left.
-    pub fn set_covers(&self, covers: &[(i64, Option<&Path>)]) -> Result<usize> {
+    pub fn set_covers(&self, covers: &[(i64, Option<&Cover>)]) -> Result<usize> {
         if covers.is_empty() {
             return Ok(0);
         }
@@ -200,11 +195,13 @@ impl<'a> Films<'a> {
             let mut written = 0;
             {
                 let mut statement = transaction.prepare_cached(
-                    "UPDATE film SET cover_path = ?2 WHERE id = ?1 AND cover_path IS NOT ?2",
+                    "UPDATE film SET cover_path = ?2, cover_source = ?3
+                     WHERE id = ?1 AND (cover_path IS NOT ?2 OR cover_source IS NOT ?3)",
                 )?;
                 for (id, cover) in covers {
-                    let cover = cover.map(path_text).transpose()?;
-                    written += statement.execute(params![id, cover])?;
+                    let path = cover.map(|cover| path_text(&cover.path)).transpose()?;
+                    let source = Cover::source_of(*cover).as_str();
+                    written += statement.execute(params![id, path, source])?;
                 }
             }
             transaction.commit()?;
@@ -377,14 +374,30 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
             .and_then(|millis| u32::try_from(millis).ok())
             .map(Timestamp::from_millis),
         poster_path: row.get::<_, Option<String>>(8)?.map(Into::into),
-        cover_path: row.get::<_, Option<String>>(9)?.map(Into::into),
-        accent: row.get(10)?,
-        missing_since: row.get(11)?,
-        choice: TrackChoice::from_columns(row.get(12)?, row.get(13)?),
-        added_at: row.get(14)?,
-        container: row.get(15)?,
+        cover: cover_in(row, 9)?,
+        accent: row.get(11)?,
+        missing_since: row.get(12)?,
+        choice: TrackChoice::from_columns(row.get(13)?, row.get(14)?),
+        added_at: row.get(15)?,
+        container: row.get(16)?,
         video: video_in(row)?,
     })
+}
+
+/// The cover a film's row describes, read from the path and the source that
+/// sit next to each other in `at` and the column after it.
+///
+/// The path is what says there is a cover at all. A row with none has nothing
+/// to draw and nothing to compare, whatever its source column happens to say.
+fn cover_in(row: &Row<'_>, at: usize) -> rusqlite::Result<Option<Cover>> {
+    let Some(path) = row.get::<_, Option<String>>(at)? else {
+        return Ok(None);
+    };
+    let source = row.get::<_, Option<String>>(at + 1)?;
+    Ok(Some(Cover::new(
+        path,
+        CoverSource::from_stored(source.as_deref().unwrap_or_default()),
+    )))
 }
 
 /// The picture a film's row describes, where it describes one.
@@ -393,18 +406,18 @@ pub(super) fn from_row(row: &Row<'_>) -> rusqlite::Result<FilmRecord> {
 /// named no video track, or that has not been looked at, has nothing here, and
 /// the dimensions of such a film are absent rather than zero.
 fn video_in(row: &Row<'_>) -> rusqlite::Result<Option<VideoDetails>> {
-    let Some(codec) = row.get::<_, Option<String>>(16)? else {
+    let Some(codec) = row.get::<_, Option<String>>(17)? else {
         return Ok(None);
     };
 
     Ok(Some(VideoDetails {
         codec,
-        width: row.get::<_, Option<i64>>(17)?.and_then(narrow),
-        height: row.get::<_, Option<i64>>(18)?.and_then(narrow),
+        width: row.get::<_, Option<i64>>(18)?.and_then(narrow),
+        height: row.get::<_, Option<i64>>(19)?.and_then(narrow),
         bit_depth: row
-            .get::<_, Option<i64>>(19)?
+            .get::<_, Option<i64>>(20)?
             .and_then(|depth| u8::try_from(depth).ok()),
-        frame_rate: row.get(20)?,
+        frame_rate: row.get(21)?,
     }))
 }
 

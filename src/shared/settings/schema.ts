@@ -125,11 +125,13 @@ export const FIELDS = {
    */
   libraryLayout: choice('library.layout', ['shelves', 'wall'], 'shelves'),
   /*
-   * Covers or a list. The wall stops serving somewhere around two hundred
-   * films and a table serves ten thousand, so both are here rather than one of
-   * them being the right answer for every library.
+   * Covers, a list, or spines. The wall stops serving somewhere around two
+   * hundred films, a table serves ten thousand of them by name, and the spines
+   * are the other half of that: the whole shelf at once, as edges, for anybody
+   * who knows their library by sight rather than by title. Three answers rather
+   * than one being right for every library.
    */
-  libraryView: choice('library.view', ['covers', 'list'], 'covers'),
+  libraryView: choice('library.view', ['covers', 'list', 'spines'], 'covers'),
   /*
    * Which column the list is ordered by, and whether it runs the other way.
    * The names are the columns themselves, so that a sort a version from later
@@ -149,6 +151,16 @@ export const FIELDS = {
    * cover that where a hundred would only make it harder to choose.
    */
   tileSize: choice('library.tiles', ['small', 'medium', 'large'], 'medium'),
+  /*
+   * What a film with no artwork anywhere on the disk is drawn as.
+   *
+   * The composed cover, because it was designed and the frame is a guess: a
+   * fifth of the way into a film is a moment nobody chose, and a wall of those
+   * reads as a decoder having run rather than as a shelf of films. The frame is
+   * still taken, and still shown where a wide picture is wanted, so this
+   * decides what a cover is and nothing else.
+   */
+  withoutArtwork: choice('library.without-artwork', ['composed', 'frame'], 'composed'),
   // The value Rust reads under this key is the name of the strict one, so these
   // two spellings are shared with `src-tauri/src/settings.rs`.
   matching: choice('library.matching', ['relaxed', 'exact'], 'relaxed'),
@@ -180,6 +192,15 @@ export const FIELDS = {
    * can be read, short enough that it rarely reaches the line after it.
    */
   subtitleMinimumMs: amount('subtitles.minimum', { least: 0, most: 2_000, step: 50 }, 850),
+
+  /*
+   * Whether the dialogue is listed beside the picture. Hidden until it is
+   * asked for, because a film opens as a film, and remembered from then on:
+   * somebody who watches with the lines beside them wants them beside them for
+   * the next film as well, and the key that shows them is the same key that
+   * puts them away.
+   */
+  transcript: choice('player.transcript', ['shown', 'hidden'], 'hidden'),
 
   resume: choice('playback.resume', ['carry-on', 'beginning'], 'carry-on'),
   hardwareDecoding: toggle('playback.hardware', true),

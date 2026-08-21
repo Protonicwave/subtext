@@ -36,6 +36,8 @@ function film(id: number, title: string, shelf = 'Films'): FilmView {
     addedAt: 0,
     durationMs: null,
     posterPath: null,
+    coverPath: null,
+    coverSource: 'none',
     accent: null,
     missing: false,
     details: null,
@@ -127,7 +129,8 @@ describe('the palette', () => {
     expect(screen.getByText('What Subtext can do')).toBeInTheDocument();
     expect(rows()).toEqual([
       expect.stringContaining('Choose a folder to watch'),
-      expect.stringContaining('Show the library as covers or as a list'),
+      expect.stringContaining('Show the library as covers, a list or spines'),
+      expect.stringContaining('Show or hide the dialogue beside the film'),
       expect.stringContaining('Read the watched folders again'),
       expect.stringContaining('Open settings'),
     ]);
@@ -179,14 +182,15 @@ describe('the palette', () => {
 
     expect(rows()).toEqual([
       expect.stringContaining('The Third Man'),
-      expect.stringContaining('Show the library as covers or as a list'),
+      expect.stringContaining('Show the library as covers, a list or spines'),
+      expect.stringContaining('Show or hide the dialogue beside the film'),
       expect.stringContaining('Read the watched folders again'),
     ]);
 
     await userEvent.keyboard('{ArrowDown}');
-    expect(selected()).toContain('Show the library as covers or as a list');
+    expect(selected()).toContain('Show the library as covers, a list or spines');
 
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
     expect(selected()).toContain('Read the watched folders again');
 
     await userEvent.keyboard('{ArrowDown}');
@@ -305,11 +309,29 @@ describe('the actions', () => {
     useSettings.setState({ settings: DEFAULTS });
   });
 
-  it('switches the library between covers and the list', async () => {
+  it('moves the library on to the next of the three views', async () => {
     await open();
     await userEvent.keyboard('covers{Enter}');
 
     expect(useSettings.getState().settings.libraryView).toBe('list');
+  });
+
+  /*
+   * Three views and one key, so it cycles rather than swaps, and pressing it
+   * enough times has to come back to where it started rather than sticking on
+   * the last of them.
+   */
+  it('comes back round to the covers', async () => {
+    render(<Palette />);
+
+    await userEvent.keyboard('{Control>}l{/Control}');
+    expect(useSettings.getState().settings.libraryView).toBe('list');
+
+    await userEvent.keyboard('{Control>}l{/Control}');
+    expect(useSettings.getState().settings.libraryView).toBe('spines');
+
+    await userEvent.keyboard('{Control>}l{/Control}');
+    expect(useSettings.getState().settings.libraryView).toBe('covers');
   });
 
   it('opens the settings screen', async () => {

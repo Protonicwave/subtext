@@ -1,11 +1,24 @@
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 
+/** Where a drop landed, in the window's own pixels rather than the screen's. */
+export interface DropPoint {
+  x: number;
+  y: number;
+}
+
 interface DropHandlers {
   /** Something is being dragged over the window. */
   over: () => void;
   /** It has left again, or the drop was cancelled. */
   left: () => void;
-  drop: (paths: string[]) => void;
+  /**
+   * Files were let go of, at a point in the window.
+   *
+   * The point is reported because a drop is the window's event and not the
+   * element's: the webview says where it happened and leaves working out what
+   * was under it to whoever cares.
+   */
+  drop: (paths: string[], at: DropPoint) => void;
 }
 
 /**
@@ -25,7 +38,13 @@ export function onFilesDropped(handlers: DropHandlers): Promise<() => void> {
         handlers.over();
         break;
       case 'drop':
-        handlers.drop(event.payload.paths);
+        // The webview reports the position in device pixels and the document
+        // is laid out in CSS pixels, which differ on any display scaled above
+        // one hundred per cent.
+        handlers.drop(event.payload.paths, {
+          x: event.payload.position.x / window.devicePixelRatio,
+          y: event.payload.position.y / window.devicePixelRatio,
+        });
         break;
       default:
         handlers.left();

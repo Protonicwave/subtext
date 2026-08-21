@@ -8,6 +8,7 @@ import { classes } from '@/shared/ui/classes';
 import { AlertIcon, CheckIcon, InsideIcon, PairedIcon } from '@/shared/ui/Icon';
 import { ProgressRing } from '@/shared/ui/ProgressRing';
 import { Sheet } from '@/shared/ui/Sheet';
+import { CoverReport } from '@/features/library/CoverReport';
 import { fileNameOf, filmsIn, useLibrary } from '@/features/library/useLibrary';
 import { trackNameOf, trackProblemOf } from '@/features/player/tracks';
 import { foldersIn, unpairedIn, useImport } from './useImport';
@@ -63,6 +64,7 @@ export function ImportFlow() {
         }
         onClose={dismiss}
       >
+        <Covers summaries={summaries} />
         <Pairings summaries={summaries} />
       </Sheet>
     </>
@@ -125,6 +127,22 @@ function Summary({ summaries }: { summaries: ScanSummary[] }) {
         ` · ${String(unpaired)} subtitle ${unpaired === 1 ? 'file belongs' : 'files belong'} to no film`}
     </>
   );
+}
+
+/**
+ * Where the covers came from, when the scan settled any.
+ *
+ * Only then. A scan writes a cover where the answer is different from what the
+ * row already said, so a rescan of a library nobody has touched settles nothing
+ * and has nothing to state. Putting an unchanged tally up after every scan
+ * would teach somebody to read past it.
+ */
+function Covers({ summaries }: { summaries: ScanSummary[] }) {
+  const films = useLibrary((library) => library.films);
+  const changed = summaries.reduce((total, summary) => total + summary.coversChanged, 0);
+
+  if (changed === 0) return null;
+  return <CoverReport films={films} />;
 }
 
 function Pairings({ summaries }: { summaries: ScanSummary[] }) {

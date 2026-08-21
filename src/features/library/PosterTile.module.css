@@ -9,22 +9,33 @@
 
 .tile {
   position: relative;
+  border-radius: var(--radius-lg);
+  transition: transform var(--duration-quick) var(--ease-out);
+}
+
+/*
+ * Opening the film, which is the whole tile bar the mark over its corner. The
+ * two are siblings rather than one inside the other, because a button inside a
+ * button is not something a browser or a screen reader can make sense of.
+ */
+.open {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   width: 100%;
   text-align: left;
-  border-radius: var(--radius-lg);
-  transition: transform var(--duration-quick) var(--ease-out);
 }
 
 /*
  * The lift. Only the tile moves; the glow below is a separate layer so that it
  * grows rather than travelling with it, which is the difference between a card
  * rising off a surface and a card sliding across one.
+ *
+ * Focus is matched anywhere inside rather than on the tile itself, since the
+ * tile is no longer the thing that takes focus.
  */
 .tile:hover,
-.tile:focus-visible {
+.tile:focus-within {
   transform: translateY(-4px);
 }
 
@@ -44,7 +55,7 @@
 }
 
 .tile:hover::before,
-.tile:focus-visible::before {
+.tile:focus-within::before {
   opacity: 0.34;
   transform: scale(1);
 }
@@ -66,7 +77,7 @@
 }
 
 .tile:hover .frame,
-.tile:focus-visible .frame {
+.tile:focus-within .frame {
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--film-accent) 55%, transparent);
 }
 

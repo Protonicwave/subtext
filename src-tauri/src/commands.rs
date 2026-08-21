@@ -5,17 +5,19 @@
 //! shape, without the compiler saying so.
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use subtext_core::Timestamp;
+use subtext_core::{Cover, CoverSource, Timestamp};
 use subtext_index::{Database, TrackChoice};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::chrome::Chrome;
 use crate::dto::{
-    AccentView, AlignProgressed, AlignmentView, Answer, CorrectionView, CueView, Failure, FilmView,
-    FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, TrackView,
+    AccentView, AlignProgressed, AlignmentView, Answer, CorrectionView, CoversTaken, CueView,
+    Failure, FilmView, FolderView, Id, PosterWanted, PreferenceView, ScanProgressed, TrackView,
 };
 use crate::state::AppState;
 use crate::{allowed, dropped, posters, reveal};
@@ -330,14 +332,14 @@ pub(crate) async fn posters_wanted(app: AppHandle) -> Answer<Vec<PosterWanted>> 
             let wanted = directory.join(posters::file_name(
                 &film.path,
                 film.modified_at,
-                film.cover_path.as_deref(),
+                film.cover.as_ref().map(|cover| cover.path.as_path()),
             ));
             film.poster_path.as_deref() != Some(wanted.as_path()) || !wanted.is_file()
         })
         .map(|film| PosterWanted {
             id: Id::of(film.id),
             path: film.path.display().to_string(),
-            cover: film.cover_path.is_some(),
+            cover: film.cover.is_some(),
         })
         .collect())
 }
@@ -364,7 +366,8 @@ pub(crate) async fn cover_image(app: AppHandle, film_id: Id) -> Answer<Vec<u8>> 
             .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
 
         let cover = film
-            .cover_path
+            .cover
+            .map(|cover| cover.path)
             .ok_or_else(|| Failure::saying("that film has no cover to read"))?;
 
         // The film's own path says the image is attached inside it, which is
@@ -418,7 +421,7 @@ pub(crate) async fn save_poster(
         let poster = directory.join(posters::file_name(
             &film.path,
             film.modified_at,
-            film.cover_path.as_deref(),
+            film.cover.as_ref().map(|cover| cover.path.as_path()),
         ));
         std::fs::write(&poster, &image).map_err(Failure::of)?;
 
@@ -446,6 +449,221 @@ pub(crate) async fn save_poster(
     })
     .await
     .map_err(|_| Failure::saying("the poster could not be written"))?
+}
+
+/// Opens the platform's own file picker, filtered to picture files.
+///
+/// The other half of settling a cover by hand. What comes back is a path and
+/// nothing else: whether the file is a picture at all is [`choose_cover`]'s
+/// question, because a path can also arrive from a drop and both have to be
+/// held to the same test.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn choose_image(app: AppHandle) -> Answer<Option<String>> {
+    let chosen = app
+        .dialog()
+        .file()
+        .add_filter("Pictures", &["jpg", "jpeg", "png", "webp"])
+        .blocking_pick_file();
+    Ok(chosen.map(|file| file.to_string()))
+}
+
+/// Settles a film's cover, because somebody said which picture it is.
+///
+/// The one source no scan is allowed to have an opinion about, which is what
+/// makes this worth a command of its own rather than a row written like any
+/// other. The file stays exactly where it is: what is recorded is where to
+/// find it, and the poster drawn from it goes in the cache with every other.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn choose_cover(app: AppHandle, film_id: Id, path: String) -> Answer<FilmView> {
+    // Opening a file and writing a row, neither of which belongs on the thread
+    // answering commands.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        settled(state.scanner().database(), film_id.get(), Path::new(&path))
+    })
+    .await
+    .map_err(|_| Failure::saying("that picture could not be settled on"))?
+}
+
+/// Gives a film back to the scan, which is the undo of choosing.
+///
+/// The choice is dropped and the folder is looked at again, so what the film
+/// ends up with is what a scan would have given it and stays that way. Doing
+/// only the first half would leave a film showing a frame until the next
+/// startup and then quietly showing artwork again, which is a state nobody
+/// asked for and could not keep.
+///
+/// A film the disk has no picture for ends with no cover at all, and the tile
+/// goes back to being drawn from the film itself. That is what taking a frame
+/// means here, and it is the common case in a library of releases that carry
+/// no artwork.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn clear_cover(app: AppHandle, film_id: Id) -> Answer<FilmView> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let scanner = state.scanner();
+        let path = forgotten(scanner.database(), film_id.get())?;
+
+        // Silent on purpose. Nobody asked for a scan, and a progress bar
+        // appearing across the window because a cover was put back would
+        // describe work that is not the work they asked for. An unchanged
+        // folder costs one stat a file.
+        scanner
+            .scan_containing(&[path], &subtext_scan::Silent)
+            .map_err(Failure::of)?;
+
+        read_back(scanner.database(), film_id.get())
+    })
+    .await
+    .map_err(|_| Failure::saying("that cover could not be put back"))?
+}
+
+/// Covers as much of the library as one folder of pictures can.
+///
+/// The folder is walked for pictures and each one is matched to the film its
+/// name reduces to. A film the folder has nothing for is left exactly as it
+/// was, since a folder somebody pointed at is an offer of artwork and not a
+/// statement that everything else is wrong.
+///
+/// What is matched is recorded as chosen, because it was: somebody pointed at
+/// the folder. That includes a film whose cover was already chosen by hand,
+/// which is the one place a choice is overwritten, and it is overwritten by a
+/// later choice rather than by a scan.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn covers_from_folder(app: AppHandle, path: String) -> Answer<CoversTaken> {
+    // Walking a folder and writing a row for every film in the library, neither
+    // of which belongs on the thread answering commands.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        taken_from(state.scanner().database(), Path::new(&path))
+    })
+    .await
+    .map_err(|_| Failure::saying("those pictures could not be read"))?
+}
+
+/// Matches a folder of pictures to the library, and records what it found.
+///
+/// Each matched picture is held to what it begins with rather than to what it
+/// is called, which is what a picture chosen one at a time is held to. The
+/// files here were not picked one at a time, so a folder that turns out to hold
+/// a few text files named like images covers the films it can and leaves the
+/// rest, rather than recording a cover that would draw nothing.
+fn taken_from(database: &Database, folder: &Path) -> Answer<CoversTaken> {
+    let films = database.films().list().map_err(Failure::of)?;
+    let names: Vec<subtext_core::ParsedName> = films
+        .iter()
+        .map(|film| {
+            subtext_core::ParsedName::from_file_name(
+                film.path
+                    .file_name()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    let pictures = subtext_scan::discover(folder).images;
+    let matched = subtext_scan::from_folder(&pictures, &names);
+
+    let chosen: Vec<(i64, Cover)> = films
+        .iter()
+        .zip(matched)
+        .filter_map(|(film, picture)| {
+            let picture = picture.filter(|picture| is_a_picture(picture))?;
+            Some((film.id, Cover::new(picture, CoverSource::Chosen)))
+        })
+        .collect();
+
+    let covers: Vec<(i64, Option<&Cover>)> = chosen
+        .iter()
+        .map(|(id, cover)| (*id, Some(cover)))
+        .collect();
+    database.films().set_covers(&covers).map_err(Failure::of)?;
+
+    Ok(CoversTaken::of(chosen.len(), films.len()))
+}
+
+/// Whether a file on the disk begins the way a picture does.
+fn is_a_picture(path: &Path) -> bool {
+    let mut head = [0_u8; subtext_scan::PICTURE_HEAD];
+    match File::open(path).and_then(|mut file| file.read(&mut head)) {
+        Ok(read) => subtext_scan::is_picture(&head[..read]),
+        Err(_) => false,
+    }
+}
+
+/// Records a picture as the cover somebody picked for a film.
+///
+/// Held to what the file begins with rather than to what it is called. A
+/// picker filters by extension and a drop does not filter at all, so the name
+/// is a claim either way, and a file that is not a picture would be accepted
+/// here and then draw nothing, which reads as the application losing the image
+/// rather than as the file being wrong.
+fn settled(database: &Database, film_id: i64, image: &Path) -> Answer<FilmView> {
+    let film = database
+        .films()
+        .by_id(film_id)
+        .map_err(Failure::of)?
+        .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+
+    let mut head = [0_u8; subtext_scan::PICTURE_HEAD];
+    let read = File::open(image)
+        .and_then(|mut file| file.read(&mut head))
+        .map_err(|_| Failure::saying("that picture could not be read"))?;
+
+    if !subtext_scan::is_picture(&head[..read]) {
+        return Err(Failure::saying(
+            "that file is not a JPEG, a PNG or a WebP, which are the pictures Subtext can draw",
+        ));
+    }
+
+    let cover = Cover::new(image, CoverSource::Chosen);
+    database
+        .films()
+        .set_covers(&[(film.id, Some(&cover))])
+        .map_err(Failure::of)?;
+
+    read_back(database, film.id)
+}
+
+/// Drops a film's choice of cover, and says where the film is.
+///
+/// The path comes back because the caller's next move is to look at the folder
+/// the film sits in, and reading the row twice to find it would be reading it
+/// twice.
+///
+/// What the row is left saying matters more than it looks. A scan does not
+/// open a film it has already seen, so whether that film carries its own
+/// artwork is something only the row still remembers, and clearing the row
+/// outright would lose it until the file itself changed. So the film is asked
+/// once, here, which reads the attachments element and not the film. A film
+/// that carries artwork is put back to that, and a film that does not is left
+/// with nothing for the scan to weigh against what is beside it.
+fn forgotten(database: &Database, film_id: i64) -> Answer<PathBuf> {
+    let film = database
+        .films()
+        .by_id(film_id)
+        .map_err(Failure::of)?
+        .ok_or_else(|| Failure::saying("that film is no longer in the library"))?;
+
+    // A film that cannot be opened at all carries nothing this can see, which
+    // is the same answer as a film that carries no artwork and is treated as
+    // one: the scan will find the file missing soon enough and say so.
+    let inside = subtext_container::cover(&film.path)
+        .ok()
+        .flatten()
+        .map(|_| Cover::new(&film.path, CoverSource::InFile));
+
+    database
+        .films()
+        .set_covers(&[(film.id, inside.as_ref())])
+        .map_err(Failure::of)?;
+
+    Ok(film.path)
 }
 
 /// One film as the library screen sees it, straight from the database.
@@ -729,4 +947,309 @@ pub(crate) async fn scan_progress(state: State<'_, AppState>) -> Answer<Option<S
 #[specta::specta]
 pub(crate) async fn is_scanning(state: State<'_, AppState>) -> Answer<bool> {
     Ok(state.is_scanning())
+}
+
+#[cfg(test)]
+mod tests {
+    // A test that cannot build the library it is about to change has nothing
+    // to say, so it stops rather than passing quietly.
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use std::path::{Path, PathBuf};
+
+    use subtext_core::CoverSource;
+    use subtext_index::{Database, NewFilm};
+    use tempfile::TempDir;
+
+    use super::{forgotten, settled, taken_from};
+
+    /// The first bytes of a PNG, which is as much of one as any of this reads.
+    const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00];
+
+    struct Fixture {
+        database: Database,
+        film_id: i64,
+        root: PathBuf,
+        // Held so that the directory outlasts the database inside it.
+        _directory: TempDir,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let directory = TempDir::new().unwrap();
+            let root = directory.path().to_path_buf();
+            let database = Database::open(root.join("library.db")).unwrap();
+
+            let path = root.join("Heat.1995.mkv");
+            std::fs::write(&path, b"not really a film").unwrap();
+            let folder = database.folders().add(&root).unwrap();
+            let film_id = database
+                .films()
+                .upsert(&NewFilm {
+                    folder_id: folder.id,
+                    path: &path,
+                    title: "Heat",
+                    year: Some(1_995),
+                    size_bytes: 17,
+                    modified_at: 1_700_000_000_000,
+                })
+                .unwrap()
+                .id;
+
+            Self {
+                database,
+                film_id,
+                root,
+                _directory: directory,
+            }
+        }
+
+        /// A folder of the test's own, inside the library's root.
+        fn folder(&self, name: &str) -> PathBuf {
+            let path = self.root.join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            path
+        }
+
+        /// A picture on the disk, with whatever bytes the test wants in it.
+        fn picture(&self, name: &str, bytes: &[u8]) -> PathBuf {
+            let path = self.root.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        }
+
+        fn cover(&self) -> Option<subtext_core::Cover> {
+            self.cover_of(self.film_id)
+        }
+
+        fn cover_of(&self, film_id: i64) -> Option<subtext_core::Cover> {
+            self.database
+                .films()
+                .by_id(film_id)
+                .unwrap()
+                .and_then(|film| film.cover)
+        }
+
+        /// A second film in the same folder, from a file already on the disk.
+        fn film_at(&self, path: &Path) -> i64 {
+            let folder = self.database.folders().list().unwrap()[0].id;
+            self.database
+                .films()
+                .upsert(&NewFilm {
+                    folder_id: folder,
+                    path,
+                    title: "Attached",
+                    year: None,
+                    size_bytes: std::fs::metadata(path).unwrap().len(),
+                    modified_at: 1_700_000_000_000,
+                })
+                .unwrap()
+                .id
+        }
+    }
+
+    /// A Matroska file with a picture attached, as a well made one carries.
+    fn carrying_artwork() -> Vec<u8> {
+        use subtext_container::fixture::{Attachment, Container, Entry};
+
+        Container::new(vec![Entry::video(1)])
+            .with_attachments(vec![Attachment::new("cover.png", PNG).of_type("image/png")])
+            .bytes()
+    }
+
+    #[test]
+    fn a_picture_somebody_picked_becomes_the_films_cover() {
+        let fixture = Fixture::new();
+        let picture = fixture.picture("chosen.png", PNG);
+
+        let film = settled(&fixture.database, fixture.film_id, &picture)
+            .expect("a picture on the disk should be settled on");
+
+        assert!(matches!(
+            film.cover_source,
+            crate::dto::CoverSourceView::Chosen
+        ));
+        let cover = fixture.cover().expect("the row should name the picture");
+        assert_eq!(cover.path, picture);
+        assert_eq!(cover.source, CoverSource::Chosen);
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_picture_is_refused_and_changes_nothing() {
+        let fixture = Fixture::new();
+        let pretender = fixture.picture("poster.jpg", b"<html>not a picture at all</html>");
+
+        let refusal = settled(&fixture.database, fixture.film_id, &pretender)
+            .expect_err("a file that is not a picture should be refused");
+
+        assert!(refusal.message.contains("JPEG"), "{}", refusal.message);
+        assert_eq!(fixture.cover(), None);
+    }
+
+    #[test]
+    fn a_picture_that_has_gone_says_so_rather_than_being_recorded() {
+        let fixture = Fixture::new();
+
+        let refusal = settled(
+            &fixture.database,
+            fixture.film_id,
+            &fixture.root.join("never-existed.png"),
+        )
+        .expect_err("a picture that is not there should be refused");
+
+        assert!(
+            refusal.message.contains("could not be read"),
+            "{}",
+            refusal.message
+        );
+        assert_eq!(fixture.cover(), None);
+    }
+
+    #[test]
+    fn a_film_that_has_been_forgotten_takes_no_cover() {
+        let fixture = Fixture::new();
+        let picture = fixture.picture("chosen.png", PNG);
+
+        let refusal = settled(&fixture.database, fixture.film_id + 1_000, &picture)
+            .expect_err("a film that is not in the library should be refused");
+
+        assert!(refusal.message.contains("no longer in the library"));
+    }
+
+    #[test]
+    fn forgetting_a_choice_drops_it_and_says_where_the_film_is() {
+        let fixture = Fixture::new();
+        let picture = fixture.picture("chosen.png", PNG);
+        settled(&fixture.database, fixture.film_id, &picture).unwrap();
+
+        let path = forgotten(&fixture.database, fixture.film_id)
+            .expect("a film in the library should be forgettable");
+
+        assert_eq!(path, fixture.root.join("Heat.1995.mkv"));
+        // Nothing is left for the scan to weigh the choice against, which is
+        // what puts the film back in the way of being decided afresh.
+        assert_eq!(fixture.cover(), None);
+    }
+
+    /*
+     * A scan does not open a film it has already seen, so the row is the only
+     * thing that still remembers whether the file carries artwork. Clearing it
+     * outright would lose that until the file itself changed.
+     */
+    #[test]
+    fn forgetting_a_choice_puts_back_the_artwork_inside_the_film() {
+        let fixture = Fixture::new();
+        let film = fixture.root.join("Attached.mkv");
+        std::fs::write(&film, carrying_artwork()).unwrap();
+        let film_id = fixture.film_at(&film);
+        settled(
+            &fixture.database,
+            film_id,
+            &fixture.picture("chosen.png", PNG),
+        )
+        .unwrap();
+
+        forgotten(&fixture.database, film_id).unwrap();
+
+        let cover = fixture
+            .cover_of(film_id)
+            .expect("a film carrying its own artwork should be put back to it");
+        assert_eq!(cover.source, CoverSource::InFile);
+        assert_eq!(cover.path, film);
+    }
+
+    #[test]
+    fn forgetting_the_cover_of_a_film_that_is_gone_is_refused() {
+        let fixture = Fixture::new();
+
+        let refusal = forgotten(&fixture.database, fixture.film_id + 1_000)
+            .expect_err("a film that is not in the library should be refused");
+
+        assert!(refusal.message.contains("no longer in the library"));
+    }
+
+    /// A folder of posters, matched to the library in one pass. The pictures
+    /// are nowhere near the films and are matched by name alone, which is what
+    /// makes one folder able to dress a whole library.
+    #[test]
+    fn a_folder_of_pictures_covers_the_films_it_names() {
+        let fixture = Fixture::new();
+        let pictures = fixture.folder("pictures");
+        std::fs::write(pictures.join("Heat.1995.jpg"), PNG).unwrap();
+        // A picture for a film nobody has, which covers nothing and is not an
+        // error either.
+        std::fs::write(pictures.join("Sicario.2015.jpg"), PNG).unwrap();
+
+        let taken = taken_from(&fixture.database, &pictures)
+            .expect("a folder of pictures should be readable");
+
+        assert_eq!(taken.matched, 1);
+        assert_eq!(taken.unmatched, 0);
+        let cover = fixture.cover().expect("the row should name the picture");
+        assert_eq!(cover.path, pictures.join("Heat.1995.jpg"));
+        assert_eq!(cover.source, CoverSource::Chosen);
+    }
+
+    /// Somebody pointed at a folder, which is an offer of artwork rather than a
+    /// statement that everything already on screen is wrong.
+    #[test]
+    fn a_film_the_folder_has_nothing_for_is_left_as_it_was() {
+        let fixture = Fixture::new();
+        let already = fixture.picture("chosen.png", PNG);
+        settled(&fixture.database, fixture.film_id, &already).unwrap();
+
+        let pictures = fixture.folder("pictures");
+        std::fs::write(pictures.join("Ran.1985.jpg"), PNG).unwrap();
+
+        let taken = taken_from(&fixture.database, &pictures).unwrap();
+
+        assert_eq!(taken.matched, 0);
+        assert_eq!(taken.unmatched, 1);
+        assert_eq!(fixture.cover().map(|cover| cover.path), Some(already));
+    }
+
+    /// The files were not picked one at a time, so anything in the folder that
+    /// is not a picture is stepped over rather than recorded as a cover that
+    /// would draw nothing.
+    #[test]
+    fn a_file_that_is_not_a_picture_covers_nothing() {
+        let fixture = Fixture::new();
+        let pictures = fixture.folder("pictures");
+        std::fs::write(
+            pictures.join("Heat.1995.jpg"),
+            b"<html>not a picture</html>",
+        )
+        .unwrap();
+
+        let taken = taken_from(&fixture.database, &pictures).unwrap();
+
+        assert_eq!(taken.matched, 0);
+        assert_eq!(taken.unmatched, 1);
+        assert_eq!(fixture.cover(), None);
+    }
+
+    /// A folder that has been moved or unplugged since it was chosen.
+    #[test]
+    fn a_folder_that_is_not_there_changes_nothing() {
+        let fixture = Fixture::new();
+
+        let taken = taken_from(&fixture.database, &fixture.root.join("never-existed"))
+            .expect("a folder that is not there is not a failure");
+
+        assert_eq!(taken.matched, 0);
+        assert_eq!(taken.unmatched, 1);
+        assert_eq!(fixture.cover(), None);
+    }
+
+    #[test]
+    fn a_picture_is_read_by_what_it_begins_with_and_not_by_its_name() {
+        let fixture = Fixture::new();
+        // Named as though it were anything at all, and a PNG inside.
+        let picture = fixture.picture("artwork.txt", PNG);
+
+        settled(&fixture.database, fixture.film_id, &picture)
+            .expect("a picture should be settled on whatever it is called");
+
+        assert_eq!(fixture.cover().map(|cover| cover.path), Some(picture));
+    }
 }

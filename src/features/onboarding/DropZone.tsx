@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DropIcon } from '@/shared/ui/Icon';
 import { onFilesDropped } from '@/shared/window/drops';
+import { coverDropped } from '@/features/library/coverDrops';
 import { useImport } from './useImport';
 import styles from './DropZone.module.css';
 
@@ -10,6 +11,10 @@ import styles from './DropZone.module.css';
  * There is no target to aim at, because the whole window is the target. This
  * draws the overlay that says so while something is being dragged, and does
  * nothing at all the rest of the time.
+ *
+ * One drop has two possible meanings and this is where they are told apart. A
+ * picture let go of on a film is that film's cover; everything else is films
+ * arriving, which is the folders around them being watched.
  */
 export function DropZone() {
   const [over, setOver] = useState(false);
@@ -26,9 +31,14 @@ export function DropZone() {
       left: () => {
         setOver(false);
       },
-      drop: (paths) => {
+      drop: (paths, at) => {
         setOver(false);
-        void addDropped(paths);
+        // A picture let go of on a film is that film's cover and nothing else.
+        // Asked first so that one drop never both adds a folder and settles a
+        // picture, which is what two listeners on the same event would do.
+        void coverDropped(paths, at).then((settled) => {
+          if (!settled) void addDropped(paths);
+        });
       },
     }).then((unsubscribe) => {
       if (watching) stop = unsubscribe;

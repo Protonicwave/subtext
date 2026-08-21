@@ -1,0 +1,188 @@
+/*
+ * The masthead sits inside the same padding the shelves do, so its left edge is
+ * the left edge of the library rather than the edge of the window. That is the
+ * point of it: a panel among the rows instead of a picture behind them, which
+ * is what brings the first shelf up into view.
+ */
+.masthead {
+  position: relative;
+  display: grid;
+  /* Narrower on a narrow window, so the words keep their measure rather than
+     the cover taking the room they need. */
+  grid-template-columns: clamp(132px, 16vw, 200px) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: center;
+  margin: var(--space-10) 0 var(--space-4);
+  padding: var(--space-8);
+  overflow: hidden;
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-xl);
+  /* The film's own pair, at a strength that reads as light in the room rather
+     than as a coloured panel. On the long transition, so moving from one film
+     to another reads as the light changing. */
+  background: linear-gradient(
+    115deg,
+    color-mix(in oklab, var(--film-accent) 13%, var(--colour-surface)),
+    color-mix(in oklab, var(--film-pair) 9%, var(--colour-bg)) 72%
+  );
+  transition: background var(--duration-slow) var(--ease-out);
+}
+
+/* A pool of the accent behind the words, which is what stops the right of the
+   panel reading as empty once the type has run out. */
+.masthead::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    70% 130% at 92% 40%,
+    color-mix(in oklab, var(--film-accent) 14%, transparent),
+    transparent 70%
+  );
+}
+
+/*
+ * The picture, at the shape of a cover. Both of the things drawn inside it fill
+ * it, so the size is set here and once.
+ */
+.art {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--film-accent) 30%, var(--colour-surface)),
+    color-mix(in oklab, var(--film-pair) 34%, var(--colour-bg))
+  );
+}
+
+.still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--colour-text-faint);
+}
+
+.rule {
+  width: 22px;
+  height: 1px;
+  background: var(--colour-line-strong);
+}
+
+/* The line, with the moment it was said against it. */
+.said {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: baseline;
+  margin-bottom: var(--space-5);
+}
+
+.at {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--film-accent);
+  white-space: nowrap;
+}
+
+/*
+ * Set in the serif and in italic, which is how a quotation is set. The quote
+ * marks are the browser's own, so they are the right ones for the language the
+ * document is in rather than two apostrophes typed into the markup.
+ */
+.line {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-style: italic;
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+  color: var(--colour-text);
+  text-wrap: balance;
+  /* A cue can be several lines and a translation can be long. Three of them is
+     the most that can be given without the panel growing under the shelves. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.title {
+  margin-bottom: var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+.facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--colour-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--colour-text-faint);
+}
+
+/* How far through, as a rule rather than as a figure: the figure is already in
+   the facts above it, and this says the same thing at a glance. */
+.progress {
+  display: block;
+  max-width: 420px;
+  height: 2px;
+  margin-top: var(--space-5);
+  border-radius: var(--radius-full);
+  background: var(--colour-line-strong);
+}
+
+.done {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--film-accent);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}

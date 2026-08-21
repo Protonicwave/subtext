@@ -69,19 +69,19 @@ export function shelvesOf(films: readonly FilmView[], resumable: readonly FilmVi
 }
 
 /**
- * The one film shown large above the rows.
+ * The one film the masthead is about.
  *
- * What was stopped most recently, because somebody who left a film part way
- * through is more likely to have come back for it than for anything else. With
- * nothing part watched it is the most recently added film, which is the newest
- * identifier: a library nobody has watched yet still has something to show, and
- * what arrived last is the likeliest reason the application was opened.
+ * What was stopped most recently, because that is the question the screen is
+ * opened to answer. With nothing part watched it is the most recently added
+ * film, which is the newest identifier: a library nobody has watched yet still
+ * has something to show, and what arrived last is the likeliest reason the
+ * application was opened.
  *
- * A film whose file has gone is never chosen. The billboard offers to play it,
+ * A film whose file has gone is never chosen. The masthead offers to play it,
  * and offering to play a file that is not there is the one thing this screen
  * should not do.
  */
-export function billboardOf(
+export function mastheadOf(
   films: readonly FilmView[],
   resumable: readonly FilmView[],
 ): FilmView | null {
